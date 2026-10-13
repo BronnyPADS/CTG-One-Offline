@@ -1,0 +1,2865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CTG One</title>
+<!-- Browser tab / home-screen icon. The symbol sits on a white plate because
+     the mark is dark line art and would otherwise vanish against a dark tab. -->
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=20260930b">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=20260930b">
+<link rel="icon" type="image/png" sizes="48x48" href="favicon-48.png?v=20260930b">
+<link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
+<meta name="theme-color" content="#1f7ac4">
+<link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=20261009b">
+<script src="csp-styles.js?v=20261005b"></script>
+<script src="boot-theme.js?v=20260929a"></script>
+<script src="ctg-actions.js?v=20261009a"></script>
+<link rel="stylesheet" href="day1-enhance.css?v=20261013a">
+</head>
+<body class="sidebar-visible auth-active">
+<!-- Restore the rail state before first paint, the same way the theme is
+     restored in <head>. Set after the class attribute rather than in it so a
+     browser with localStorage blocked still gets a working expanded sidebar. -->
+<script src="boot-rail.js?v=20260929a"></script>
+
+<!-- Patient-facing forms view — shown only when opened via a #pf= invite link.
+     The staff shell is hidden by the .pf-mode class (see patientforms.js). -->
+<div id="patientFormsView"></div>
+
+
+<!-- ───────── LOGIN OVERLAY ───────── -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-hero">
+      <div class="auth-hero-top">
+        <div class="auth-icon"><img src="ctg-one-mark.png?v=20260918b" alt="" aria-hidden="true"></div>
+        <div class="auth-brand-copy">
+          <div class="auth-logo"><img src="ctg-one-wordmark.png?v=20260918b" alt="CTG One" ></div>
+        </div>
+      </div>
+      <div class="auth-sub">Secure Portal Access</div>
+      <div class="auth-hero-foot">
+        <span class="auth-pill">Final Case Report</span>
+        <span class="auth-pill">Billing</span>
+        <span class="auth-pill">Day 1 Form</span>
+      </div>
+    </div>
+    <div class="auth-body">
+      <div class="auth-err" id="authError">Invalid username or password.</div>
+      <form id="authForm" autocomplete="off" data-onsubmit="return false">
+        <div class="fg"><div class="auth-field"><label for="authUser">Username</label><input type="text" id="authUser" placeholder="Enter your username" autocomplete="username"></div></div>
+        <div class="fg"><div class="auth-field"><label for="authPass">Password</label><input type="password" id="authPass" placeholder="Enter your password" autocomplete="current-password"></div></div>
+        <div class="auth-forgot-row"><button type="button" class="auth-forgot-link" data-onclick="openForgotPassword()">Forgot password?</button></div>
+        <button type="submit" class="auth-btn" id="authSubmit">Sign In <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>
+      </form>
+      <!-- Discoverable on the login screen itself: a warning only deters misuse
+           if it is read before someone signs in. -->
+      <button type="button" class="auth-phi-link" data-onclick="ctgShowPhiNotice()">Protected Health Information &amp; Access Notice</button>
+      <form id="authMfaForm" autocomplete="off" data-onsubmit="return false" data-cs-boot="display:none">
+        <div class="auth-mfa-lead">We emailed a 6-digit code to <strong id="authMfaHint"></strong>. Enter it below to finish signing in.</div>
+        <div class="fg"><div class="auth-field"><label for="authCode">Sign-in code</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="auth-code-input"></div></div>
+        <button type="submit" class="auth-btn" id="authCodeSubmit">Verify <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+        <div class="auth-mfa-actions">
+          <button type="button" class="auth-linkbtn" id="authResendBtn" data-onclick="ctgResendCode()">Send a new code</button>
+          <button type="button" class="auth-linkbtn" data-onclick="ctgCancelMfa()">Use a different account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<div class="top-bar">
+  <div data-cs-boot="display:flex;align-items:center">
+    <button class="menu-btn" data-onclick="toggleSidebar()" aria-label="Open menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+    <!-- data-short is what the bar falls back to on a phone when the exam
+         section tabs are sharing the row. A complete short mark beats the
+         full name cut off mid-word. -->
+    <div class="logo topbar-logo" id="topbarLogo" data-short="CTG">Concussion Therapy <span>Group</span></div>
+  </div>
+  <div class="tabs" id="day1Tabs" data-cs-boot="display:none">
+    <div class="tab active" data-onclick="goTo('sec-header')"><span class="tab-n">1</span>Patient</div>
+    <div class="tab" data-onclick="goTo('sec-moi')"><span class="tab-n">2</span>Mechanism</div>
+    <div class="tab" data-onclick="goTo('sec-hpi')"><span class="tab-n">3</span>HPI</div>
+    <div class="tab" data-onclick="goTo('sec-pmh')"><span class="tab-n">4</span>PMH</div>
+    <div class="tab" data-onclick="goTo('sec-ace')"><span class="tab-n">5</span>Day 1 Score</div>
+    <div class="tab" data-onclick="goTo('sec-dx')"><span class="tab-n">6</span>Diagnosis</div>
+    <div class="tab" data-onclick="goTo('sec-plan')"><span class="tab-n">7</span>Plan</div>
+  </div>
+  <div data-cs-boot="display:flex;align-items:center">
+    <!-- Discoverability for Ctrl+K. Hidden until signed in, like the rest of
+         the shell chrome, because the palette itself refuses to open before. -->
+    <button type="button" class="topbar-search" id="topbarSearchBtn" data-cs-boot="display:none"
+            data-onclick="ctgOpenSpotlight()" aria-label="Search the portal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Search</span><kbd>Ctrl K</kbd>
+    </button>
+    <div class="user-chip" id="userChip" data-cs-boot="display:none">
+      <button class="user-chip-btn" id="userChipBtn" data-onclick="toggleUserMenu(event)">
+        <span class="user-chip-av" id="userChipAv">A</span>
+        <span data-cs-boot="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2">
+          <span id="userChipName">Admin</span>
+          <span class="user-chip-role" id="userChipRole">admin</span>
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-cs-boot="width:13px;height:13px;opacity:.6"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="user-menu" id="userMenu">
+        <div class="user-menu-info">
+          <div class="user-menu-name" id="userMenuName">Admin</div>
+          <div class="user-menu-sub" id="userMenuSub">admin</div>
+        </div>
+        <button class="user-menu-item" id="userMenuAccess" data-onclick="showPage('accessControl');closeUserMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Admin Center
+        </button>
+        <button class="user-menu-item" data-onclick="openChangePassword();closeUserMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Change Password
+        </button>
+        <button class="user-menu-item danger" data-onclick="logout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Fixed frame: paints the brand ground everywhere OUTSIDE a rounded hole,
+     so the white sheet stays a complete square with the frame around it no
+     matter how far the page scrolls. Purely decorative, never hit-tested. -->
+<div id="ctgFrame" aria-hidden="true"></div>
+<div class="sidebar-overlay" id="sidebarOverlay" data-onclick="toggleSidebar()"></div>
+<div class="sidebar" id="sidebar">
+  <!-- The brand moved off the top bar and into the rail. The mark stays visible
+       in both states; only .side-brand-name is dropped when collapsed, so the
+       icon alone identifies the rail the way the reference does. -->
+  <div class="side-brand">
+    <a class="side-brand-mark" role="button" tabindex="0" data-onclick="showPage('dashboard')"
+       data-onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('dashboard')}"
+       aria-label="CTG One — go to the dashboard">
+      <span class="side-brand-icon"><img src="ctg-one-mark-light.png?v=20260918b" alt="" aria-hidden="true"></span>
+      <span class="side-brand-name"><img src="ctg-one-wordmark-light.png?v=20260918b" alt="CTG One"></span>
+    </a>
+    <button type="button" class="side-collapse" id="sideCollapseBtn" data-onclick="ctgToggleSidebarRail()"
+            aria-label="Collapse the sidebar" aria-expanded="true" title="Collapse the sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+  </div>
+  <a class="side-link" id="sideDashboard" data-page="dashboard" data-onclick="showPage('dashboard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+    Dashboard
+  </a>
+  <div class="side-group open" id="sideRegGroup">
+    <a class="side-link side-group-toggle" data-onclick="toggleSideGroup('sideRegGroup')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+      <span>Registration</span>
+      <svg class="side-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </a>
+    <div class="side-group-body"><div class="side-group-body-inner">
+      <a class="side-sublink active" id="sideRegistration" data-page="registration" data-onclick="showPage('registration')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+        Patient Registration
+      </a>
+    </div></div>
+  </div>
+  <!-- Referrals: the law firm ↔ clinic hand-off. Top level rather than inside
+       the Registration group because a law-firm account has that whole group
+       hidden, and this is the one page those accounts write to. -->
+  <!-- Notes Form integration test bench. Admin-only (routes/notesForm.js checks
+       the role), so applySidebar hides it for everyone else alongside Admin Center. -->
+  <a class="side-link" id="sideNotesFormTest" data-page="notesFormTest" data-cs-boot="display:none" data-onclick="showPage('notesFormTest')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+    Notes Form API
+  </a>
+  <a class="side-link" id="sideReferrals" data-page="referrals" data-onclick="showPage('referrals')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l2 3h5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 14h6"/><path d="m13 11 3 3-3 3"/></svg>
+    Referrals
+  </a>
+  <a class="side-link" id="sidePatientLists" data-page="patientLists" data-onclick="showPage('patientLists')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Patient Lists
+  </a>
+  <div class="side-group open" id="sideApptGroup">
+    <a class="side-link side-group-toggle" data-onclick="toggleSideGroup('sideApptGroup')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span>Appointment</span>
+      <svg class="side-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </a>
+    <div class="side-group-body"><div class="side-group-body-inner">
+      <a class="side-sublink" id="sideAppointment" data-page="appointment" data-onclick="showPage('appointment')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Appointments
+      </a>
+      <!-- Rooms sit beside the calendar because that is where they are used.
+           They ride on the `appointment` permission (SUBPAGE_PARENT). -->
+      <!-- The day's rooms at a glance. Rides on `appointment` too. -->
+      <a class="side-sublink" id="sideCommandCenter" data-page="commandCenter" data-onclick="showPage('commandCenter')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Provider's Dashboard
+      </a>
+      <a class="side-sublink" id="sideApptRooms" data-page="apptRooms" data-onclick="showPage('apptRooms')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M15 21v-9a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v9"/></svg>
+        Rooms
+      </a>
+    </div></div>
+  </div>
+  <a class="side-link" id="sidePendingAce" data-page="pendingAce" data-onclick="showPage('pendingAce')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    Patients Pending for Day 1
+  </a>
+  <a class="side-sublink" id="sideIncompleteAce" data-page="incompleteAce" data-onclick="showPage('incompleteAce')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    Incomplete Day 1 <span id="incompleteAceCount" data-cs-boot="margin-left:auto;background:#392638;color:#90E0EF;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
+  </a>
+  <a class="side-sublink" id="sideCompletedAce" data-page="completedAce" data-onclick="showPage('completedAce')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    Completed Day 1 <span id="completedAceCount" data-cs-boot="margin-left:auto;background:#062E52;color:#00B4D8;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
+  </a>
+  <a class="side-link" id="sidePendingDay2" data-page="pendingDay2" data-onclick="showPage('pendingDay2')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    Patients Pending for Day 2 <span id="pendingDay2Count" data-cs-boot="display:none;margin-left:auto;background:#062E52;color:#00B4D8;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
+  </a>
+  <div class="side-divider"></div>
+  <div class="side-section-label">Current Forms</div>
+  <a class="side-link" id="sideDay2" data-page="day2" data-onclick="showPage('day2')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    Exams
+  </a>
+  <a class="side-link" id="sideDailyNotes" data-page="dailyNotes" data-onclick="showPage('dailyNotes')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Daily Notes
+  </a>
+  <a class="side-link" id="sideIntakeForm" data-page="intakeForm" data-onclick="showPage('intakeForm')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    Forms
+  </a>
+  <div class="side-divider"></div>
+  <div class="side-section-label" id="sideBillingLabel">Billing</div>
+  <a class="side-link" id="sideArSummary" data-page="arSummary" data-onclick="showPage('arSummary')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    AR Summary
+  </a>
+  <a class="side-link" id="sideCollectionMgmt" data-page="collectionMgmt" data-onclick="showPage('collectionMgmt')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+    Collection Management
+  </a>
+  <div class="side-divider"></div>
+  <div class="side-section-label" id="sideMessagingLabel">Messaging</div>
+  <a class="side-link" id="sideMeetings" data-page="meetings" data-onclick="showPage('meetings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    Meeting Rooms
+    <span id="mtgLobbyBadge" class="im-sidebar-unread" data-cs-boot="display:none">0</span>
+  </a>
+  <a class="side-link" id="sideInternalMessaging" data-page="internalMessaging" data-onclick="showPage('internalMessaging')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/></svg>
+    Internal Messaging
+    <span id="imSidebarUnread" class="im-sidebar-unread" data-cs-boot="display:none">0</span>
+  </a>
+  <a class="side-link" id="sidePatientMessaging" data-page="patientMessaging" data-onclick="showPage('patientMessaging')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8H7"/><path d="M17 12H7"/><path d="M19 4H5a2 2 0 0 0-2 2v13l4-4h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg>
+    Patient Messaging
+    <span id="pmSidebarBadge" class="im-sidebar-unread" data-cs-boot="display:none">0</span>
+  </a>
+  <a class="side-link" id="sideInvitePatient" data-page="invitePatient" data-onclick="showPage('invitePatient')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
+    Invite Patient
+  </a>
+  <div class="side-divider" id="sideAdminDivider" data-cs-boot="display:none"></div>
+  <div class="side-section-label" id="sideAdminLabel" data-cs-boot="display:none">Administration</div>
+  <a class="side-link" id="sideAccessControl" data-page="accessControl" data-onclick="showPage('accessControl')" data-cs-boot="display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Admin Center
+  </a>
+  <div class="side-group" id="sideNewGroup">
+    <a class="side-link side-group-toggle" data-onclick="toggleSideGroup('sideNewGroup')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>New Additions</span>
+      <svg class="side-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </a>
+    <div class="side-group-body"><div class="side-group-body-inner">
+      <a class="side-sublink" id="sideCareAdmin" data-page="careAdmin" data-onclick="showPage('careAdmin')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Care Administration
+      </a>
+      <a class="side-sublink" id="sideNotification" data-page="notification" data-onclick="showPage('notification')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Notification
+      </a>
+      <a class="side-sublink" id="sideContacts" data-page="contacts" data-onclick="showPage('contacts')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Contacts
+      </a>
+      <a class="side-sublink" id="sidePatientCheckIn" data-page="patientCheckIn" data-onclick="showPage('patientCheckIn')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Patient Check In
+      </a>
+      <a class="side-sublink" id="sidePatientChart" data-page="patientChart" data-onclick="showPage('patientChart')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6a2 2 0 0 1 2 2v2h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2V4a2 2 0 0 1 2-2z"/><path d="M9 2v4h6V2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="13" y2="15"/></svg>
+        Patient Chart
+      </a>
+      <a class="side-sublink" id="sideRegistrationList" data-page="registrationList" data-onclick="showPage('registrationList')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        Registration List
+      </a>
+      <a class="side-sublink" id="sideApptConfigs" data-page="apptConfigs" data-onclick="showPage('apptConfigs')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Appointment Configs
+      </a>
+      <a class="side-sublink" id="sidePatientEncounters" data-page="patientEncounters" data-onclick="showPage('patientEncounters')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+        Patient Encounters
+      </a>
+    </div></div>
+  </div>
+  <div class="side-divider" data-cs-boot="margin-top:auto"></div>
+  <!-- Theme toggle mounts here (see mountThemeToggle) rather than in the top
+       bar, so the sidebar carries every piece of account/appearance chrome and
+       nothing has to float over the content. -->
+  <div class="side-tools" id="sideTools"></div>
+  <div class="side-account-card" id="sideAccountCard">
+    <div class="side-account-who">
+      <span class="side-account-av" id="sideAccountAv">A</span>
+      <span class="side-account-info">
+        <span class="side-account-name" id="sideAccountName">Admin</span>
+        <span class="side-account-role" id="sideAccountRole">Administrator</span>
+      </span>
+    </div>
+    <button type="button" class="side-account-out" data-onclick="logout()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Log out
+    </button>
+  </div>
+</div>
+<script src="boot-sidegroups.js?v=20260929a"></script>
+
+
+<div class="page" id="page-dashboard">
+<div class="wrap"><div id="dashboardMount"></div></div>
+</div>
+
+<div class="page" id="page-noAccess">
+<div class="wrap">
+  <div class="card" data-cs-boot="margin-top:40px;text-align:center">
+    <div class="card-body" data-cs-boot="padding:44px 24px">
+      <div data-cs-boot="width:54px;height:54px;border-radius:50%;background:var(--aml);color:var(--amber);display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-cs-boot="width:26px;height:26px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div data-cs-boot="font-size:17px;font-weight:600;margin-bottom:6px">No portal access yet</div>
+      <div data-cs-boot="font-size:13px;color:var(--muted);max-width:380px;margin:0 auto">Your account hasn't been granted access to any sections. Please contact an administrator to enable the pages you need.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="page" id="page-accessControl">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--al);color:var(--accent)">AC</div>
+      <div>
+        <div class="pt-n">Admin Center</div>
+      </div>
+    </div>
+    <div class="tags"><span class="tag tb" id="acUserCountTag">0 Accounts</span></div>
+  </div>
+
+  <div class="ac-page-tabs" id="acPageTabs">
+    <button type="button" class="ac-page-tab active" data-ac-tab="addAccount" data-onclick="acSwitchTab('addAccount')">Add Account</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="accounts" data-onclick="acSwitchTab('accounts')">Accounts &amp; Page Visibility</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="lawFirms" data-onclick="acSwitchTab('lawFirms')">Law Firm Registration</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="audit" data-onclick="acSwitchTab('audit')">Audit Logging</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="review" data-onclick="acSwitchTab('review')">Review History</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="pendingAmendments" data-onclick="acSwitchTab('pendingAmendments')">Pending Amendments</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="privacyRequests" data-onclick="acSwitchTab('privacyRequests')">Privacy Requests</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="disclosureLog" data-onclick="acSwitchTab('disclosureLog')">Disclosure Log</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="backup" data-onclick="acSwitchTab('backup')">Backup &amp; Restore</button>
+    <button type="button" class="ac-page-tab" data-ac-tab="settings" data-onclick="acSwitchTab('settings')">Settings</button>
+  </div>
+
+  <div class="ac-page-panel active" id="acPanel-addAccount">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-ico ic-blue">+</div>
+        <div class="card-title" id="acFormTitle">Add Account</div>
+        <div class="card-sub"><button class="btn btn-ghost" id="acResetFormBtn" data-cs-boot="display:none" data-onclick="acResetForm()">Cancel Edit</button></div>
+      </div>
+      <div class="card-body">
+        <div class="g3 ac-ident-row">
+          <div class="fg"><label for="acDisplayName">Full Name</label><input type="text" id="acDisplayName" placeholder="e.g. Jane Doe">
+            <div class="small-muted ac-field-note">The person's real full name. It is what identifies them in the audit log.</div>
+          </div>
+          <div class="fg"><label>Username</label><input type="text" id="acUsername" placeholder="e.g. jdoe" autocomplete="off"></div>
+          <div class="fg"><label>Account Type</label>
+            <select id="acRole" data-onchange="acToggleLawFirm()">
+              <option value="lawyer">Law Firm</option>
+              <option value="provider">Provider</option>
+              <option value="ta">Technical Assistant (TA)</option>
+              <option value="compliance">Compliance</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+        </div>
+        <div class="g2" id="acLawFirmRow">
+          <div class="fg"><label>Law Firm</label>
+            <select id="acLawFirm"><option value="">— Select —</option></select>
+            <div class="small-muted" data-cs-boot="margin-top:4px">Selections come only from the Law Firm Registration tab. This lawyer will only see patients whose Law Firm matches this exact name.</div>
+          </div>
+          <div class="fg"></div>
+        </div>
+        <div class="g2 ac-security-row">
+          <div class="fg"><label for="acEmail">Email Address</label><input type="email" id="acEmail" placeholder="e.g. jane@clinic.com" autocomplete="off">
+            <div class="small-muted ac-field-note">Where sign-in codes and notifications are sent.</div>
+          </div>
+          <div class="fg ac-mfa-field">
+            <label aria-hidden="true" class="ac-spacer-label">&nbsp;</label>
+            <label class="ac-mfa-card" for="acMfaEnabled">
+              <input type="checkbox" id="acMfaEnabled">
+              <span class="ac-mfa-copy">
+                <span class="ac-mfa-title">Two-step verification</span>
+                <span class="ac-mfa-note">Require a one-time code emailed at each sign-in. Needs an email address above.</span>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="g2 ac-form-actions">
+          <div class="fg"><label id="acPassLabel" for="acPassword">Password</label>
+            <div class="pw-field">
+              <input type="password" id="acPassword" placeholder="Set a password" autocomplete="new-password">
+              <button type="button" class="pw-reveal" id="acPassReveal" data-onclick="acTogglePassword()"
+                      aria-controls="acPassword" aria-pressed="false" aria-label="Show password" title="Show password">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line class="pw-slash" x1="4" y1="20" x2="20" y2="4"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="fg"><label aria-hidden="true" class="ac-spacer-label">&nbsp;</label><button class="btn btn-primary" id="acSaveBtn" data-onclick="acSaveAccount()">Create Account</button></div>
+        </div>
+        <!-- Below the grid, not inside the Password cell: .g2 bottom-aligns its
+             cells so inputs line up when labels wrap, which only holds while every
+             cell ends at its input. Help text inside the cell pushed the Create
+             Account button down to match the bottom of the text. -->
+        <div class="small-muted" data-cs-boot="margin-top:6px">At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.</div>
+        <div data-cs-boot="font-size:11px;color:var(--muted);margin-top:4px">Administrators always have full access. For other account types, set page visibility in the Accounts &amp; Page Visibility tab after creating the account.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-accounts">
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-ico ic-green">✓</div>
+        <div class="card-title">Accounts &amp; Page Visibility</div>
+        <div class="card-sub">Open an account to control visible pages and page parts</div>
+      </div>
+      <div class="card-body ac-table-wrap" id="acMatrixMount"></div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-lawFirms">
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-blue">LF</div><div class="card-title">Register a Law Firm</div><div class="card-sub">This list is the only source for law-firm selections across the portal</div></div>
+      <div class="card-body">
+        <div class="ac-law-firm-add">
+          <div class="fg" data-cs-boot="margin:0;flex:1"><label>Law Firm Name</label><input type="text" id="acNewLawFirmName" placeholder="Enter the complete law firm name" data-onkeydown="if(event.key==='Enter'){event.preventDefault();acAddLawFirm()}"></div>
+          <button type="button" class="btn btn-primary" data-onclick="acAddLawFirm()">Add Law Firm</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-green">A–Z</div><div class="card-title">Registered Law Firms</div><div class="card-sub" id="acLawFirmCountTag">0 Law Firms</div></div>
+      <div class="card-body" id="acLawFirmListMount"></div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-audit">
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-amber">AL</div><div class="card-title">Audit Logging</div></div>
+      <div class="card-body">
+        <div class="small-muted" data-cs-boot="margin-bottom:14px">A permanent, read-only record of every sign-in and every change to accounts and patient records. Entries cannot be edited or removed.</div>
+        <div class="ac-audit-filters">
+          <div class="fg"><label for="auditAction">Action</label><select id="auditAction" data-onchange="auditReload()"><option value="">All actions</option></select></div>
+          <div class="fg"><label for="auditActor">User</label><select id="auditActor" data-onchange="auditReload()"><option value="">All users</option></select></div>
+          <div class="fg"><label for="auditFrom">From</label><input type="date" id="auditFrom" data-onchange="auditReload()"></div>
+          <div class="fg"><label for="auditTo">To</label><input type="date" id="auditTo" data-onchange="auditReload()"></div>
+          <button type="button" class="btn btn-ghost btn-sm ac-audit-clear" data-onclick="auditClearFilters()">Clear</button>
+        </div>
+        <div class="ac-audit-summary" id="auditSummary">Loading audit trail…</div>
+        <div class="ac-audit-tablewrap">
+          <table class="ac-audit-table">
+            <colgroup><col data-cs-boot="width:14%"><col data-cs-boot="width:12%"><col data-cs-boot="width:13%"><col data-cs-boot="width:30%"><col data-cs-boot="width:11%"><col data-cs-boot="width:20%"></colgroup>
+            <thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Session</th><th>Country &amp; IP</th></tr></thead>
+            <tbody id="auditRows"></tbody>
+          </table>
+        </div>
+        <div class="ac-audit-pager">
+          <button type="button" class="btn" id="auditPrev" data-onclick="auditPage(-1)">Previous</button>
+          <span class="small-muted" id="auditPageLabel"></span>
+          <button type="button" class="btn" id="auditNext" data-onclick="auditPage(1)">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-review">
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-blue">RV</div><div class="card-title">Review History</div></div>
+      <div class="card-body">
+        <div class="small-muted" data-cs-boot="margin-bottom:12px">A dated record that the audit trail was actually reviewed — the periodic activity review required by HIPAA §164.308(a)(1)(ii)(D). Each entry is permanent once logged.</div>
+        <div data-cs-boot="display:flex;justify-content:flex-end;margin-bottom:10px"><button type="button" class="btn btn-primary btn-sm" data-onclick="arOpenAdd()">Log a review</button></div>
+        <div id="arListMount"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-pendingAmendments">
+    <div id="paMount"></div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-privacyRequests">
+    <div id="patientRequestsMount"></div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-disclosureLog">
+    <div id="disclosureMount"></div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-backup">
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-blue">BK</div><div class="card-title">Backup &amp; Restore</div></div>
+      <div class="card-body">
+        <div class="small-muted" data-cs-boot="margin-bottom:14px">A complete copy of every record, kept in private
+        storage separate from the portal. Backups are removed automatically after 30 days. Every backup,
+        test and restore is written to the audit log.</div>
+        <div id="bkSchedule"></div>
+        <div class="bk-toolbar">
+          <button type="button" class="btn btn-primary" data-onclick="bkCreate(this)">Create backup now</button>
+          <button type="button" class="btn btn-ghost" data-onclick="renderBackups()">Refresh</button>
+          <button type="button" class="btn btn-ghost" data-onclick="bkPrune(this)">Remove expired backups</button>
+        </div>
+        <div id="bkList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ac-page-panel" id="acPanel-settings">
+    <div class="card">
+      <div class="card-hd"><div class="card-ico ic-blue">ST</div><div class="card-title">Portal Settings</div></div>
+      <div class="card-body">
+        <label class="acfg-toggle-row">
+          <span class="acfg-toggle-copy">
+            <strong>Grammar Deep Check (AI)</strong>
+            <small>Automatically corrects grammar, spelling, and punctuation in clinical text fields using Azure OpenAI. Turning this off applies to every account immediately.</small>
+          </span>
+          <span class="acfg-toggle-switch"><input type="checkbox" id="stGrammarDeepCheck" data-onchange="stToggleGrammarDeepCheck(this.checked)"><i></i></span>
+        </label>
+        <div class="small-muted" id="stGrammarDeepCheckNote" data-cs-boot="margin-top:8px"></div>
+        <div class="acfg-role-picker" id="stGrammarDeepCheckRoles">
+          <div class="acfg-role-picker-label">Applies to</div>
+          <div class="acfg-role-pills">
+            <label class="acfg-role-pill"><input type="checkbox" value="provider" data-onchange="stSaveGrammarDeepCheckRoles()"><span>Provider</span></label>
+            <label class="acfg-role-pill"><input type="checkbox" value="ta" data-onchange="stSaveGrammarDeepCheckRoles()"><span>Technical Assistant (TA)</span></label>
+            <label class="acfg-role-pill"><input type="checkbox" value="compliance" data-onchange="stSaveGrammarDeepCheckRoles()"><span>Compliance</span></label>
+            <label class="acfg-role-pill"><input type="checkbox" value="lawyer" data-onchange="stSaveGrammarDeepCheckRoles()"><span>Law Firm</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="page active" id="page-registration">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av">PR</div>
+      <div><div class="pt-n">Patient Registration</div></div>
+    </div>
+    <div class="tags"><span class="tag tb" id="regTotalTag">0 Registered</span><span class="tag ta" id="regPendingTag">0 Pending Day 1</span></div>
+  </div>
+
+  <!-- Shown only when Registration was opened from an appointment's right-click
+       menu (apptBlockCtxRegistration in appointments.js) — makes it clear this
+       isn't the generic new-patient flow, and saving here links the new patient
+       back to that specific appointment instead of just dropping into Patient
+       Lists. Hidden otherwise. -->
+  <div id="regApptLinkBanner" data-cs-boot="display:none;margin-bottom:14px;padding:12px 16px;border-radius:10px;background:var(--al);border:1px solid var(--accent);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div data-cs-boot="font-size:12.5px;font-weight:700;color:var(--accent)" id="regApptLinkText"></div>
+    <button type="button" class="btn btn-ghost btn-sm" data-onclick="apptCancelRegistrationLink()">Cancel, back to Appointments</button>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-blue">+</div><div class="card-title" id="regFormCardTitle">New Patient Details</div><div class="card-sub" id="regFormCardSub"></div></div>
+    <div class="card-body">
+      <div class="g3">
+        <div class="fg"><label>Last Name<span class="req-star" aria-hidden="true">*</span></label><input type="text" id="regLastName" required aria-required="true" placeholder="Last name"></div>
+        <div class="fg"><label>First Name<span class="req-star" aria-hidden="true">*</span></label><input type="text" id="regFirstName" required aria-required="true" placeholder="First name"></div>
+        <div class="fg"><label>ID / Medical Record #</label><input type="text" id="regMRN" placeholder="e.g. MR-00123"></div>
+        <div class="fg"><label>Date of Birth<span class="req-star" aria-hidden="true">*</span></label>
+          <div class="date-field"><input type="text" id="regDOB" required aria-required="true" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('regDOB')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Gender<span class="req-star" aria-hidden="true">*</span></label><select id="regGender" required aria-required="true"><option value="">— Select —</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Prefer not to say</option></select></div>
+        <div class="fg"><label>Law Firm<span class="req-star" aria-hidden="true">*</span></label>
+          <select id="regLawFirm" required aria-required="true"><option value="">— Select —</option></select>
+        </div>
+        <div class="fg full"><label>Address Line 1</label><input type="text" id="regAddressLine" placeholder="Street address"></div>
+        <div class="fg full"><label>Address Line 2</label><input type="text" id="regAddressLine2" placeholder="Apartment, suite, unit, building (optional)"></div>
+        <div class="fg"><label>City</label><input type="text" id="regCity" placeholder="City"></div>
+        <div class="fg"><label>State</label><input type="text" id="regState" placeholder="State"></div>
+        <div class="fg"><label>ZIP Code<span class="req-star" aria-hidden="true">*</span></label><input type="text" id="regZip" required aria-required="true" placeholder="ZIP code"></div>
+        <div class="fg"><label>Email Address</label><input type="text" id="regEmail" placeholder="patient@email.com"></div>
+        <div class="fg"><label>Mobile #</label><input type="text" id="regMobile" placeholder="Mobile number"></div>
+        <div class="fg"><label>Date of Incident</label>
+          <div class="date-field"><input type="text" id="regDOI" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('regDOI')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Device</label><select id="regDevice"><option value="">— Select —</option><option>iPhone</option><option>Android</option></select></div>
+        <div class="fg"><label>RecoverArc ID</label><input type="text" id="regRecoverArcId" placeholder="e.g. patient_0f3c…" autocomplete="off" spellcheck="false" title="The id RecoverArc uses for this patient. Their daily notes are matched to this chart by this id."></div>
+      </div>
+      <div class="sdiv"><span>Case Assignment</span></div>
+      <div class="g3">
+        <div class="fg"><label>Facility</label>
+          <select id="regFacility">
+            <option>Concussion Therapy Group</option><option>Provider</option>
+          </select>
+        </div>
+        <div class="fg"><label>Provider</label><select id="regProvider"></select></div>
+        <div class="fg"><label>Case</label>
+          <select id="regCase">
+            <option>Neuro</option><option selected>Neuro 1</option><option>Neuro 2</option><option>Neuro 3</option><option>Neuro 4</option>
+          </select>
+        </div>
+      </div>
+      <div data-cs-boot="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;flex-wrap:wrap">
+        <label class="plain-check"><input type="checkbox" id="regPendingAce"> Pending for Day 1</label>
+        <div data-cs-boot="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" data-onclick="exitRegistration()" data-cs-boot="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border-color:transparent;box-shadow:0 8px 20px rgba(220,38,38,.28)">Exit</button>
+          <button class="btn btn-primary" data-onclick="saveRegistration()">Save Patient</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /page-registration -->
+
+<div class="page" id="page-appointment">
+<div class="wrap appt-page-wrap">
+  <div class="card appt-calendar-card">
+    <div class="card-hd appt-toolbar">
+      <div class="appt-nav">
+        <button type="button" class="btn btn-ghost btn-sm" data-onclick="apptPrev()" aria-label="Previous">‹</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-onclick="apptToday()">Today</button>
+        <button type="button" class="btn btn-ghost btn-sm" data-onclick="apptNext()" aria-label="Next">›</button>
+      </div>
+      <div class="appt-date-summary">
+        <div class="card-title" id="apptWeekRangeLabel">—</div>
+        <div class="appt-date-status" aria-live="polite">
+          <span class="appt-date-status-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+          <strong id="apptWeekTag">0 Patients Scheduled Today</strong>
+        </div>
+      </div>
+      <div class="appt-toolbar-controls">
+        <select id="apptFacilityFilterSelect" class="appt-facility-select" data-onchange="apptSetFacilityFilter(this.value)" aria-label="Facility filter">
+          <option value="both">Both Facilities</option>
+          <option value="Concussion Therapy Group">Concussion Therapy Group</option>
+          <option value="Provider">Provider</option>
+        </select>
+        <div class="appt-facility-tabs" id="apptViewTabs"></div>
+        <span id="apptUndoSlot" class="appt-undo-slot"></span>
+        <button type="button" class="btn btn-primary btn-sm" data-onclick="openApptModal()">+ New Appointment</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="apptGridMount"></div>
+    </div>
+  </div>
+</div>
+</div><!-- /page-appointment -->
+
+<div class="modal-overlay" id="apptModal">
+  <div class="modal" data-cs-boot="width:min(700px,96%)">
+    <div class="modal-hd"><div class="modal-title" id="apptModalTitle">New Appointment</div><button class="modal-close" data-onclick="closeApptModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div class="fg">
+        <label>Patient</label>
+        <select id="apptPatientSelect" data-onchange="apptPatientSelectChange()">
+          <option value="">— Not yet registered —</option>
+        </select>
+      </div>
+
+      <div id="apptNewPatientBlock">
+        <div class="sdiv"><span>New Patient Details</span></div>
+        <div class="g2">
+          <div class="fg"><label>Last Name</label><input type="text" id="apptNewLastName" placeholder="Last name"></div>
+          <div class="fg"><label>First Name</label><input type="text" id="apptNewFirstName" placeholder="First name"></div>
+          <div class="fg"><label>ID / Medical Record #</label><input type="text" id="apptNewMRN" placeholder="e.g. MR-00123"></div>
+          <div class="fg"><label>Date of Birth</label>
+            <div class="date-field"><input type="text" id="apptNewDOB" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('apptNewDOB')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+          </div>
+          <div class="fg"><label>Gender</label><select id="apptNewGender"><option value="">— Select —</option><option>Male</option><option>Female</option><option>Non-binary</option><option>Prefer not to say</option></select></div>
+          <div class="fg"><label>Law Firm</label>
+            <select id="apptNewLawFirm"><option value="">— Select —</option></select>
+          </div>
+          <div class="fg full"><label>Address Line 1</label><input type="text" id="apptNewAddressLine" placeholder="Street address"></div>
+          <div class="fg full"><label>Address Line 2</label><input type="text" id="apptNewAddressLine2" placeholder="Apartment, suite, unit, building (optional)"></div>
+          <div class="fg"><label>City, State, Zip</label><input type="text" id="apptNewCityStateZip" placeholder="City, State ZIP"></div>
+          <div class="fg"><label>Email Address</label><input type="text" id="apptNewEmail" placeholder="patient@email.com"></div>
+          <div class="fg"><label>Mobile #</label><input type="text" id="apptNewMobile" placeholder="Mobile number"></div>
+          <div class="fg"><label>Date of Incident</label>
+            <div class="date-field"><input type="text" id="apptNewDOI" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('apptNewDOI')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sdiv"><span>Case Assignment</span></div>
+      <div class="g3">
+        <div class="fg"><label>Facility</label>
+          <select id="apptFacility" data-onchange="apptFacilityChange()">
+            <option>Concussion Therapy Group</option><option>Provider</option>
+          </select>
+        </div>
+        <div class="fg"><label>Provider</label><select id="apptProvider"></select></div>
+        <div class="fg"><label>Case</label>
+          <select id="apptCase">
+            <option>Neuro</option><option selected>Neuro 1</option><option>Neuro 2</option><option>Neuro 3</option><option>Neuro 4</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sdiv"><span>Visit Details</span></div>
+      <div class="g3">
+        <div class="fg"><label>Date</label>
+          <div class="date-field"><input type="text" id="apptDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('apptDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Start Time</label><input type="time" id="apptStart" data-onchange="apptSyncEndTime()"></div>
+        <div class="fg"><label>End Time</label><input type="time" id="apptEnd"></div>
+      </div>
+      <div class="g3">
+        <div class="fg">
+          <label>Visit Type</label>
+          <select id="apptVisitType">
+            <option value="Day 2 Exam_Neuro Only">Day 2 Exam Neuro Only</option>
+            <option value="Therapy Visits_Neuro Only">Therapy Visits Neuro Only</option>
+            <option value="Re-Exam_Neuro Only">Re-Exam Neuro Only</option>
+            <option value="ACE_Neuro Only">Day 1 Neuro Only</option>
+            <option value="Final Exam_Neuro Only">Final Exam Neuro Only</option>
+          </select>
+        </div>
+        <div class="fg"><label>Status</label>
+          <select id="apptStatus">
+            <option>Unconfirmed</option>
+            <option>Check-in</option>
+            <option>Reschedule</option>
+            <option>Missed</option>
+            <option>Cancelled</option>
+          </select>
+        </div>
+        <div class="fg"><label>Room</label>
+          <select id="apptRoom" data-onchange="apptRoomChanged()"><option value="">— Select —</option></select>
+        </div>
+      </div>
+      <!-- Video visit. Ticks itself when the chosen room is a video room, but
+           stays overridable: a phone consult booked into a physical room is a
+           real thing, and so is an in-person visit in a room that usually
+           does video. Filled in by apptSyncTelehealthRow(). -->
+      <div class="appt-tele-row" id="apptTeleRow"></div>
+      <div class="fg"><label>Notes</label><textarea id="apptNotes" rows="3" placeholder="Optional notes..."></textarea></div>
+      <div class="appt-modal-color-key" aria-label="Concussion Therapy Group appointment colors">
+        <div class="appt-modal-color-title">Concussion Therapy Group Appointment Colors</div>
+        <div class="appt-modal-color-items">
+          <span><i data-cs-boot="background:#1FCECB"></i>Day 2 Exam Neuro Only</span>
+          <span><i data-cs-boot="background:#1A56DB"></i>Therapy Visits Neuro Only</span>
+          <span><i data-cs-boot="background:#0A6E3F"></i>Re-Exam Neuro Only</span>
+          <span><i data-cs-boot="background:#C2540A"></i>Day 1 Neuro Only</span>
+          <span><i data-cs-boot="background:#F5C518"></i>Final Exam Neuro Only</span>
+        </div>
+      </div>
+      <div class="appt-modal-color-key" aria-label="Appointment status colors">
+        <div class="appt-modal-color-title">Status Colors</div>
+        <div class="appt-modal-color-items" id="apptModalStatusColorItems"></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost btn-sm" id="apptDeleteBtn" data-cs-boot="display:none;margin-right:auto;border-color:var(--red);color:var(--red)" data-onclick="deleteAppointment()">Delete</button>
+      <button type="button" class="btn btn-ghost" data-onclick="closeApptModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="apptSaveBtn" data-onclick="saveAppointment()">Save Appointment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Right-click context menu on the appointment grid: choose Appointment or Break/Block -->
+<div class="appt-context-menu" id="apptContextMenu">
+  <button type="button" id="apptContextAddAppointmentBtn" data-onclick="apptContextAddAppointment()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+    Add Appointment
+  </button>
+  <button type="button" id="apptContextAddBreakBtn" data-onclick="apptContextAddBreakBlock()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="4" x2="8" y2="10"/></svg>
+    Break / Block
+  </button>
+</div>
+
+<!-- Right-click context menu on an APPOINTMENT block: Edit / Status ▸ /
+     Patient ▸ / Delete. Content is built per-appointment by
+     apptBlockCtxHTML() in appointments.js. -->
+<div class="appt-context-menu appt-block-ctx" id="apptBlockContextMenu"></div>
+
+<!-- Patient Comments — a per-patient note log (status + free text + who/when
+     added/updated), styled after EnableMyPractice's "Patient Comment" panel.
+     Opened only from the appointment right-click menu's "Patient Comment"
+     item (not from the Registration page). Logic lives in appointments.js. -->
+<div class="modal-overlay" id="patientCommentsModal">
+  <div class="modal" data-cs-boot="width:min(760px,96%)">
+    <div class="modal-hd"><div class="modal-title">Patient Comments</div><button class="modal-close" data-onclick="closePatientCommentsModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div id="pcSummary" data-cs-boot="font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:14px"></div>
+      <div id="pcListView">
+        <div data-cs-boot="display:flex;justify-content:flex-end;margin-bottom:10px">
+          <button type="button" class="btn btn-primary btn-sm" data-onclick="patientCommentsShowEditor()">+ Add Note</button>
+        </div>
+        <div id="pcTableWrap"></div>
+      </div>
+      <div id="pcEditorView" data-cs-boot="display:none">
+        <div class="fg"><label>Note</label><textarea id="pcNoteText" rows="8" placeholder="Enter comment..."></textarea></div>
+        <div data-cs-boot="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          <button type="button" class="btn btn-ghost" data-onclick="patientCommentsCancelEditor()">Cancel</button>
+          <button type="button" class="btn btn-primary" data-onclick="patientCommentsSaveNote()">Add/Update</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="apptRescheduleModal">
+  <div class="modal" data-cs-boot="width:min(460px,96%)">
+    <div class="modal-hd"><div class="modal-title">Reschedule Appointment</div><button class="modal-close" data-onclick="closeApptRescheduleModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div id="apptRescheduleCurrent" class="bpbox" data-cs-boot="font-style:normal;margin-bottom:14px"></div>
+      <div class="g2">
+        <div class="fg"><label>New Date</label>
+          <div class="date-field"><input type="text" id="apptRescheduleDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('apptRescheduleDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>New Time</label><input type="time" id="apptRescheduleTime"></div>
+      </div>
+      <div class="small-muted" data-cs-boot="margin-top:2px">Saving will set the appointment status to Reschedule and add a patient comment automatically.</div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="closeApptRescheduleModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="confirmApptReschedule()">Save Reschedule</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="breakBlockModal">
+  <div class="modal" data-cs-boot="width:min(560px,96%)">
+    <div class="modal-hd"><div class="modal-title" id="breakModalTitle">New Break / Block</div><button class="modal-close" data-onclick="closeBreakBlockModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div class="g2">
+        <div class="fg"><label>Facility</label>
+          <select id="breakFacility">
+            <option>Concussion Therapy Group</option><option>Provider</option>
+          </select>
+        </div>
+        <div class="fg"><label>Scheduled By</label>
+          <input type="text" id="breakSchedule" readonly title="The account that created this break/block">
+        </div>
+      </div>
+      <div class="fg"><label>Patient</label><select id="breakPatientSelect" data-onchange="breakPreviewColor()"></select></div>
+      <div class="fg"><label>Agenda</label><input type="text" id="breakAgendaInput" placeholder="e.g. ACE, Sway Review, or Meeting with someone" data-oninput="breakPreviewColor()"></div>
+      <div class="fg" id="breakColorPreviewRow" data-cs-boot="margin-top:-6px">
+        <div class="small-muted"><span id="breakColorDot" data-cs-boot="display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;background:#03045E"></span>Detected as <strong id="breakColorLabel">General</strong> — color is picked up automatically from the text (mention "Sway", "ACE", "Epley's", "Balance", etc.)</div>
+      </div>
+      <div class="g3">
+        <div class="fg"><label>Date</label>
+          <div class="date-field"><input type="text" id="breakDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('breakDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Start Time</label><input type="time" id="breakStart" data-onchange="breakSyncEndTime()"></div>
+        <div class="fg"><label>End Time</label><input type="time" id="breakEnd"></div>
+      </div>
+      <div class="appt-modal-color-key" aria-label="Provider break and block colors">
+        <div class="appt-modal-color-title">Provider Break / Block Colors</div>
+        <div class="appt-modal-color-items" id="breakColorKeyItems">
+          <span><i data-cs-boot="background:#C2540A"></i>Sway Review</span>
+          <span><i data-cs-boot="background:#B57EDC"></i>Epley's Review</span>
+          <span><i data-cs-boot="background:#F5D913"></i>Epley's Coaching</span>
+          <span><i data-cs-boot="background:#F8B8D0"></i>Balance Review</span>
+          <span><i data-cs-boot="background:#E8112D"></i>ACE</span>
+          <span><i data-cs-boot="background:#B22222"></i>Day 1 Report Completion</span>
+          <span><i data-cs-boot="background:#2E8B57"></i>General</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost btn-sm" id="breakDeleteBtn" data-cs-boot="display:none;margin-right:auto;border-color:var(--red);color:var(--red)" data-onclick="deleteBreakBlock()">Delete</button>
+      <button type="button" class="btn btn-ghost" data-onclick="closeBreakBlockModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="breakSaveBtn" data-onclick="saveBreakBlock()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-arSummary">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--gl);color:var(--green)">AR</div>
+      <div><div class="pt-n">AR Summary</div></div>
+    </div>
+    <div class="tags"><span class="tag tb" id="arPatientCountTag">0 Patients</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" data-cs-boot="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;padding:12px 18px">
+      <div class="fg" data-cs-boot="flex:1;min-width:260px;margin-bottom:0">
+        <label>Patient</label>
+        <select id="arPatientSelect" data-onchange="arSelectPatient(this.value)"></select>
+      </div>
+      <div class="fg" data-cs-boot="min-width:150px;margin-bottom:0">
+        <label>Status</label>
+        <select id="arStatusFilter" data-onchange="arRenderPatientOptions()">
+          <option value="active">Active</option>
+          <option value="all">All</option>
+          <option value="inactive">In Active</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div id="arContentMount"></div>
+</div>
+</div><!-- /page-arSummary -->
+
+<div class="page" id="page-collectionMgmt">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--aml);color:var(--amber)">CM</div>
+      <div><div class="pt-n">Collection Management</div></div>
+    </div>
+    <div class="tags"><span class="tag tb" id="wcClaimCountTag">0 Patients</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd" data-cs-boot="flex-wrap:wrap;gap:10px">
+      <label class="plain-check" data-cs-boot="margin:0"><input type="checkbox" id="wcSelectAll" data-onchange="wcToggleSelectAll(this.checked)"> Select All</label>
+      <div class="card-title" id="wcSelectedCountLabel" data-cs-boot="flex:1">0 selected</div>
+      <button type="button" class="btn btn-ghost btn-sm btn-writeoff" id="wcWriteOffBtn" data-onclick="wcOpenWriteOffModal()" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>Write Off…</button>
+    </div>
+    <div class="card-body" data-cs-boot="padding:0"><div class="ar-table-scroll" id="wcTableMount"></div></div>
+  </div>
+</div>
+</div><!-- /page-collectionMgmt -->
+
+<div class="modal-overlay" id="wcWriteOffModal">
+  <div class="modal" data-cs-boot="width:min(560px,96%)">
+    <div class="modal-hd"><div class="modal-title">Write Off?</div><button class="modal-close" data-onclick="wcCloseWriteOffModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>Type</label>
+        <select id="wcTypeSelect" data-onchange="wcTypeChange()">
+          <option value="patientBalanceSelected">Write off patient balance for selected claims</option>
+          <option value="patientBalanceAmount">Adjust patient balance by amount entered</option>
+          <option value="insuranceBalanceSelected">Write off insurance balance for selected claims</option>
+          <option value="insuranceBalanceAmount">Adjust insurance balance by amount entered</option>
+        </select>
+      </div>
+      <div class="fg" id="wcAmountRow" data-cs-boot="display:none"><label>Amount ($)</label><input type="text" id="wcAmount" placeholder="0.00"></div>
+      <div class="g2">
+        <div class="fg"><label>Group Code</label>
+          <div class="ar-combo" id="wcGroupCombo">
+            <input type="text" class="ar-combo-input" id="wcGroupInput" placeholder="Search group code…" autocomplete="off" data-oninput="wcFilterGroup()" data-onfocus="wcOpenGroup()">
+          </div>
+        </div>
+        <div class="fg"><label>Reason Code</label>
+          <div class="ar-combo" id="wcReasonCombo">
+            <input type="text" class="ar-combo-input" id="wcReasonInput" placeholder="Search reason code…" autocomplete="off" data-oninput="wcFilterReason()" data-onfocus="wcOpenReason()">
+          </div>
+        </div>
+      </div>
+      <div class="fg" data-cs-boot="margin-bottom:0">
+        <div class="small-muted" id="wcConfirmText">Are you sure you want to write off the selected claims?</div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="wcCloseWriteOffModal()">Close</button>
+      <button type="button" class="btn btn-primary" data-cs-boot="background:var(--red);border-color:var(--red)" data-onclick="wcSubmitWriteOff()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Single shared combo panel, positioned via getBoundingClientRect (same
+     pattern as the existing date picker) — lives outside the modal so it's
+     never clipped by .modal-body's own overflow:auto scroll container. -->
+<div class="ar-combo-panel" id="wcComboPanel"></div>
+
+<div class="modal-overlay" id="arChargeModal">
+  <div class="modal" data-cs-boot="width:min(620px,96%)">
+    <div class="modal-hd"><div class="modal-title" id="arChargeModalTitle">Add Charge</div><button class="modal-close" data-onclick="closeArChargeModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div class="g3">
+        <div class="fg"><label>Service Date</label>
+          <div class="date-field"><input type="text" id="arServiceDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('arServiceDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Bill Date</label>
+          <div class="date-field"><input type="text" id="arBillDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('arBillDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Status</label>
+          <select id="arChargeStatus">
+            <option>InProgress Claims</option>
+            <option>Finalized Paid</option>
+            <option>Sent To Insurance</option>
+            <option>Patient Owes</option>
+            <option>Error</option>
+            <option>Special Fee</option>
+          </select>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fg"><label>Charges ($)</label><input type="text" id="arCharges" placeholder="0.00"></div>
+        <div class="fg"><label>Insurance Charges ($)</label><input type="text" id="arInsCharges" placeholder="0.00"></div>
+      </div>
+      <div class="fg"><label>Notes</label><input type="text" id="arChargeNotes" placeholder="Optional"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost btn-sm" id="arChargeDeleteBtn" data-cs-boot="display:none;margin-right:auto;border-color:var(--red);color:var(--red)" data-onclick="deleteArCharge()">Delete</button>
+      <button type="button" class="btn btn-ghost" data-onclick="closeArChargeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="saveArCharge()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ONE payment for the whole account, not one per claim.
+     The per-row "Payment" button is gone: a patient hands over a single
+     amount, and which claim it lands on is arithmetic, not a decision the
+     front desk should be making mid-conversation. Auto Apply spreads it
+     oldest-claim-first and the preview shows exactly where every dollar
+     goes BEFORE anything is committed - the one thing the per-claim
+     buttons did give you was certainty about where the money went. -->
+<div class="modal-overlay" id="arPaymentModal">
+  <div class="modal" data-cs-boot="width:min(820px,96%)">
+    <div class="modal-hd"><div class="modal-title">New Payment</div><button class="modal-close" data-onclick="closeArPaymentModal()" aria-label="Close modal">&times;</button></div>
+    <div class="modal-body">
+      <div class="ar-pay-head">
+        <div class="ar-pay-head-who">
+          <div class="ar-pay-head-name" id="arPayPatientName">&mdash;</div>
+          <div class="ar-pay-head-meta" id="arPayPatientMeta"></div>
+        </div>
+        <div class="ar-pay-head-stats">
+          <div><span>Patient Owes</span><strong id="arPayStatPat">$0.00</strong></div>
+          <div><span>Insurance Owes</span><strong id="arPayStatIns">$0.00</strong></div>
+          <div><span>Total Balance</span><strong id="arPayStatTotal">$0.00</strong></div>
+        </div>
+      </div>
+
+      <div class="g2">
+        <div class="fg"><label>Apply As</label>
+          <select id="arPaymentType" data-onchange="arPayTypeChange()">
+            <option value="patPayments">Patient Payment</option>
+            <option value="insPayments">Insurance Payment</option>
+            <option value="patDiscounts">Patient Discount</option>
+            <option value="insAdjs">Insurance Adjustment</option>
+          </select>
+        </div>
+        <div class="fg"><label>Payment Reason</label>
+          <select id="arPaymentReason">
+            <option>Patient Payment</option>
+            <option>Copay</option>
+            <option>Deductible</option>
+            <option>Coinsurance</option>
+            <option>Self Pay</option>
+            <option>Attorney / Lien Payment</option>
+            <option>Insurance Payment</option>
+            <option>Refund</option>
+            <option>Adjustment Reason</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="g3">
+        <div class="fg"><label>Amount ($)</label>
+          <div class="ar-pay-amount"><input type="text" id="arPaymentAmount" placeholder="0.00" autocomplete="off" data-oninput="arPayRenderPreview()"><button type="button" class="ar-pay-full" data-onclick="arPayFillFull()" title="Fill the full outstanding balance">Full</button></div>
+        </div>
+        <div class="fg"><label>Payment Method</label>
+          <select id="arPaymentMethod" data-onchange="arPayMethodChange()">
+            <option>Check</option>
+            <option>Cash</option>
+            <option>Credit Card</option>
+            <option>EFT / ACH</option>
+            <option>Money Order</option>
+          </select>
+        </div>
+        <div class="fg"><label>Type of Payment</label>
+          <select id="arPaymentTypeOfPayment">
+            <option>Attorney Lien</option>
+            <option>PIP Payment</option>
+            <option>Insurance Payment</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="g3">
+        <div class="fg" id="arPayCheckNoField"><label>Check Number</label><input type="text" id="arPaymentCheckNo" placeholder="Optional" autocomplete="off"></div>
+        <div class="fg" id="arPayCheckDateField"><label>Check Date</label>
+          <div class="date-field"><input type="text" id="arPaymentCheckDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('arPaymentCheckDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+        <div class="fg"><label>Received Date</label>
+          <div class="date-field"><input type="text" id="arPaymentReceivedDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('arPaymentReceivedDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+        </div>
+      </div>
+
+      <div class="g3">
+        <div class="fg"><label>Deposit Num</label><input type="text" id="arPaymentDepositNo" placeholder="Optional" autocomplete="off"></div>
+        <div class="fg"><label>Special Fee Provider</label><select id="arPaymentProvider"></select></div>
+        <div class="fg"><label>Comments</label><input type="text" id="arPaymentComments" placeholder="Optional" autocomplete="off"></div>
+      </div>
+
+      <label class="plain-check ar-pay-auto"><input type="checkbox" id="arPaymentAutoApply" checked data-onchange="arPayRenderPreview()"> Auto apply across open claims (oldest first)</label>
+      <div class="ar-pay-alloc" id="arPayAlloc"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="closeArPaymentModal()">Cancel</button>
+      <button type="button" class="btn btn-ghost" data-onclick="saveArPayment(true)">Submit and New</button>
+      <button type="button" class="btn btn-primary" data-onclick="saveArPayment()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Internal Messaging -->
+<div class="page" id="page-meetings">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--al);color:var(--accent)">MR</div>
+      <div><div class="pt-n">Meeting Rooms</div>
+        <div class="mtg-strip-sub">Video meetings with anyone — patients, law firms, colleagues. Guests join from a link, no account needed.</div></div>
+    </div>
+    <div data-cs-boot="display:flex;gap:8px">
+      <button class="btn btn-ghost" id="mtgScheduleBtn" data-onclick="mtgOpenSchedule()">Schedule a meeting</button>
+      <button class="btn btn-primary" id="mtgInstantBtn" data-onclick="mtgStartInstant()">New instant meeting</button>
+    </div>
+  </div>
+  <div id="mtgLobbyWrap"></div>
+  <div class="card"><div class="card-body">
+    <div class="sdiv"><span>Meetings</span></div>
+    <div id="mtgList"></div>
+  </div></div>
+  <div class="card" id="mtgTxCard" data-cs-boot="display:none"><div class="card-body">
+    <div class="sdiv"><span>Live Transcripts</span></div>
+    <div id="mtgTxList"></div>
+  </div></div>
+  <div class="card" id="mtgRecCard" data-cs-boot="display:none"><div class="card-body">
+    <div class="sdiv" data-cs-boot="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <span>Recordings</span><span id="mtgRecHead"></span></div>
+    <div id="mtgRecList"></div>
+  </div></div>
+</div>
+</div>
+<div class="page" id="page-internalMessaging">
+  <div class="im-page-shell" id="imPageShell">
+    <div class="im-no-access"><strong>Loading Internal Messaging…</strong></div>
+  </div>
+</div>
+
+<!-- Patient Messaging & Calling (Messaging) -->
+<div class="page" id="page-patientMessaging">
+  <div id="pmMount">
+    <div class="pm-no-access"><strong>Loading Patient Messaging…</strong></div>
+  </div>
+</div>
+
+<!-- Invite Patient (Messaging) -->
+<div class="page" id="page-invitePatient">
+<div class="wrap" data-cs-boot="max-width:1200px">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--al);color:var(--accent)">IP</div>
+      <div><div class="pt-n">Invite Patient</div></div>
+    </div>
+    <div class="tags"><span class="tag tb" id="msgInviteCountTag">0 Sent</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" data-cs-boot="padding:0">
+
+      <!-- Compose an invite (always visible) -->
+      <div class="msg-tab-body active" id="msgTabNewInvite">
+        <div class="msg-compose-hd">
+          <div class="msg-compose-title">Compose a new invite</div>
+          <div class="msg-compose-actions">
+            <button type="button" class="btn btn-ghost btn-sm" id="msgTemplatesToggle" data-onclick="msgToggleTemplates()">Message templates</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-onclick="msgResetForm()">Close</button>
+            <button type="button" class="btn btn-primary btn-sm" data-onclick="msgSend()">Send</button>
+          </div>
+        </div>
+        <div class="msg-compose-body">
+          <div class="msg-step-label"><span class="msg-step-n">1</span>Choose patient</div>
+          <div class="g2" data-cs-boot="row-gap:10px">
+            <div class="fg" data-cs-boot="margin-bottom:0">
+              <label>Patient</label>
+              <div class="ar-combo" id="msgPatientCombo">
+                <input type="text" class="ar-combo-input" id="msgPatientInput" placeholder="Type Name, DOB or Home# to find patient" autocomplete="off" data-oninput="msgFilterPatient()" data-onfocus="msgOpenPatient()">
+              </div>
+            </div>
+            <div class="fg" data-cs-boot="margin-bottom:0"><label>Mobile No</label><input type="text" id="msgMobile" placeholder="___-___-____"></div>
+            <div class="fg" data-cs-boot="margin-bottom:0"><label>Email</label><input type="text" id="msgEmail" placeholder="patient@email.com"></div>
+          </div>
+
+          <div class="fg" id="msgFormsPanel" data-cs-boot="display:none;margin:16px 0 0">
+            <div class="msg-step-label"><span class="msg-step-n">2</span>Forms to send <span id="msgFormsCount" class="msg-forms-count"></span></div>
+            <div class="msg-forms-list" id="msgFormsMount"></div>
+            <div class="msg-forms-hint">Only the ticked forms are unlocked by the invite link. Pre-filled from this patient's Forms checklist.</div>
+          </div>
+
+          <div class="msg-deliver-row">
+            <span class="msg-step-label" data-cs-boot="margin:0"><span class="msg-step-n">3</span>Send via</span>
+            <label class="plain-check" data-cs-boot="margin:0"><input type="checkbox" id="msgChanSms" checked> SMS</label>
+            <label class="plain-check" data-cs-boot="margin:0"><input type="checkbox" id="msgChanEmail" checked> Email</label>
+          </div>
+
+          <!-- The invite body is generated automatically from the ticked forms +
+               secure link, so it stays collapsed until someone wants to customise it. -->
+          <details class="msg-msg-collapse">
+            <summary><span class="msg-msg-lead">Message</span><span class="msg-msg-note">Auto-generated with secure form link — click to edit</span></summary>
+            <div class="msg-editor">
+              <textarea id="msgBody" class="msg-editor-textarea" rows="6" placeholder="Message body…"></textarea>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Message templates (relocated from the old tab row; hidden until opened) -->
+      <div id="msgTemplatesPanel" data-cs-boot="display:none">
+        <div class="msg-tpl-bar">
+          <div class="msg-tpl-seg" id="msgTplSeg">
+            <button type="button" class="msg-tpl-seg-btn active" data-sub="default" data-onclick="msgTemplateSub('default')">Default message</button>
+            <button type="button" class="msg-tpl-seg-btn" data-sub="newPatient" data-onclick="msgTemplateSub('newPatient')">New-patient defaults</button>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" data-onclick="msgToggleTemplates()">Back to invite</button>
+        </div>
+        <div id="msgDefaultsWrap"><div id="msgDefaultsMount" data-cs-boot="padding:16px 18px 20px"></div></div>
+        <div id="msgNewPatientWrap" data-cs-boot="display:none"><div id="msgNewPatientDefaultsMount" data-cs-boot="padding:16px 18px 20px"></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card" id="msgHistoryCard">
+    <div class="card-hd"><div class="card-title">Recent Invites</div></div>
+    <div class="card-body" data-cs-boot="padding:0"><div id="msgHistoryMount"></div></div>
+  </div>
+</div>
+</div><!-- /page-invitePatient -->
+
+<!-- Notification (SMS/Email notification settings, under Invite Patient) -->
+<div class="page" id="page-notification">
+<div class="wrap" data-cs-boot="max-width:1100px">
+  <div id="notifMount"></div>
+</div>
+</div><!-- /page-notification -->
+
+<div class="modal-overlay" id="msgVisitTypeModal">
+  <div class="modal" data-cs-boot="width:min(420px,96%)">
+    <div class="modal-hd"><div class="modal-title">Select Visit Type</div><button class="modal-close" data-onclick="msgCloseVisitTypeModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body">
+      <div class="fg" data-cs-boot="margin-bottom:0"><label>Visit Type</label>
+        <select id="msgVisitTypeSelect">
+          <option value="">Select</option>
+          <option value="Day 2 Exam_Neuro Only">Day 2 Exam Neuro Only</option>
+          <option value="Consents">Consents</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="msgCloseVisitTypeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="msgConfirmVisitType()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared searchable-combo panel for the patient search field — same
+     position:fixed + getBoundingClientRect technique as the date picker and
+     the Write Off Group/Reason Code combos, living outside the page/modal so
+     it's never clipped by an ancestor's overflow. -->
+<div class="ar-combo-panel" id="msgComboPanel"></div>
+
+<!-- Appointment snapshot hover card — shown on hovering a patient appointment
+     block/chip/row in any calendar view. Positioned via getBoundingClientRect
+     (same technique as the date picker / combo panels) so it floats above
+     everything and is never clipped by a scrolling ancestor. -->
+<div class="appt-hover-card" id="apptHoverCard" data-onmouseenter="apptHoverCardHover()" data-onmouseleave="apptHideHoverCard()"></div>
+<div class="appt-hover-card preg-hover-card" id="pregHoverCard" data-onmouseenter="pregHoverCardHover()" data-onmouseleave="pregHideHoverCard()"></div>
+
+<div class="page" id="page-patientLists">
+<div class="wrap patient-list-redesign-wrap">
+  <div class="patient-list-layout patient-list-dashboard">
+    <aside class="pld-sidebar-card">
+      <div class="pld-sidebar-head">
+        <div data-cs-boot="display:flex;align-items:center;gap:12px">
+          <div class="pt-av">PL</div>
+          <div>
+            <div class="pld-page-title" id="pldPageTitle">Patient Lists</div>
+          </div>
+        </div>
+        <span class="tag tb" id="listTotalTag">0 Patients</span>
+      </div>
+      <div class="patient-search-bar pld-search-bar">
+        <div class="patient-search-tools pld-search-tools">
+          <div class="pld-search-input-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="patientListSearchInput" class="patient-search-input" placeholder="Search patient by name or ID..." data-oninput="patientListSearchLive()" data-onkeydown="if(event.key==='Enter'){event.preventDefault();searchPatientList()}">
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm pld-search-btn" data-onclick="searchPatientList()">Search</button>
+          <button type="button" class="pld-clear-btn" data-onclick="clearPatientListSearch()">Clear</button>
+        </div>
+        <div class="patient-search-summary" id="patientSearchSummary"></div>
+      </div>
+      <div id="patientListRows" class="pld-patient-rows"></div>
+      <div class="pld-sidebar-foot" id="patientListFoot">
+        <!-- Inactive Patients is a filtered view of the same patient store:
+             inactive patients are hidden from the working list but never
+             deleted, and can be reactivated anytime. -->
+        <div class="pld-view-seg" id="patientViewSeg" role="group" aria-label="Patient list view">
+          <button type="button" class="pld-seg-btn is-on" data-view="active" data-onclick="setPatientListView('active')">Active <span class="pld-seg-count">0</span></button>
+          <button type="button" class="pld-seg-btn" data-view="inactive" data-onclick="setPatientListView('inactive')">Inactive <span class="pld-seg-count">0</span></button>
+          <button type="button" class="pld-seg-btn" data-view="all" data-onclick="setPatientListView('all')">All <span class="pld-seg-count">0</span></button>
+        </div>
+        <button type="button" class="btn btn-primary pld-add-patient-btn" id="addPatientBtn" data-onclick="showPage('registration')">
+          <span data-cs-boot="font-size:18px;line-height:1">＋</span> Add New Patient
+        </button>
+      </div>
+    </aside>
+    <main id="patientDetail" class="patient-detail-empty pld-detail-empty">Select a patient to view demographics, exams, Day 1, notes, and billing.</main>
+  </div>
+</div>
+</div><!-- /page-patientLists -->
+
+<div class="page" id="page-pendingAce">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av">D1</div>
+      <div><div class="pt-n">Patients Pending for Day 1</div></div>
+    </div>
+    <div class="tags"><span class="tag ta" id="pendingTotalTag">0 Pending</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-amber">!</div><div class="card-title">Day 1 Queue</div><div class="card-sub">Click a patient to start Day 1</div></div>
+    <div class="card-body" id="pendingAceRows"></div>
+  </div>
+</div>
+</div><!-- /page-pendingAce -->
+
+<div class="page" id="page-incompleteAce">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--aml);color:var(--amber)">IC</div>
+      <div><div class="pt-n">Incomplete Day 1</div></div>
+    </div>
+    <div class="tags"><span class="tag ta" id="incompleteAceTotalTag">0 Incomplete</span></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-amber">!</div><div class="card-title">Incomplete Day 1 Records</div></div>
+    <div class="card-body" id="incompleteAceRows"></div>
+  </div>
+</div>
+</div><!-- /page-incompleteAce -->
+
+<div class="page" id="page-completedAce">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--gl);color:var(--green)">CA</div>
+      <div><div class="pt-n">Completed Day 1</div></div>
+    </div>
+    <div class="tags"><span class="tag tgn" id="completedAceTotalTag">0 Completed</span></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-green">✓</div><div class="card-title">Completed Day 1 Records</div></div>
+    <div class="card-body" id="completedAceRows"></div>
+  </div>
+</div>
+</div><!-- /page-completedAce -->
+
+<div class="page" id="page-pendingDay2">
+<div class="wrap">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av">D2</div>
+      <div><div class="pt-n">Patients Pending for Day 2</div></div>
+    </div>
+    <div class="tags"><span class="tag ta" id="pendingDay2TotalTag">0 Pending</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-amber">!</div><div class="card-title">Day 2 Queue</div><div class="card-sub">Click a patient to start their Day 2 exam</div></div>
+    <div class="card-body" id="pendingDay2Rows"></div>
+  </div>
+</div>
+</div><!-- /page-pendingDay2 -->
+
+<div class="page" id="page-patientAce">
+  <div id="patientAceMount"></div>
+  <div id="aceLockBanner2" class="dn-lock" data-cs-boot="display:none;margin:0 0 13px">
+    <div class="dn-lock-main">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <div>
+        <div class="dn-lock-title">Signed &amp; locked — closed clinical record</div>
+        <div class="dn-lock-sub" id="aceLockBanner2Sub"></div>
+      <div class="dn-lock-history" id="aceLockBanner2History"></div>
+      </div>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" id="aceAmendBtn2" data-onclick="aceAmend()">Edit to Amend</button>
+  </div>
+  <div class="action-bar">
+    <div class="ab-left">Patient Day 1: <strong id="patientAceBarName">—</strong>&nbsp;|&nbsp;Day 1: <strong id="patientAceBarScore">0/22</strong><span class="draft-status" id="draftStatus2"></span></div>
+    <div class="ab-btns">
+      <button class="btn btn-ghost btn-sm" data-onclick="showPage('patientLists')">← Back to Patient Lists</button>
+      <button class="btn btn-ghost btn-sm" id="aceSignBtn2" data-onclick="aceSignRecord()">Sign &amp; Lock</button>
+      <button class="btn btn-green btn-sm" id="aceSaveBtn2" data-onclick="saveAndDownloadAce(this)">Save Day 1</button>
+    </div>
+  </div>
+</div><!-- /page-patientAce -->
+
+<div class="modal-overlay" id="patientModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="modalTitle">Edit</div><button class="modal-close" data-onclick="closePatientModal()" aria-label="Close modal">×</button></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-ft"><button class="btn btn-ghost" data-onclick="closePatientModal()">Cancel</button><button class="btn btn-primary" id="modalSaveBtn">Save Updates</button></div>
+  </div>
+</div>
+
+<!-- Themed replacement for window.confirm() — used everywhere via ctgConfirm()
+     in app.js instead of the browser's native "This page says" dialog, which
+     doesn't match the portal's theme (light-only, can't be styled, doesn't
+     respect dark mode). Same .modal-overlay/.modal component every other
+     modal in the app already uses, just generic content set at call time. -->
+<div class="modal-overlay" id="ctgConfirmModal">
+  <div class="modal" data-cs-boot="width:min(440px,94%)">
+    <div class="modal-hd"><div class="modal-title" id="ctgConfirmTitle">Please Confirm</div><button class="modal-close" data-onclick="ctgConfirmResolve(false)" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body"><div id="ctgConfirmMessage" data-cs-boot="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-line"></div></div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="ctgConfirmResolve(false)">Cancel</button>
+      <button type="button" class="btn btn-primary" id="ctgConfirmOkBtn" data-onclick="ctgConfirmResolve(true)">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Themed replacement for window.prompt() — used via ctgPrompt() in app.js
+     when an action needs one free-text answer (a decline reason, say). Native
+     prompt() has the same problem as native confirm(): browser chrome on top
+     of a clinical page, unstyled and light-only. -->
+<!-- Pregnancy status. The Day 1 answer is a point-in-time clinical record and
+     is never rewritten here — this records a dated update alongside it, which
+     the header badge reads in preference. See pregOpenEditor() in app.js. -->
+<div class="modal-overlay" id="pregEditModal">
+  <div class="modal" data-cs-boot="width:min(500px,95%)">
+    <div class="modal-hd">
+      <div><div class="modal-title">Pregnancy status</div><div class="modal-sub" id="pregEditWho"></div></div>
+      <button class="modal-close" data-onclick="pregEditorClose()" aria-label="Close modal">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div class="preg-edit-lede">Day 1 stays exactly as it was recorded. What you enter here is a dated update, shown on the badge from now on.</div>
+      <div class="preg-edit-choice">
+        <label><input type="radio" name="pregStatus" value="pregnant" data-onchange="pregEditorSync()"><span>Currently pregnant</span></label>
+        <label><input type="radio" name="pregStatus" value="ended" data-onchange="pregEditorSync()"><span>Pregnancy has ended</span></label>
+      </div>
+      <div class="g2" id="pregWeeksRow">
+        <div class="fg" id="pregWeeksField"><label for="pregWeeks">Gestational age (weeks)</label><input type="number" id="pregWeeks" min="0" max="45" step="1" placeholder="e.g. 12"></div>
+        <div class="fg"><label for="pregAsOf" id="pregAsOfLabel">As of</label><input type="date" id="pregAsOf"></div>
+      </div>
+      <div class="fg" id="pregOutcomeRow" data-cs-boot="display:none">
+        <label for="pregOutcome">How it ended (optional)</label>
+        <select id="pregOutcome">
+          <option value="">Not recorded</option>
+          <option value="miscarriage">Miscarriage</option>
+          <option value="delivered">Delivered</option>
+          <option value="ectopic">Ectopic pregnancy</option>
+          <option value="termination">Termination</option>
+          <option value="other">Other</option>
+        </select>
+        <div class="preg-edit-day1" data-cs-boot="margin-top:6px">Optional on purpose. Leave it as <em>Not recorded</em> if it was not discussed, or if the patient would rather it were not written down.</div>
+      </div>
+      <div class="fg"><label for="pregNote">Note (optional)</label><textarea id="pregNote" rows="2" maxlength="300" placeholder="Anything the next person reading this should know"></textarea></div>
+      <div class="preg-edit-day1" id="pregDay1Line"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost btn-sm" id="pregResetBtn" data-onclick="pregEditorReset()">Use the Day 1 answer</button>
+      <span class="preg-edit-spacer"></span>
+      <button type="button" class="btn btn-ghost" data-onclick="pregEditorClose()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="pregEditorSave()">Save status</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ctgPromptModal">
+  <div class="modal" data-cs-boot="width:min(480px,94%)">
+    <div class="modal-hd">
+      <div><div class="modal-title" id="ctgPromptTitle">Please Confirm</div><div class="modal-sub" id="ctgPromptSub" data-cs-boot="display:none"></div></div>
+      <button class="modal-close" data-onclick="ctgPromptResolve(null)" aria-label="Close modal">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <div id="ctgPromptMessage" data-cs-boot="font-size:13.5px;line-height:1.6;color:var(--text);white-space:pre-line;margin-bottom:10px"></div>
+      <textarea id="ctgPromptInput" rows="3" maxlength="1000"></textarea>
+      <div id="ctgPromptHint" data-cs-boot="font-size:11.5px;line-height:1.5;color:var(--muted);margin-top:8px;display:none"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="ctgPromptResolve(null)">Cancel</button>
+      <button type="button" class="btn btn-primary" id="ctgPromptOkBtn" data-onclick="ctgPromptSubmit()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Amendment to a signed note. A reason is mandatory: an amendment trail with
+     no stated reason is not evidence of anything. -->
+<div class="modal-overlay" id="ctgAmendModal">
+  <div class="modal" data-cs-boot="width:min(520px,95%)">
+    <div class="modal-hd"><div class="modal-title">Add Amendment</div><button class="modal-close" data-onclick="ctgAmendClose()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body">
+      <div data-cs-boot="font-size:13px;line-height:1.6;color:var(--muted);margin-bottom:12px">
+        This record is signed, so the original stays on file exactly as it was.
+        Your amendment is recorded alongside it with your name and the time.
+      </div>
+      <div class="fg" data-cs-boot="margin-bottom:0">
+        <label>Reason for amendment <span class="req">*</span></label>
+        <textarea id="ctgAmendReason" rows="3" placeholder="e.g. Corrected symptom score recorded in error"></textarea>
+      </div>
+      <div id="ctgAmendErr" data-cs-boot="display:none;color:var(--red);font-size:12px;font-weight:700;margin-top:8px"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="ctgAmendClose()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="ctgAmendSubmit()">Record Amendment</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pending Amendments "View": shows exactly what an amendment changes and
+     why, so an approver can decide without leaving the list. -->
+<div class="modal-overlay" id="paViewModal">
+  <div class="modal" data-cs-boot="width:min(680px,95%)">
+    <div class="modal-hd"><div class="modal-title">Review Amendment</div><button class="modal-close" data-onclick="paViewClose()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body" id="paViewBody"></div>
+    <div class="modal-ft" id="paViewFt" data-cs-boot="display:flex;gap:8px"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="validationModal">
+  <div class="modal" data-cs-boot="width:min(720px,95%)">
+    <div class="modal-hd"><div class="modal-title">Form Validation — Missing Fields</div><button class="modal-close" data-onclick="closeValidationModal()">&#215;</button></div>
+    <div class="modal-body" id="validationModalBody"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" data-onclick="closeValidationModal()">Cancel</button>
+      <button class="btn btn-ghost" data-onclick="goToFirstMissingField()" data-cs-boot="border-color:var(--amber);color:var(--amber)">Go to First Missing Field</button>
+      <button class="btn btn-warn" id="validationProceedBtn" data-onclick="proceedSaveIncomplete(this)">Save as Incomplete</button>
+      <button class="btn btn-primary" id="validationCompleteBtn" data-onclick="proceedSaveComplete(this)">Save as Complete</button>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-day1">
+<div class="wrap" id="aceFormHost">
+
+<div id="aceLockBanner" class="dn-lock" data-cs-boot="display:none">
+  <div class="dn-lock-main">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <div>
+      <div class="dn-lock-title">Signed &amp; locked — closed clinical record</div>
+      <div class="dn-lock-sub" id="aceLockBannerSub"></div>
+      <div class="dn-lock-history" id="aceLockBannerHistory"></div>
+    </div>
+  </div>
+  <button type="button" class="btn btn-ghost btn-sm" id="aceAmendBtn" data-onclick="aceAmend()">Edit to Amend</button>
+</div>
+
+<!-- PROGRESS STRIP -->
+<div id="aceProgressStrip">
+  <div data-cs-boot="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+    <div data-cs-boot="display:flex;align-items:center;gap:10px;position:relative">
+      <span data-cs-boot="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent)" id="progressPct">0%</span>
+      <span data-cs-boot="font-size:11px;color:var(--muted)">Complete</span>
+      <span data-cs-boot="font-size:11px;font-weight:600;color:var(--amber)" id="progressMissing"></span>
+      <div id="missingFieldsPopover"></div>
+    </div>
+    <span data-cs-boot="font-size:10px;color:var(--faint)" id="progressLastSaved"></span>
+  </div>
+  <div data-cs-boot="background:var(--s3);border-radius:4px;height:7px;overflow:hidden">
+    <div id="progressBar" data-cs-boot="height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),#0077B6);transition:width .5s;width:0%"></div>
+  </div>
+</div>
+
+<!-- PATIENT STRIP -->
+<div class="pt-strip">
+  <div data-cs-boot="display:flex;align-items:center;gap:12px">
+    <div class="pt-av" id="ptAv">—</div>
+    <div><div class="pt-n" id="ptBannerName">New Patient</div><div class="pt-s" id="ptBannerSub">Day 1 Evaluation</div></div>
+  </div>
+  <div class="tags" id="ptBannerTags"><span class="tag tg">No DOS set</span></div>
+</div>
+
+<!-- 1. PATIENT & SESSION -->
+<div class="card" id="sec-header">
+  <div class="card-hd"><div class="card-ico ic-blue">1</div><div class="card-title">Patient & Session Info</div></div>
+  <div class="card-body">
+    <div class="g3">
+      <div class="fg"><label>Patient Full Name</label><input type="text" id="ptName" placeholder="First Last" data-oninput="updateBanner()"></div>
+      <div class="fg"><label>Date of Birth</label>
+        <div class="date-field">
+          <input type="text" id="ptDOB" placeholder="MM/DD/YYYY" data-oninput="updateBanner()" autocomplete="off">
+          <button type="button" class="cal-btn" data-onclick="toggleDatePicker('ptDOB')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+        </div>
+      </div>
+      <div class="fg"><label>Age</label><input type="text" id="ptAge" placeholder="e.g. 53"></div>
+      <div class="fg"><label>Date of Service (DOS)</label>
+        <div class="date-field">
+          <input type="text" id="dos" placeholder="MM/DD/YYYY" data-oninput="updateBanner()" autocomplete="off">
+          <button type="button" class="cal-btn" data-onclick="toggleDatePicker('dos')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+        </div>
+      </div>
+      <div class="fg"><label>Date of Injury (DOI)</label>
+        <div class="date-field">
+          <input type="text" id="doi" placeholder="MM/DD/YYYY" data-oninput="updateBoilerplates()" autocomplete="off">
+          <button type="button" class="cal-btn" data-onclick="toggleDatePicker('doi')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+        </div>
+      </div>
+      <div class="fg"><label>Patient Gender</label>
+        <select id="ptGender" data-onchange="applyPregnancyGate()"><option value="">— Select —</option><option>Male</option><option>Female</option><option>Non-binary</option></select>
+      </div>
+    </div>
+    <div class="g3">
+      <div class="fg"><label>ID / Medical Record #</label><input type="text" id="ptMRN" placeholder="e.g. MR-00123"></div>
+      <div class="fg"><label>Reporter (History Provided By)</label>
+        <select id="reporter" data-onchange="ctgShowIf('reporterOtherWrap', (this.value&&this.value!=='Patient'), 'flex')">
+          <option value="">— Select —</option><option>Patient</option><option>Parent</option><option>Spouse</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg" id="reporterOtherWrap" data-cs-boot="display:none"><label>Name (optional)</label><input type="text" id="reporterOther" placeholder="e.g. Jane Smith"></div>
+      <div class="fg"><label>Translator</label>
+        <select id="translator" data-onchange="ctgShowIf('translatorNameWrap', this.value==='Yes', 'flex')">
+          <option value="">— Select —</option><option>No</option><option>Yes</option>
+        </select>
+      </div>
+      <div class="fg" id="translatorNameWrap" data-cs-boot="display:none"><label>Translator Name</label><input type="text" id="translatorName" placeholder="e.g. Jane Smith"></div>
+    </div>
+    <div class="sdiv"><span>Injury Type</span></div>
+    <div class="g2">
+      <div class="fg" data-cs-boot="position:relative"><label>Injury Event Type</label>
+        <select id="injuryType" data-cs-boot="display:none"></select>
+        <div class="it-wrap" id="itWrap">
+          <div class="it-display" id="itDisplay" data-onclick="itToggle()">
+            <span id="itDisplayText" data-cs-boot="flex:1;color:var(--muted)">Select Injury Type</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="it-panel" id="itPanel" data-cs-boot="display:none">
+            <div class="it-list" id="itList"></div>
+          </div>
+        </div>
+        <div id="itOtherWrap" data-cs-boot="display:none;margin-top:8px">
+          <input type="text" id="itOtherText" placeholder="Describe injury type..." data-oninput="itOtherInput()" data-cs-boot="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px">
+        </div>
+      </div>
+      <div class="fg"><label>Location / Jurisdiction</label>
+        <select id="jurisdiction">
+          <option value="">— Select —</option>
+          <option>Maryland</option><option>Virginia</option><option>Washington D.C.</option>
+          <option>Pennsylvania</option><option>Delaware</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. MECHANISM OF INJURY -->
+<div class="card" id="sec-moi">
+  <div class="card-hd"><div class="card-ico ic-amber">2</div><div class="card-title">Mechanism of Injury (MOI)</div></div>
+  <div class="card-body">
+    <div class="g3" id="moiVehicleGrid">
+      <div class="fg"><label>Where Were You Seated in the Vehicle?</label>
+        <select id="ptRole"><option value="">— Select —</option><option>seat-belted driver</option><option>unbelted driver</option><option>seat-belted front passenger</option><option>unbelted front passenger</option><option>seat-belted rear passenger</option><option>unbelted rear passenger</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>What Type of Vehicle Were You Driving/Seated? (Unit 1)</label>
+        <select id="unit1Type"><option value="">— Select —</option><option>Sedan</option><option>SUV</option><option>Small SUV</option><option>Van</option><option>Pickup truck</option><option>Crossover</option><option>Motorcycle</option><option>Bus</option><option>Semi-trailer truck</option><option>Heavy transport vehicle</option></select>
+      </div>
+      <div class="fg"><label>Which Side of Your Vehicle Was Hit? (MVC 1)</label>
+        <select id="strikeDir"><option value="">— Select —</option><option>front (head-on)</option><option>rear</option><option>driver side (left)</option><option>passenger side (right)</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>What Type of Vehicle Was the Other Party Driving? (Unit 2)</label>
+        <select id="unit2Type"><option value="">— Select —</option><option>Sedan</option><option>SUV</option><option>Small SUV</option><option>Van</option><option>Pickup truck</option><option>Crossover</option><option>Bus</option><option>Semi-trailer truck</option><option>Heavy transport vehicle</option><option>Fixed object</option></select>
+      </div>
+      <div class="fg"><label>What Type of Vehicle Was the Third Party Driving? (Unit 3)</label>
+        <select id="unit3Type"><option value="">— Select —</option><option>Sedan</option><option>SUV</option><option>Small SUV</option><option>Van</option><option>Pickup truck</option><option>Crossover</option><option>Bus</option><option>Semi-trailer truck</option><option>Heavy transport vehicle</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>Second Hit Side of (Unit 1) Vehicle? (MVC 2)</label>
+        <select id="strikeDir2"><option value="">— Select —</option><option>front (head-on)</option><option>rear</option><option>driver side (left)</option><option>passenger side (right)</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>Third Hit Side of (Unit 1) Vehicle? (MVC 3)</label>
+        <select id="strikeDir3"><option value="">— Select —</option><option>front (head-on)</option><option>rear</option><option>driver side (left)</option><option>passenger side (right)</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>In Which Direction Was the Vehicle Moving at the Time of the Accident?</label>
+        <select id="vehicleDirection"><option value="">— Select —</option><option>forward-moving</option><option>backward-moving / reversing</option><option>stationary / parked</option><option>turning left</option><option>turning right</option><option>changing lanes</option><option>merging</option></select>
+      </div>
+      <div class="fg"><label>Was This a Traffic or Non-Traffic Accident?</label>
+        <select id="trafficType"><option value="">— Select —</option><option>Traffic accident</option><option>Non-traffic accident</option></select>
+      </div>
+      <div class="fg"><label>Total MVCs</label>
+        <select id="totalMVC"><option>0</option><option selected>1</option><option>2</option><option>3</option><option>4+</option></select>
+      </div>
+      <div class="fg"><label>Total SOCs (Stationary Objects)</label>
+        <select id="totalSOC"><option>0</option><option>1</option><option>2</option><option>3+</option></select>
+      </div>
+    </div>
+    <div class="g3 moi-novehicle-highlight" id="moiNoVehicleWrap" data-cs-boot="display:none">
+      <div class="fg full"><label>Describe How the Injury Occurred</label>
+        <textarea id="moiNoVehicleText" rows="4" placeholder="Describe how the injury happened, in your own words (no vehicle involved)..." data-oninput="updateBoilerplates()"></textarea>
+        <div class="moi-novehicle-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>This exact text becomes the Mechanism of Injury narrative in the ACE PDF.</div>
+      </div>
+    </div>
+    <div id="moiHeadImpactsSection">
+    <div class="sdiv"><span>Head Impacts</span></div>
+    <div class="g2">
+      <div class="fg"><label>DHI 1 — Direct Head Impact Description</label>
+        <select id="dhi1"><option value="">— Select —</option>
+          <option>struck head on headrest</option><option>struck head on steering wheel</option>
+          <option>struck head on window</option><option>struck head on dashboard</option>
+          <option>struck head on airbag</option><option>struck head on door frame</option>
+          <option>struck head on another passenger</option></select>
+      </div>
+      <div class="fg"><label>IHI 1 — Indirect Head Impact Description</label>
+        <select id="ihi1"><option value="">— Select —</option>
+          <option>head jolted forward and snapped back</option>
+          <option>head jolted sideways</option>
+          <option>head jolted backward</option>
+          <option>head jolted forward</option>
+          <option>head jolted to the left</option>
+          <option>head jolted to the right</option>
+          <option>rotational head movement</option></select>
+      </div>
+      <div class="fg"><label>Total DHIs</label>
+        <select id="totalDHI"><option>0</option><option>1</option><option>2</option><option>3+</option></select>
+      </div>
+      <div class="fg"><label>Total IHIs</label>
+        <select id="totalIHI"><option>0</option><option>1</option><option>2</option><option>3+</option></select>
+      </div>
+    </div>
+    </div>
+    <div id="moiPostImpactSection">
+    <div class="sdiv"><span>Post-Impact</span></div>
+    <div class="g2">
+      <div class="fg"><label>Chief Complaint</label>
+        <textarea id="immediateSyms" placeholder="e.g. dizziness, headache, confusion, neck pain..."></textarea>
+      </div>
+      <div class="fg"><label>ED / ER Visit?</label>
+        <select id="erVisit" data-onchange="ctgShowIf('erVisitOtherWrap', this.value==='Other', 'flex')">
+          <option value="">— Select —</option><option>Yes — transported by ambulance</option><option>Yes — drove themselves</option><option>Yes — transported by family</option><option>No</option><option>Other</option>
+        </select>
+      </div>
+      <div class="fg" id="erVisitOtherWrap" data-cs-boot="display:none"><label>Specify ED / ER Visit</label><input type="text" id="erVisitOther" placeholder="Describe ED/ER visit details..."></div>
+      <div class="fg full"><label>What Did You Experience Right After the Injury Incident? (check all that apply)</label>
+        <div id="immedExperienceList" data-cs-boot="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin-top:4px"></div>
+      </div>
+      <div class="fg"><label>Which Hospital Were You Admitted To After Your Injury?</label>
+        <select id="hospitalAdmitted">
+          <option value="">— Select —</option>
+          <option>Not admitted / no hospital</option>
+          <option>Ascension Saint Agnes Hospital</option>
+          <option>Johns Hopkins Hospital</option>
+          <option>University of Maryland Medical Center</option>
+          <option>University of Maryland Shock Trauma Center (R Adams Cowley)</option>
+          <option>MedStar Harbor Hospital</option>
+          <option>MedStar Franklin Square Medical Center</option>
+          <option>Luminis Health Anne Arundel Medical Center</option>
+          <option>Sinai Hospital of Baltimore</option>
+          <option>Greater Baltimore Medical Center (GBMC)</option>
+          <option>Mercy Medical Center</option>
+          <option>Holy Cross Hospital</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="fg"><label>Other Post Reference Treatment (Chiropractor, psychiatrist etc.) — Optional</label>
+        <input type="text" id="otherPostTx" placeholder="e.g. Treated for soft-tissue injuries by chiropractor. Examined by psychiatrist (etc)">
+      </div>
+      <div class="fg"><label>MOI Dx (ICD-10 codes related to mechanism of injury)</label>
+        <input type="text" id="moiDx" placeholder="e.g. V43.52XA, W22.8XXA...">
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. HPI -->
+<div class="card" id="sec-hpi">
+  <div class="card-hd"><div class="card-ico ic-blue">3</div><div class="card-title">History of Present Illness (HPI)</div><div class="card-sub" id="hpiCount">0 of 20 answered</div></div>
+  <div class="card-body">
+    <div class="yn-list" id="hpiList"></div>
+    <div class="sdiv"><span>Other</span></div>
+    <div class="g2">
+      <div class="fg"><label>Employment Status</label>
+        <select id="employStatus"><option value="">— Select —</option><option>Employed full time</option><option>Employed part time</option><option>Self-employed</option><option>Unable to work due to injury</option><option>Unemployed</option><option>Retired</option><option>Student</option></select>
+      </div>
+      <div class="fg"><label>ADL Limitations</label>
+        <select id="adlLimit"><option value="">— Select —</option><option>Significant — unable to perform most ADLs</option><option>Moderate — difficulty with many ADLs</option><option>Mild — some limitations</option><option>Minimal — mostly functioning</option><option>None reported</option></select>
+      </div>
+    </div>
+    <div class="fg"><label>Risk Factors for Injury Severity & Prolonged Recovery</label>
+      <div id="riskFactorsList" data-cs-boot="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin-top:4px"></div>
+    </div>
+    <div class="sdiv"><span>Risk Factors for Protracted Recovery</span></div>
+    <div class="g3">
+      <div class="fg"><label>Did You Ever Have a Concussion Before This Injury?</label>
+        <select id="rpr_priorConc"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Number of Previous Concussions</label>
+        <select id="rpr_concNum"><option value="">— Select —</option><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5+</option></select>
+      </div>
+      <div class="fg"><label>Longest Prior Symptom Duration</label>
+        <select id="rpr_concDur"><option value="">— Select —</option><option>Days</option><option>Weeks</option><option>Months</option><option>Years</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>If Multiple Concussions, Less Force Caused Reinjury?</label>
+        <select id="rpr_reinjury"><option value="">— Select —</option><option>Yes</option><option>No</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>Did You Have Headaches Before This Injury?</label>
+        <select id="rpr_priorHA"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Have You Received Treatment for Headaches Before?</label>
+        <select id="rpr_haTx"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>History of Migraine Headache?</label>
+        <select id="rpr_migraine"><option value="">— Select —</option><option>None</option><option>Personal</option><option>Family</option><option>Personal & Family</option></select>
+      </div>
+      <div class="fg"><label>Any Learning Disability?</label>
+        <select id="rpr_learningDis"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Any History of ADHD (Attention-Deficit/Hyperactivity Disorder)?</label>
+        <select id="rpr_adhd"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Any Other Developmental Conditions History?</label>
+        <select id="rpr_otherDevYN"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Other Developmental Disorder (specify)</label>
+        <input type="text" id="rpr_otherDx" placeholder="Specify if applicable">
+      </div>
+      <div class="fg"><label>Any History of Anxiety?</label>
+        <select id="rpr_anxiety"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Any History of Depression?</label>
+        <select id="rpr_depression"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Any Sleep Disorder Before This Injury?</label>
+        <select id="rpr_sleepDisorder"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Any Other Psychiatric Conditions Before This Injury?</label>
+        <select id="rpr_otherPsychYN"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Other Psychiatric Disorder (specify)</label>
+        <input type="text" id="rpr_otherPsychDx" placeholder="Specify if applicable">
+      </div>
+      <div class="fg"><label>Assessment — Collision Impact Type</label>
+        <select id="assessCollisionType">
+          <option value="">— Select —</option>
+          <option>Collision with car, pickup truck, or van</option>
+          <option>Collision with heavy transport vehicle or bus</option>
+          <option>Collision with railway train or vehicle</option>
+          <option>Collision with two- or three-wheeled motor vehicle</option>
+          <option>Collision with fixed or stationary object</option>
+          <option>Noncollision transport accident (rollover, etc.)</option>
+          <option>Pedestrian struck by vehicle</option>
+          <option>Other / unspecified transport accident</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg" data-cs-boot="margin-top:10px"><label>Other Comorbid Medical Disorders / Medication Usage</label>
+      <textarea id="rpr_comorbid" placeholder="e.g. hypothyroid, prior seizures, current medications..."></textarea>
+    </div>
+    <div class="fg" data-cs-boot="margin-top:10px"><label>Patient Goals</label>
+      <textarea id="ptGoals">work without increased neurologic symptoms and do daily activities without increased symptoms</textarea>
+    </div>
+  </div>
+</div>
+
+<!-- 4. PMH -->
+<div class="card" id="sec-pmh">
+  <div class="card-hd"><div class="card-ico ic-gray">4</div><div class="card-title">Past Medical History (PMH) & Social History</div><div class="card-sub" id="pmhCount">0 answered</div></div>
+  <div class="card-body">
+    <div class="yn-list" id="pmhList"></div>
+    <div class="sdiv"><span>Social History</span></div>
+    <div class="g2">
+      <div class="fg"><label>Job Duties</label><textarea id="jobDuties" placeholder="Describe patient's job duties..."></textarea></div>
+      <div class="fg"><label>Diet & Nutrition</label>
+        <select id="diet"><option value="">— Select —</option><option>Balanced / healthy</option><option>High sugar / processed foods</option><option>Vegetarian</option><option>Vegan</option><option>Keto / low carb</option><option>No significant dietary concerns</option></select>
+      </div>
+      <div class="fg"><label>Exercise Habits</label>
+        <select id="exercise"><option value="">— Select —</option><option>Sedentary</option><option>Light activity (walks)</option><option>Moderate (3x/week)</option><option>Active (5+ days/week)</option><option>Athletic / competitive</option></select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. ACE SCORE -->
+<div class="card" id="sec-ace">
+  <div class="card-hd"><div class="card-ico ic-red">5</div><div class="card-title">Day 1 — Symptom Checklist</div><div class="card-sub" id="aceTotal">Total: 0 / 22</div></div>
+  <div class="card-body">
+    <div class="sdiv"><span>A. Injury Characteristics</span></div>
+    <div class="g3">
+      <div class="fg"><label>Evidence of forcible blow to head?</label>
+        <select id="ace_blow" data-onchange="ctgShowIf('ace_blow_comment_row', this.value==='Yes', '')"><option value="">— Select —</option><option>Yes</option><option>No</option><option>Unknown</option></select>
+      </div>
+      <div class="fg full" id="ace_blow_comment_row" data-cs-boot="display:none"><label>Comments (optional)</label><textarea id="ace_blow_comment" rows="2" placeholder="Additional details..."></textarea></div>
+      <div class="fg"><label>Evidence of intracranial injury / skull fracture?</label>
+        <select id="ace_icf"><option value="">— Select —</option><option>Yes</option><option>No</option><option>Unknown</option></select>
+      </div>
+      <div class="fg" data-cs-boot="position:relative"><label>Location of Impact</label>
+        <input type="text" id="ace_loc" data-cs-boot="display:none">
+        <div class="it-wrap" id="aceLocWrap">
+          <div class="it-display" id="aceLocDisplay" data-onclick="aceLocToggle(event)">
+            <span id="aceLocText" data-cs-boot="flex:1;color:var(--muted)">— Select —</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="it-panel" id="aceLocPanel" data-cs-boot="display:none">
+            <div class="it-list" id="aceLocList"></div>
+          </div>
+        </div>
+      </div>
+      <div class="fg"><label>Amnesia Before Injury (Retrograde)?</label>
+        <select id="ace_retro"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Retrograde Amnesia Duration</label>
+        <input type="text" id="ace_retro_dur" placeholder="e.g. a few seconds">
+      </div>
+      <div class="fg"><label>Amnesia After Injury (Anterograde)?</label>
+        <select id="ace_antero"><option value="">— Select —</option><option>Yes</option><option>No</option></select>
+      </div>
+      <div class="fg"><label>Anterograde Amnesia Duration</label>
+        <input type="text" id="ace_antero_dur" placeholder="e.g. 10 minutes">
+      </div>
+      <div class="fg"><label>Loss of Consciousness?</label>
+        <select id="ace_loc2"><option value="">— Select —</option><option>No</option><option>Yes — brief (seconds)</option><option>Yes — less than 30 min</option><option>Yes — more than 30 min</option></select>
+      </div>
+      <div class="fg"><label>Seizures observed?</label>
+        <select id="ace_seiz"><option value="">— Select —</option><option>No</option><option>Yes</option></select>
+      </div>
+      <div class="fg full"><label>Seizure Detail</label>
+        <input type="text" id="ace_seiz_detail" placeholder="Describe seizure activity if observed...">
+      </div>
+    </div>
+    <div class="fg" data-cs-boot="margin-top:10px"><label>Early Signs (check all that apply)</label>
+      <div id="earlySignsList" data-cs-boot="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin-top:4px"></div>
+    </div>
+
+    <div class="sdiv"><span>B. Symptom Checklist (0 = No, 1 = Yes)</span></div>
+
+    <div data-cs-boot="font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Physical (0–10)</div>
+    <div class="sym-score-grid" id="acePhysical"></div>
+
+    <div data-cs-boot="font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Cognitive (0–4)</div>
+    <div class="sym-score-grid" id="aceCognitive"></div>
+
+    <div data-cs-boot="font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Sleep (0–4)</div>
+    <div class="sym-score-grid" id="aceSleep"></div>
+
+    <div data-cs-boot="font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Emotional (0–4)</div>
+    <div class="sym-score-grid" id="aceEmotional"></div>
+
+    <div class="score-totals-row">
+      <div class="score-cat"><div class="score-cat-lbl">Physical</div><div class="score-cat-val" id="scorePhys">0</div><div data-cs-boot="font-size:9px;color:var(--faint)">/ 10</div></div>
+      <div class="score-cat"><div class="score-cat-lbl">Cognitive</div><div class="score-cat-val" id="scoreCog">0</div><div data-cs-boot="font-size:9px;color:var(--faint)">/ 4</div></div>
+      <div class="score-cat"><div class="score-cat-lbl">Sleep</div><div class="score-cat-val" id="scoreSleep">0</div><div data-cs-boot="font-size:9px;color:var(--faint)">/ 4</div></div>
+      <div class="score-cat"><div class="score-cat-lbl">Emotional</div><div class="score-cat-val" id="scoreEmot">0</div><div data-cs-boot="font-size:9px;color:var(--faint)">/ 4</div></div>
+    </div>
+    <div class="score-total" data-cs-boot="margin-top:10px">
+      <div><div class="score-label">Total Day 1 Symptom Score</div><div class="score-out">Maximum 22</div></div>
+      <div data-cs-boot="display:flex;align-items:baseline;gap:5px"><div class="score-val" id="scoreTotalBig">0</div><div data-cs-boot="font-size:12px;color:var(--faint)">/ 22</div></div>
+    </div>
+    <div class="sdiv"><span>Exertion & Overall Rating</span></div>
+    <div class="g3">
+      <div class="fg"><label>Symptoms worse with Physical Activity?</label>
+        <select id="ace_physact"><option value="">— Select —</option><option>Yes</option><option>No</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>Symptoms worse with Cognitive Activity?</label>
+        <select id="ace_cogact"><option value="">— Select —</option><option>Yes</option><option>No</option><option>N/A</option></select>
+      </div>
+      <div class="fg"><label>Overall Behavioral Change Rating (0–6)</label>
+        <select id="ace_rating"><option value="">— Select —</option><option>0 — Normal</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6 — Very Different</option></select>
+      </div>
+    </div>
+
+    <div class="sdiv"><span>D. Red Flags — Acute Emergency Referral Criteria</span></div>
+    <div class="bpbox">
+      Refer immediately to the Emergency Department for <strong>sudden onset or worsening</strong> of any of the following: headaches that worsen · looks very drowsy or can't be awakened · cannot recognize people or places · increasing confusion or irritability · repeated vomiting · slurred speech · unsteadiness on feet · weakness or numbness in arms or legs · seizures or convulsions · less responsive than usual · neck pain · double vision.
+    </div>
+    <div class="fg" data-cs-boot="margin-top:10px"><label>Red Flag Screening</label>
+      <select id="redFlagStatus" data-onchange="ctgShowIf('redFlagNotesWrap', this.value==='positive', 'flex')">
+        <option value="">— Select —</option>
+        <option value="none">None present — patient screened negative for all red flags</option>
+        <option value="positive">Positive red flag(s) present — see notes / ED referral made</option>
+      </select>
+    </div>
+    <div class="fg" id="redFlagNotesWrap" data-cs-boot="display:none">
+      <label>Red Flag Notes</label>
+      <textarea id="redFlagNotes" placeholder="Describe positive red flag findings and actions taken..."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- 6. DIAGNOSIS -->
+<div class="card" id="sec-dx">
+  <div class="card-hd"><div class="card-ico ic-red">6</div><div class="card-title">Diagnosis — ICD-10 Codes</div><div class="card-sub" id="dxCount">0 selected</div></div>
+  <div class="card-body">
+    <input type="text" class="icd-search" id="icdSearch" placeholder="Search diagnosis codes or descriptions..." data-oninput="filterICD()">
+    <div class="icd-selected-count" id="icdSelCount">0 codes selected</div>
+    <div class="icd-grid" id="icdGrid"></div>
+  </div>
+</div>
+
+<!-- 7. ASSESSMENT & PLAN -->
+<div class="card" id="sec-plan">
+  <div class="card-hd"><div class="card-ico ic-green">7</div><div class="card-title">Assessment & Plan</div></div>
+  <div class="card-body">
+    <div class="sdiv"><span>Clinical Impression</span></div>
+    <div class="fg"><label>Impression</label>
+      <select id="impression">
+        <option value="std">Today the patient has demonstrated subjective and objective neurocognitive and vestibular findings associated with traumatic brain injury concussion. Further testing has been scheduled for a future date of service.</option>
+        <option value="custom">Custom — enter below</option>
+      </select>
+    </div>
+    <div class="fg" id="customImpWrap" data-cs-boot="display:none">
+      <label>Custom Impression</label>
+      <textarea id="customImp" placeholder="Enter custom impression..."></textarea>
+    </div>
+
+    <div class="sdiv" id="assessRiskSection"><span>Risk Factors for Assessment</span></div>
+    <div id="assessRiskList" data-cs-boot="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin-bottom:14px"></div>
+
+    <div class="sdiv"><span>Prognosis</span></div>
+    <div class="fg"><label>Prognosis Statement</label>
+      <select id="prognosis">
+        <option>PT Name is expected to make good progress and recovery with few residuals. Based on their history and examination, it is reasonable to believe that their recovery will take about the same length of time as an average case of approximate age and health status with similar diagnoses. This assessment is subject to re-evaluation.</option>
+        <option value="guarded">Prognosis is guarded. Patient presents with multiple risk factors that may prolong recovery. Close monitoring and re-evaluation will be ongoing.</option>
+        <option value="custom">Custom — enter below</option>
+      </select>
+    </div>
+
+    <div class="sdiv"><span>Auto-Generated Boilerplate</span></div>
+    <div class="bpbox" id="bpBox">Fill in patient name and DOI to generate boilerplate.</div>
+
+    <div class="sdiv"><span>Plan</span></div>
+    <div class="fg"><label>Treatment Plan</label>
+      <select id="txPlan">
+        <option>Patient scheduled for further neurocognitive and vestibular concussion evaluation.</option>
+        <option>Initiate neurocognitive and vestibular treatment protocol — 3 visits/week for 4 weeks.</option>
+        <option>Continue current treatment plan with re-evaluation in 4 weeks.</option>
+      </select>
+    </div>
+    <textarea id="homeCare" data-cs-boot="display:none">The patient was instructed to continue home care recommendations.</textarea>
+    <div class="fg"><label>Recommendation</label>
+      <select id="recommendation" data-onchange="syncAceNoFollowupState()">
+        <option>Continue Treatment Plan</option>
+        <option>No follow-up</option>
+        <option>Schedule neurocognitive and vestibular examination</option>
+        <option>Refer to specialist</option>
+        <option>Discharge — goals achieved</option>
+      </select>
+    </div>
+
+    <div class="sdiv"><span>Follow-Up Action Plan</span></div>
+    <div class="fg"><label>Follow-Up Plan</label>
+      <select id="followupPlan" data-onchange="toggleFollowupFields()">
+        <option value="">— Select —</option>
+        <option value="none">No Follow-Up Needed</option>
+        <option value="monitor">Physician / Clinician Office Monitoring</option>
+        <option value="referral">Referral</option>
+      </select>
+    </div>
+    <div class="fg" id="followupMonitorWrap" data-cs-boot="display:none">
+      <label>Date of Next Follow-Up</label>
+      <div class="date-field">
+        <input type="text" id="followupDate" placeholder="MM/DD/YYYY" autocomplete="off">
+        <button type="button" class="cal-btn" data-onclick="toggleDatePicker('followupDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+      </div>
+    </div>
+    <div class="fg" id="followupReferralWrap" data-cs-boot="display:none">
+      <label>Referral Type(s) (check all that apply)</label>
+      <div id="referralTypeList" data-cs-boot="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:5px;margin-top:4px"></div>
+      <div class="fg" data-cs-boot="margin-top:8px"><label>Other Referral (specify)</label><input type="text" id="referralOther" placeholder="e.g. Other specialist..."></div>
+    </div>
+
+    <div class="sdiv"><span>Sign-Off</span></div>
+    <div class="g2">
+      <div class="fg"><label>Completed By</label><input type="text" id="completedBy" value="Nicholas A. Grande"></div>
+      <div class="fg"><label>Credentials</label>
+        <select id="completedByCred"><option value="">— Select —</option><option>DC</option><option>MD</option><option>RN</option><option>NP</option><option>PhD</option><option>ATC</option><option>Other</option></select>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="ace-save-panel" id="aceSavePanel">
+  <div>
+    <div class="card-title" id="aceSaveTitle">Save Day 1 to selected patient</div>
+    <div class="small-muted" id="aceSaveSub">This will attach the Day 1 diagnosis details to the patient record and remove the patient from Pending for Day 1.</div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- ACTION BAR -->
+<div class="action-bar">
+  <div class="ab-left">Patient: <strong id="abPatient">—</strong>&nbsp;|&nbsp;DOS: <strong id="abDOS">—</strong>&nbsp;|&nbsp;Day 1: <strong id="abACE">0/22</strong><span class="draft-status" id="draftStatus"></span></div>
+  <div class="ab-btns">
+    <button class="btn btn-ghost btn-sm" data-onclick="clearAll()">Clear</button>
+    <button class="btn btn-ghost btn-sm" id="aceSignBtn" data-onclick="aceSignRecord()">Sign &amp; Lock</button>
+    <button class="btn btn-green btn-sm" id="aceSaveBtn" data-onclick="saveDay1Ace(this)">Save Day 1</button>
+  </div>
+</div>
+</div><!-- /page-day1 -->
+
+<div class="page" id="page-day2">
+<div class="wrap" id="day2EditorWrap">
+
+<div id="examLockBanner" class="dn-lock" data-cs-boot="display:none">
+  <div class="dn-lock-main">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <div>
+      <div class="dn-lock-title">Signed &amp; locked — closed clinical record</div>
+      <div class="dn-lock-sub" id="examLockBannerSub"></div>
+      <div class="dn-lock-history" id="examLockBannerHistory"></div>
+    </div>
+  </div>
+  <button type="button" class="btn btn-ghost btn-sm" data-onclick="examAmend()">Add amendment</button>
+</div>
+
+<!-- PATIENT STRIP -->
+<div class="pt-strip">
+  <div data-cs-boot="display:flex;align-items:center;gap:12px">
+    <div class="pt-av" id="day2PageAvatar">D2</div>
+    <div>
+      <div class="pt-n" id="day2PageTitle">Exams</div>
+      <div data-cs-boot="margin-top:4px">
+        <select id="examTypeSelect" data-onchange="updateExamPageLabels()" data-cs-boot="font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:3px 8px;outline:none">
+          <option>Day 2</option>
+          <option>Re-Examination</option>
+          <option>Final Examination</option>
+        </select>
+        <div id="lockedExamTypeDisplay" class="tag tb" data-cs-boot="display:none;margin-top:4px;width:max-content">Exam Type</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXAM PATIENT & DATE -->
+<div class="card" id="day2ExamPatientDateCard">
+  <div class="card-hd"><div class="card-ico ic-blue">PT</div><div class="card-title">Patient &amp; Examination Date</div></div>
+  <div class="card-body">
+    <div class="g2">
+      <div class="fg"><label>Patient</label><select id="examPatientSelect" data-onchange="examOnPatientSelect()"><option value="">— Select Patient —</option></select><div id="lockedExamPatientDisplay" class="dn-static-box" data-cs-boot="display:none;margin-top:6px"></div></div>
+      <div class="fg"><label>Examination Date</label>
+        <div class="date-field"><input type="text" id="day2ExamDate" placeholder="MM/DD/YYYY" autocomplete="off"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('day2ExamDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DAY 2 RESULT PDF UPLOADS -->
+<div class="card" id="day2ResultUploadsCard">
+  <div class="card-hd"><div class="card-ico ic-blue">PDF</div><div class="card-title" id="examPdfSourcesLabel">Day 2 Exam Result PDF Sources</div></div>
+  <div class="card-body">
+    <div class="day2-upload-grid">
+      <div class="day2-upload-box">
+        <div class="day2-upload-title">Test 1 — Vestibular &amp; Neurocognitive Results</div>
+        <input type="file" id="day2UploadTest1" accept="application/pdf,.pdf" multiple data-onchange="handleDay2ResultUpload('test1', this.files)">
+        <div class="day2-upload-preview" id="day2PreviewTest1"></div>
+        <button type="button" class="btn btn-ghost btn-sm" data-onclick="clearAllDay2ResultUploads('test1')">Clear All Test 1 PDFs</button>
+      </div>
+      <div class="day2-upload-box">
+        <div class="day2-upload-title">Test 2 — Quantitative Pupillometry Results</div>
+        <div class="fg" data-cs-boot="margin-bottom:0">
+          <label>Fallback Eye Selection <span data-cs-boot="font-size:11px;font-weight:400;color:#888">(used only if not detected in PDF)</span></label>
+          <select id="day2Test2EyeType">
+            <option>Both Eyes</option>
+            <option>Left Eye</option>
+            <option>Right Eye</option>
+          </select>
+        </div>
+        <input type="file" id="day2UploadTest2" accept="application/pdf,.pdf" multiple data-onchange="handleDay2ResultUpload('test2', this.files)">
+        <div class="day2-upload-preview" id="day2PreviewTest2"></div>
+        <div data-cs-boot="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" data-onclick="clearDay2ResultUpload('test2')">Clear Selected Test 2 PDF</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-onclick="clearAllDay2ResultUploads('test2')">Clear All Test 2 PDFs</button>
+        </div>
+      </div>
+      <div class="day2-upload-box" data-cs-boot="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <div class="day2-upload-title">Test 3 — Auditory Screening Results</div>
+        </div>
+        <div>
+            <input type="file" id="day2UploadTest3" accept="application/pdf,.pdf" multiple data-onchange="handleDay2ResultUpload('test3', this.files)">
+          <div class="day2-upload-preview" id="day2PreviewTest3"></div>
+          <button type="button" class="btn btn-ghost btn-sm" data-onclick="clearAllDay2ResultUploads('test3')" data-cs-boot="margin-top:8px">Clear All Test 3 PDFs</button>
+        </div>
+        <div class="sdiv" data-cs-boot="margin:4px 0 0"><span>Manual Result Selection</span></div>
+        <div class="g2" data-cs-boot="gap:10px">
+          <div class="fg" data-cs-boot="margin-bottom:0">
+            <label>Left Ear</label>
+            <select id="day2Test3LeftEar" data-onchange="renderDay2ResultsPreview()">
+              <option value="">— Select —</option>
+              <option>Hearing loss</option>
+              <option>Good hearing</option>
+              <option>Significant hearing loss</option>
+            </select>
+          </div>
+          <div class="fg" data-cs-boot="margin-bottom:0">
+            <label>Right Ear</label>
+            <select id="day2Test3RightEar" data-onchange="renderDay2ResultsPreview()">
+              <option value="">— Select —</option>
+              <option>Hearing loss</option>
+              <option>Good hearing</option>
+              <option>Significant hearing loss</option>
+            </select>
+          </div>
+        </div>
+        <div data-cs-boot="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted)">
+          <div data-cs-boot="font-weight:600;color:var(--text);margin-bottom:6px">Result options:</div>
+          <div data-cs-boot="display:flex;flex-direction:column;gap:5px">
+            <span data-cs-boot="display:flex;align-items:center;gap:6px"><span data-cs-boot="width:8px;height:8px;border-radius:50%;background:#00B4D8;flex-shrink:0"></span>Good hearing</span>
+            <span data-cs-boot="display:flex;align-items:center;gap:6px"><span data-cs-boot="width:8px;height:8px;border-radius:50%;background:#48CAE4;flex-shrink:0"></span>Hearing loss</span>
+            <span data-cs-boot="display:flex;align-items:center;gap:6px"><span data-cs-boot="width:8px;height:8px;border-radius:50%;background:#023E8A;flex-shrink:0"></span>Significant hearing loss</span>
+          </div>
+        </div>
+        <input type="text" id="day2Test3Indication" data-cs-boot="display:none">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXAM DETAILS (Total Dates of Service used in Final Exam PDF) -->
+<div class="card" id="day2ExamDetailsCard" data-cs-boot="display:none">
+  <div class="card-hd"><div class="card-ico ic-amber">i</div><div class="card-title">Exam Details</div></div>
+  <div class="card-body">
+    <div class="fg" data-cs-boot="max-width:240px;margin-bottom:0">
+      <label>Total Dates of Service</label>
+      <input type="number" id="day2TotalDates" placeholder="e.g. 15" min="1">
+    </div>
+  </div>
+</div>
+
+<!-- DAY 2 PDF-STYLE RESULTS -->
+<div class="card" id="day2ResultsCard">
+  <div class="card-hd"><div class="card-ico ic-green">R</div><div class="card-title" id="examResultsLabel">Day 2 Exam Results</div></div>
+  <div class="card-body">
+    <div class="day2-results-preview" id="day2ResultsPreview"></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<!-- ACTION BAR -->
+<div class="action-bar" id="day2EditorActionBar">
+  <div class="ab-left">Patient: <strong id="day2BarPatient">—</strong>&nbsp;|&nbsp;Day 2 Results: <strong id="day2BarSources">0</strong></div>
+  <div class="ab-btns">
+    <button class="btn btn-ghost btn-sm" id="day2BackBtn" data-onclick="showPage('day1')" data-cs-boot="display:none">← Back to Day 1</button>
+    <button class="btn btn-ghost btn-sm" id="examSignBtn" data-onclick="examSignRecord()">Sign &amp; Lock</button>
+    <button class="btn btn-green btn-sm" id="day2SaveExamBtn" data-onclick="saveInitialExamForCurrentPatient()">Save Exam</button>
+    <button class="btn btn-primary btn-sm" id="day2DownloadPdfBtn" data-onclick="exportInitialExamPDF(this)" data-cs-boot="display:none">⬇ Download Day 2 Exam PDF</button>
+  </div>
+</div>
+</div><!-- /page-day2 -->
+
+<!-- Appointment Configs (under Appointments) -->
+<!-- Appointment ▸ Command Center. Rendered entirely by commandcenter.js. -->
+<div class="page" id="page-commandCenter"><div id="commandCenterMount"></div></div>
+
+<!-- Appointment ▸ Rooms. Rendered entirely by apptrooms.js. -->
+<div class="page" id="page-apptRooms"><div id="apptRoomsMount"></div></div>
+<!-- Notes Form integration test bench. Rendered entirely by notesform.js. -->
+<div class="page" id="page-notesFormTest"><div id="notesFormTestMount"></div></div>
+
+<div class="page" id="page-apptConfigs">
+<div class="wrap" data-cs-boot="max-width:1300px">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--al);color:var(--accent)">AC</div>
+      <div><div class="pt-n">Appointment Configs</div><div class="pt-s">Visit types, eligibility tests, rooms &amp; schedulers</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body" data-cs-boot="padding:0">
+      <div class="msg-tabs" id="apptCfgTabs"></div>
+      <div id="apptCfgBody"></div>
+    </div>
+  </div>
+</div>
+</div><!-- /page-apptConfigs -->
+
+<!-- Patient Encounters (under Appointment) -->
+<div class="page" id="page-patientEncounters">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div id="encMount"></div>
+</div>
+</div><!-- /page-patientEncounters -->
+
+<!-- Care Administration (patient list filter + encounters hand-off) -->
+<div class="page" id="page-careAdmin">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div id="caMount"></div>
+</div>
+</div><!-- /page-careAdmin -->
+
+<!-- Contacts (external directory: providers, attorneys, case managers) -->
+<!-- Disclosure Log (accounting of disclosures, 45 CFR 164.528) -->
+<div class="modal-overlay" id="dlAddModal">
+  <div class="modal" data-cs-boot="width:min(620px,96%)">
+    <div class="modal-hd"><div class="modal-title">Record a Disclosure</div><button class="modal-close" data-onclick="dlCloseAdd()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body">
+      <div data-cs-boot="font-size:12.5px;line-height:1.6;color:var(--muted);margin-bottom:12px">
+        Log this each time patient information leaves the practice. HIPAA gives the
+        patient the right to ask who received it, and this is the record that answers them.
+      </div>
+      <div id="dlAddBody"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="dlCloseAdd()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="dlSubmitAdd()">Record Disclosure</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="modal-overlay" id="arAddModal">
+  <div class="modal" data-cs-boot="width:min(560px,96%)">
+    <div class="modal-hd"><div class="modal-title">Log an Audit Review</div><button class="modal-close" data-onclick="arCloseAdd()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body">
+      <div data-cs-boot="font-size:12.5px;line-height:1.6;color:var(--muted);margin-bottom:12px">Record that the audit trail was reviewed for this period, and what was found.</div>
+      <div id="arAddBody"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="arCloseAdd()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="arSubmitAdd()">Log Review</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="prAddModal">
+  <div class="modal" data-cs-boot="width:min(640px,96%)">
+    <div class="modal-hd"><div class="modal-title">Log a Patient Request</div><button class="modal-close" data-onclick="prCloseAdd()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body">
+      <div data-cs-boot="font-size:12.5px;line-height:1.6;color:var(--muted);margin-bottom:12px">
+        The date received starts the statutory clock — 30 days for access, 60 days for an amendment.
+      </div>
+      <div id="prAddBody"></div>
+    </div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="prCloseAdd()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="prSubmitAdd()">Log Request</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="prUpdModal">
+  <div class="modal" data-cs-boot="width:min(640px,96%)">
+    <div class="modal-hd"><div class="modal-title">Update Request</div><button class="modal-close" data-onclick="prCloseUpdate()" aria-label="Close modal">&#215;</button></div>
+    <div class="modal-body"><div id="prUpdBody"></div></div>
+    <div class="modal-ft">
+      <button type="button" class="btn btn-ghost" data-onclick="prCloseUpdate()">Cancel</button>
+      <button type="button" class="btn btn-primary" data-onclick="prSubmitUpdate()">Save Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- Referrals (law-firm intake ↔ clinic inbox; referrals.js owns the body) -->
+<div class="page" id="page-referrals">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div id="referralsMount"></div>
+</div>
+</div><!-- /page-referrals -->
+
+<div class="page" id="page-contacts">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div id="contactsMount"></div>
+</div>
+</div><!-- /page-contacts -->
+
+<!-- Patient Chart (clinical details accordion + notes + note editor) -->
+<div class="page" id="page-patientChart">
+<div class="wrap" data-cs-boot="max-width:1600px">
+  <div id="patientChartMount"></div>
+</div>
+</div><!-- /page-patientChart -->
+
+<!-- Registration List (filterable/paginated grid over the patient roster) -->
+<div class="page" id="page-registrationList">
+<div class="wrap" data-cs-boot="max-width:1900px">
+  <div id="regListMount"></div>
+</div>
+</div><!-- /page-registrationList -->
+
+<!-- Intake Form (under Exams) -->
+<div class="page" id="page-intakeForm">
+<div class="wrap" data-cs-boot="max-width:1200px">
+  <div class="pt-strip">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" data-cs-boot="background:var(--al);color:var(--accent)">FM</div>
+      <div><div class="pt-n">Forms</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" data-cs-boot="padding-bottom:14px">
+      <div data-cs-boot="display:flex;align-items:flex-end;gap:12px">
+        <div class="fg" data-cs-boot="margin-bottom:0;flex:1"><label>Patient</label>
+          <select id="intakePatientSelect" data-onchange="intakeSelectPatient(this.value)"></select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="intakeFormsToSendCard" data-cs-boot="display:none">
+    <div class="card-body">
+      <div class="fts-head">
+        <div>
+          <div class="fts-title">Forms to Send</div>
+          <div class="fts-sub">Tick the forms this patient needs to complete. The New Invite page pre-fills from this, and the invite link unlocks only the ticked forms.</div>
+        </div>
+        <span class="fts-count" id="intakeFormsToSendCount">0 selected</span>
+      </div>
+      <div class="fts-list" id="intakeFormsToSendMount"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" data-cs-boot="padding:0">
+      <div class="msg-tabs" id="intakeTabs">
+        <div class="msg-tab active" data-tab="demographics" data-onclick="intakeSwitchTab('demographics')">Demographics</div>
+        <div class="msg-tab" data-tab="insurance" data-onclick="intakeSwitchTab('insurance')">Insurance &amp; Attorney</div>
+        <div class="msg-tab" data-tab="consent" data-onclick="intakeSwitchTab('consent')">Intake Form</div>
+        <div class="msg-tab" data-tab="minorAuth" data-onclick="intakeSwitchTab('minorAuth')">Minor Authorization<span class="tab-badge" id="intakeMinorBadge" data-cs-boot="display:none">Minor</span></div>
+        <div class="msg-tab" data-tab="claim" data-onclick="intakeSwitchTab('claim')">Claim Form (CMS-1500)</div>
+        <div class="msg-tab" data-tab="documents" data-onclick="intakeSwitchTab('documents')">Documents</div>
+      </div>
+      <div id="intakeTabBody"></div>
+    </div>
+  </div>
+</div>
+</div><!-- /page-intakeForm -->
+
+<!-- Patient Check In (under Forms) -->
+<div class="page" id="page-patientCheckIn">
+<div class="wrap" data-cs-boot="max-width:none">
+  <div id="chkMount"></div>
+</div>
+</div><!-- /page-patientCheckIn -->
+
+<!-- EXAM CATEGORY PAGE -->
+<div class="page" id="page-examCategory">
+<div class="wrap" data-cs-boot="max-width:780px">
+  <div class="pt-strip" data-cs-boot="margin-bottom:20px">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" id="examCatAvatar">IE</div>
+      <div>
+        <div class="pt-n" id="examCatTitle">Day 2</div>
+        <div class="pt-s" id="examCatSub">Saved exam records</div>
+      </div>
+    </div>
+    <div class="tags"><span class="tag tb" id="examCatCount">0 Records</span></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><div class="card-title" id="examCatCardTitle">Saved Exams</div></div>
+    <div class="card-body" id="examCatList" data-cs-boot="padding:0"></div>
+  </div>
+</div>
+
+</div><!-- /page-examCategory -->
+
+<!-- PATIENT EXAM DETAIL PAGE -->
+<div class="page" id="page-patientExamDetail">
+<div class="wrap" data-cs-boot="max-width:880px">
+  <div class="pt-strip" data-cs-boot="margin-bottom:20px">
+    <div data-cs-boot="display:flex;align-items:center;gap:12px">
+      <div class="pt-av" id="patientExamDetailAvatar">EX</div>
+      <div>
+        <div class="pt-n" id="patientExamDetailTitle">Exam Details</div>
+        <div class="pt-s" id="patientExamDetailSub">Saved exam record from Patient Lists</div>
+      </div>
+    </div>
+    <div class="tags">
+      <span class="tag tb" id="patientExamDetailCategoryTag">Exam</span>
+      <span class="tag tg" id="patientExamDetailDateTag">No date</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-blue">i</div><div class="card-title">Exam Summary</div><div class="card-sub">Dedicated patient exam view</div></div>
+    <div class="card-body" id="patientExamDetailSummary"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><div class="card-ico ic-green">R</div><div class="card-title">Exam Results</div><div class="card-sub">Saved PDF/manual result preview</div></div>
+    <div class="card-body">
+      <div class="day2-results-preview" id="patientExamDetailResults"></div>
+    </div>
+  </div>
+</div>
+
+<div class="action-bar">
+  <div class="ab-left">Patient: <strong id="patientExamDetailBarPatient">—</strong>&nbsp;|&nbsp;Exam: <strong id="patientExamDetailBarExam">—</strong></div>
+  <div class="ab-btns">
+    <button class="btn btn-ghost btn-sm" data-onclick="showPage('patientLists')">← Back to Patient Lists</button>
+    <button class="btn btn-ghost btn-sm" id="patientExamDetailEditBtn" data-onclick="editPatientExamFromDetail()">Edit in Exams</button>
+    <button class="btn btn-primary btn-sm" data-onclick="downloadPatientExamDetailPdf()">⬇ Download PDF</button>
+  </div>
+</div>
+</div><!-- /page-patientExamDetail -->
+
+<!-- PATIENT EXAM EDIT PAGE -->
+<div class="page" id="page-patientExamEdit">
+  <div id="patientExamEditMount"></div>
+  <div id="patientExamEditActionMount"></div>
+</div><!-- /page-patientExamEdit -->
+
+<div class="page" id="page-dailyNotes">
+<div class="wrap" data-cs-boot="max-width:680px">
+
+<div class="pt-strip" data-cs-boot="margin-bottom:24px">
+  <div data-cs-boot="display:flex;align-items:center;gap:12px">
+    <div class="pt-av">DN</div>
+    <div><div class="pt-n">Daily Notes</div></div>
+  </div>
+  <div class="tags"><span class="tag tb" id="dnPatientTag">No Patient Selected</span></div>
+</div>
+
+<!-- Signed-note state (HIPAA 164.312(c)(1) integrity). Hidden until a signed
+     note is loaded; the server enforces the lock regardless of this banner. -->
+<div id="dnLockBanner" class="dn-lock" data-cs-boot="display:none">
+  <div class="dn-lock-main">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <div>
+      <div class="dn-lock-title">Signed &amp; locked — closed clinical record</div>
+      <div class="dn-lock-sub" id="dnLockSub"></div>
+      <div class="dn-lock-history" id="dnLockHistory"></div>
+    </div>
+  </div>
+  <button type="button" class="btn btn-ghost btn-sm" id="dnAmendBtn" data-onclick="dnAmendNote()">Edit to Amend</button>
+</div>
+
+<!-- PATIENT INFO -->
+<div class="card" data-cs-boot="margin-bottom:18px">
+  <div class="card-hd"><div class="card-ico ic-blue">1</div><div class="card-title">Patient &amp; Session Info</div></div>
+  <div class="card-body" data-cs-boot="padding:22px 24px">
+    <div class="g2" data-cs-boot="margin-bottom:16px;gap:18px">
+      <div class="fg"><label>Name</label><select id="dnName" data-onchange="dnOnPatientSelect()"><option value="">— Select Patient —</option></select></div>
+      <div class="fg"><label>Session Date</label><div class="date-field"><input type="text" id="dnSessionDate" placeholder="MM/DD/YYYY" autocomplete="off" data-oninput="dnSyncSessionDate()"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('dnSessionDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div></div>
+    </div>
+    <div class="g2" data-cs-boot="gap:18px">
+      <div class="fg"><label>Appointment Type</label><input type="text" id="dnAppointmentType" value="Therapy Visit" readonly data-cs-boot="cursor:default;background:var(--s2)"></div>
+      <div class="fg"><label>Time</label><div class="date-field"><input type="text" id="dnTime" placeholder="HH:MM AM" autocomplete="off" readonly data-cs-boot="cursor:pointer" data-onclick="toggleTimePicker('dnTime')" data-oninput="dnSyncTime()"><button type="button" class="cal-btn" data-onclick="toggleTimePicker('dnTime')" aria-label="Open time picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SUBJECTIVE -->
+<div class="card" data-cs-boot="margin-bottom:18px">
+  <div class="card-hd"><div class="card-ico ic-amber">S</div><div class="card-title">Subjective — Daily Concussion Findings</div></div>
+  <div class="card-body" data-cs-boot="padding:22px 24px">
+    <div data-cs-boot="display:none"><div class="dn-static-box" id="dnStaticSymptoms"></div></div>
+    <input type="hidden" id="dnPatientNoteDate">
+    <div class="fg"><label>Patient Daily Note Following Treatment Session</label><textarea id="dnPatientNote" rows="5" autocorrect="off" autocapitalize="off" autocomplete="off" placeholder="e.g. Pt's Spell Bee note: 7 words. Headache, a 4"></textarea></div>
+  </div>
+</div>
+
+<!-- SHOEBOX OPTIONAL -->
+<div data-cs-boot="text-align:center;margin:2px 0 13px">
+  <button type="button" data-onclick="toggleDnShoebox()" id="dnShoeboxToggleBtn" class="dn-optional-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    Optional: Auditory Screening
+  </button>
+</div>
+
+<div id="dnShoeboxCard" class="card" data-cs-boot="display:none;margin-bottom:18px">
+  <div class="card-hd" data-cs-boot="display:flex;align-items:center;justify-content:space-between">
+    <div data-cs-boot="display:flex;align-items:center;gap:10px">
+      <div class="card-ico ic-gray" data-cs-boot="font-size:10px;font-weight:700">SB</div>
+      <div class="card-title">Test 3 — Auditory Screening Results</div>
+    </div>
+    <button type="button" data-onclick="toggleDnShoebox()" data-cs-boot="border:none;background:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:0 2px" title="Close">&times;</button>
+  </div>
+  <div class="card-body" data-cs-boot="padding:22px 24px">
+    <div data-cs-boot="font-size:12px;color:var(--muted);margin-bottom:16px">Online auditory screening — select the result for each ear.</div>
+    <div class="g2" data-cs-boot="gap:18px;margin-bottom:16px">
+      <div class="fg">
+        <label>Left Ear</label>
+        <select id="dnShoeboxLeftEar">
+          <option value="">— Select —</option>
+          <option>Hearing loss</option>
+          <option>Good hearing</option>
+          <option>Significant hearing loss</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Right Ear</label>
+        <select id="dnShoeboxRightEar">
+          <option value="">— Select —</option>
+          <option>Hearing loss</option>
+          <option>Good hearing</option>
+          <option>Significant hearing loss</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg" data-cs-boot="margin-top:14px">
+      <label>Upload Auditory Screening PDF File</label>
+      <input type="file" id="dnShoeboxPdfFile" accept="application/pdf,.pdf" data-onchange="handleDailyNoteShoeboxPdfUpload(this.files,'main')">
+      <div class="dn-pdf-preview" id="dnShoeboxPdfPreview"><div class="dn-pdf-empty">No Auditory Screening PDF uploaded yet.</div></div>
+    </div>
+    <input type="text" id="dnShoeboxIndication" data-cs-boot="display:none">
+    <div data-cs-boot="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <label data-cs-boot="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:6px;display:block">Billing / Exam Target</label>
+      <div data-cs-boot="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="dnShoeboxTargetCategory" data-cs-boot="font-family:'DM Sans',sans-serif;font-size:12px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 10px;outline:none;flex:1;min-width:160px">
+          <option value="">— Select Category —</option>
+        </select>
+        <button type="button" class="btn btn-ghost btn-sm" data-onclick="dnShoeboxClear()">Clear</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OBJECTIVE / ASSESSMENT — hidden from form, content still available for PDF -->
+<div data-cs-boot="display:none">
+  <div class="dn-static-box" id="dnStaticHighScore"></div>
+  <div class="dn-static-box" id="dnStaticLowScore"></div>
+  <div class="dn-static-box" id="dnStaticRecoveryStatus"></div>
+  <div class="dn-static-box" id="dnStaticRiskFactors"></div>
+  <div class="dn-static-box" id="dnStaticCausation"></div>
+  <div class="dn-static-box" id="dnStaticMedicalNecessity"></div>
+  <div class="dn-static-box" id="dnStaticReasonableness"></div>
+</div>
+
+<!-- PLAN — all hidden, values still flow to PDF -->
+<div data-cs-boot="display:none">
+  <input type="hidden" id="dnDosDate">
+  <input type="hidden" id="dnStartTimeNeuroTx">
+  <input type="hidden" id="dnNmrEyeStart"><input type="hidden" id="dnNmrEyeEnd">
+  <input type="hidden" id="dnNmrBalStart"><input type="hidden" id="dnNmrBalEnd">
+  <input type="hidden" id="dnCog1Start"><input type="hidden" id="dnCog1End">
+  <input type="hidden" id="dnCog2Start"><input type="hidden" id="dnCog2End">
+  <input type="hidden" id="dnTherExStart"><input type="hidden" id="dnTherExEnd">
+  <input type="hidden" id="dnEndTimeNeuroTx">
+  <span id="dispNmrEyeStart"></span><span id="dispNmrEyeEnd"></span>
+  <span id="dispNmrBalStart"></span><span id="dispNmrBalEnd"></span>
+  <span id="dispCog1Start"></span><span id="dispCog1End"></span>
+  <span id="dispCog2Start"></span><span id="dispCog2End"></span>
+  <span id="dispTherExStart"></span><span id="dispTherExEnd"></span>
+  <span id="dispEndNeuroTx"></span>
+  <input type="hidden" id="dnRecommendation" value="Continue Treatment Plan">
+</div>
+
+</div><!-- /wrap -->
+
+<div class="action-bar">
+  <div class="ab-left">Patient: <strong id="dnBarPatient">—</strong>&nbsp;|&nbsp;Daily Notes</div>
+  <div class="ab-btns">
+    <button class="btn btn-ghost btn-sm" id="dnSignBtn" data-onclick="dnSignNote()">Sign &amp; Lock</button>
+    <button class="btn btn-primary btn-sm" id="dnSaveBtn" data-onclick="saveDailyNote()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save Note</button>
+  </div>
+</div>
+</div><!-- /page-dailyNotes -->
+
+
+
+<div class="page" id="page-patientDailyNote">
+  <div class="wrap" data-cs-boot="max-width:760px" id="patientDailyNoteMount"></div>
+  <div class="action-bar">
+    <div class="pdn-action-bar-title">Daily Note: <strong id="pdnBarPatient">—</strong></div>
+    <div class="ab-btns" id="pdnActionButtons"></div>
+  </div>
+</div><!-- /page-patientDailyNote -->
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="changePasswordModal">
+  <div class="modal" data-cs-boot="width:min(440px,95%)">
+    <div class="modal-hd">
+      <div class="modal-title">Change Password</div>
+      <button class="modal-close" data-onclick="closeChangePassword()">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <form id="cpwForm" autocomplete="off" data-onsubmit="return false">
+        <div class="fg">
+          <label for="cpwCurrent">Current password</label>
+          <input type="password" id="cpwCurrent" autocomplete="current-password">
+        </div>
+        <div class="fg">
+          <label for="cpwNew">New password</label>
+          <input type="password" id="cpwNew" autocomplete="new-password">
+          <small class="small-muted" data-cs-boot="display:block;margin-top:4px">At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.</small>
+        </div>
+        <div class="fg">
+          <label for="cpwConfirm">Confirm new password</label>
+          <input type="password" id="cpwConfirm" autocomplete="new-password">
+        </div>
+        <div id="cpwFeedback" data-cs-boot="margin-top:6px;display:none"><span class="tag" id="cpwFeedbackTag"></span></div>
+      </form>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" data-onclick="closeChangePassword()">Cancel</button>
+      <button class="btn btn-primary" id="cpwSaveBtn" data-onclick="submitChangePassword()">Save Password</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="forgotPasswordModal">
+  <div class="modal" data-cs-boot="width:min(440px,95%)">
+    <div class="modal-hd">
+      <div class="modal-title">Forgot Password</div>
+      <button class="modal-close" data-onclick="closeForgotPassword()">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <form id="fpwForm" autocomplete="off" data-onsubmit="return false">
+        <div class="fg">
+          <label for="fpwUsername">Username</label>
+          <input type="text" id="fpwUsername" autocomplete="username">
+        </div>
+        <div id="fpwFeedback" data-cs-boot="margin-top:6px;display:none"><span class="tag" id="fpwFeedbackTag"></span></div>
+      </form>
+      <form id="fpwResetForm" autocomplete="off" data-onsubmit="return false" data-cs-boot="display:none">
+        <div class="auth-mfa-lead">If that account exists, we emailed a 6-digit code to <strong id="fpwCodeHint"></strong>. Enter it below with your new password.</div>
+        <div class="fg">
+          <label for="fpwCode">Confirmation code</label>
+          <input type="text" id="fpwCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="auth-code-input">
+        </div>
+        <div class="fg">
+          <label for="fpwNew">New password</label>
+          <input type="password" id="fpwNew" autocomplete="new-password">
+          <small class="small-muted" data-cs-boot="display:block;margin-top:4px">At least 8 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.</small>
+        </div>
+        <div class="fg">
+          <label for="fpwConfirm">Confirm new password</label>
+          <input type="password" id="fpwConfirm" autocomplete="new-password">
+        </div>
+        <div id="fpwResetFeedback" data-cs-boot="margin-top:6px;display:none"><span class="tag" id="fpwResetFeedbackTag"></span></div>
+        <div class="auth-forgot-row" data-cs-boot="margin-top:10px"><button type="button" class="auth-forgot-link" data-onclick="resendForgotPasswordCode()">Send a new code</button></div>
+      </form>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" data-onclick="closeForgotPassword()">Cancel</button>
+      <button class="btn btn-primary" id="fpwSendBtn" data-onclick="startForgotPassword()">Send Code</button>
+      <button class="btn btn-primary" id="fpwResetBtn" data-onclick="submitForgotPasswordReset()" data-cs-boot="display:none">Reset Password</button>
+    </div>
+  </div>
+</div>
+
+<script src="csp-boot-end.js?v=20261005b"></script>
+<script src="notes-group.js?v=20260923a"></script>
+<script src="app.js?v=20261013a"></script>
+<!-- Appointment scheduling (week grid) -->
+<script src="appointments.js?v=20261005e"></script>
+<!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
+<script src="apptconfig.js?v=20261005e"></script>
+<script src="apptrooms.js?v=20260929b"></script>
+<script src="commandcenter.js?v=20261005e"></script>
+<script src="apptalerts.js?v=20260929b"></script>
+<!-- Patient Encounters (read-only view over appointments + patients) -->
+<script src="encounters.js?v=20261006f"></script>
+<!-- Patient Check In (under Forms) -->
+<script src="patientcheckin.js?v=20261005e"></script>
+<!-- Notification (SMS/Email notification settings) -->
+<script src="notification.js?v=20261005e"></script>
+<!-- Care Administration (patient list filter + encounters hand-off) -->
+<script src="careadmin.js?v=20261005e"></script>
+<!-- Contacts (external directory: providers, attorneys, case managers) -->
+<script src="contacts.js?v=20261006f"></script>
+<!-- Patient Chart (clinical details accordion + notes + editor) -->
+<script src="patientchart.js?v=20261008a"></script>
+<!-- Registration List (filterable/paginated grid over the patient roster) -->
+<script src="registrationlist.js?v=20261006f"></script>
+<script src="disclosures.js?v=20261006f"></script>
+<script src="patientrequests.js?v=20261005e"></script>
+<!-- AR Summary (Billing) -->
+<script src="billing.js?v=20261005e"></script>
+<!-- Invite Patient (Messaging) -->
+<script src="messaging.js?v=20260929b"></script>
+<!-- Azure Communication Services Calling SDK (vendored single-file bundle via
+     esbuild — the npm package is ESM-only with bare-specifier imports, no
+     ready-to-use browser build, so this is pre-bundled and checked in as a
+     static asset like any other script here). Exposes window.ACS. -->
+<script src="acs-calling-bundle.js?v=20260903j"></script>
+<!-- Internal Messaging (localStorage prototype) -->
+<script src="internal-messaging.js?v=20261005e"></script>
+<script src="patient-messaging.js?v=20261005e"></script>
+<!-- Intake Form (under Exams) -->
+<script src="intake.js?v=20261012a"></script>
+<!-- CMS-1500 claim form (Forms > Claim Form tab). Loaded after intake.js,
+     which calls cfTabHTML() when that tab is active. -->
+<script src="claimform.js?v=20261008a"></script>
+<script src="referrals.js?v=20261005e"></script>
+<!-- Authentication & role-based access control (static localStorage version) -->
+<script src="input-limits.js?v=20260916d"></script>
+<script src="backup-ui.js?v=20261005e"></script>
+<script src="hipaa-policy.js?v=20261005e"></script>
+<script src="recording-share.js?v=20260929b"></script>
+<script src="meeting-greenroom.js?v=20261005e"></script>
+<!-- Live transcript helper. The Speech SDK itself is NOT loaded here — this
+     module injects speech-sdk.js on demand, so the 369 KB bundle only costs
+     someone who actually switches a transcript on. -->
+<script src="meeting-transcript.js?v=20260923a"></script>
+<script src="meeting-guest.js?v=20261005e"></script>
+<script src="meetings.js?v=20261012a"></script>
+<!-- Day 1 add-ons: MOI story, extra questions, even two-column layout. They plug into app.js (window.ctgDay1Hooks). -->
+<script src="day1-moi.js?v=20261002a"></script>
+<script src="day1-extras.js?v=20261012a"></script>
+<script src="day1-layout.js?v=20261012a"></script>
+<script src="day1-docx.js?v=20261009a"></script>
+<script src="fcr-docx.js?v=20261009c"></script>
+<script src="offline-api.js"></script>
+<script src="ctg-auth.js?v=20261012a"></script>
+<!-- Patient-facing forms (opened via #pf= invite link) -->
+<script src="patientforms.js?v=20261012a"></script>
+<script src="notesform.js?v=20261005e"></script>
+<script src="spotlight.js?v=20260929b"></script>
+<!-- Premium UI micro-interactions (decoration only — does NOT touch PDF generation/extraction) -->
+<script src="ui-effects.js?v=20260929a"></script>
+<!-- PHI warning. Deliberately on every portal screen including the login page:
+     a notice only deters misuse if it is visible before someone acts, and an
+     access warning shown after sign-in is worth much less if it is ever needed
+     as evidence. Hidden automatically on the patient-facing forms by pf-mode. -->
+<footer class="ctg-phi-footer" id="ctgPhiFooter">
+  <div class="ctg-phi-inner">
+    <div class="ctg-phi-brand">Concussion Therapy <span>Group</span></div>
+    <nav class="ctg-phi-links">
+      <button type="button" data-onclick="ctgShowPhiNotice()">PHI &amp; Access Notice</button>
+      <button type="button" data-onclick="ctgShowPolicy()">HIPAA Privacy &amp; Security Policy</button>
+    </nav>
+    <p class="ctg-phi-text">This portal contains <strong>Protected Health Information (PHI)</strong>. Access is
+    restricted to authorized personnel only. All information is confidential and protected under HIPAA, the
+    HIPAA Security Rule, and the Maryland Confidentiality of Medical Records Act. Unauthorized access,
+    disclosure, copying, or misuse is strictly prohibited and may result in disciplinary action and applicable
+    civil or criminal penalties.</p>
+    <div class="ctg-phi-base">
+      <span>Authorized use only &middot; Activity is monitored and audited</span>
+      <span>&copy; 2026 Concussion Therapy Group, LLC. All rights reserved.</span>
+    </div>
+  </div>
+</footer>
+<div class="ctg-phi-modal" id="ctgPhiModal" data-onclick="if(event.target===this)ctgHidePhiNotice()">
+  <div class="ctg-phi-card" role="dialog" aria-modal="true" aria-labelledby="ctgPhiModalTitle">
+    <div class="ctg-phi-card-head">
+      <span id="ctgPhiModalTitle">Protected Health Information &amp; Access Notice</span>
+    </div>
+    <div class="ctg-phi-card-body">
+      <p>This portal contains <strong>Protected Health Information (PHI)</strong>. Access is restricted to
+      authorized personnel only.</p>
+      <p>All information is confidential and protected under the <strong>Health Insurance Portability and
+      Accountability Act (HIPAA)</strong>, the <strong>HIPAA Security Rule</strong>, and the
+      <strong>Maryland Confidentiality of Medical Records Act</strong>.</p>
+      <p>Unauthorized access, disclosure, copying, or misuse of information contained within this system is
+      strictly prohibited and may result in <strong>disciplinary action and applicable civil or criminal
+      penalties</strong>.</p>
+    </div>
+    <div class="ctg-phi-card-foot">
+      <button type="button" data-onclick="ctgHidePhiNotice()">I understand</button>
+    </div>
+  </div>
+</div>
+<script src="phi-notice.js?v=20260929a"></script>
+<script src="offline-uploads.js"></script>
+</body>
+</html>

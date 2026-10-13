@@ -1,0 +1,342 @@
+/* CTG One Day 1 add-ons: MOI story editor, extra questions and their pick
+   lists, even two-column layout (day1-moi.js, day1-extras.js, day1-layout.js). Styled with the portal's own measurements so
+   they read as part of the Day 1 form: field white 82%, 1px #0077B6 border at
+   30%, 10px corners, Plus Jakarta Sans 14.5px, the same soft shadow. */
+:root {
+  --xo-field-bg: rgba(255, 255, 255, 0.82);
+  --xo-border: rgba(0, 119, 182, 0.3);
+  --xo-border-soft: rgba(0, 119, 182, 0.13);
+  --xo-accent: #0077B6;
+  --xo-text: #0f172a;
+  --xo-muted: #64748b;
+  --xo-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --xo-font: "Plus Jakarta Sans", Inter, "DM Sans", sans-serif;
+}
+
+/* The story replaces the old MOI fields - except on a signed Day 1 saved
+   before the story (#sec-moi.moi-legacy), which shows what was signed. */
+html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiVehicleGrid,
+html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiNoVehicleWrap,
+html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiPostImpactSection { display: none !important; }
+#sec-moi.moi-legacy .moi-story-wrap { display: none; }
+
+/* ---------------------------------------------------------- MOI story */
+.moi-story-wrap { margin-bottom: 14px; }
+.moi-story-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.moi-story-bar button:disabled { opacity: 0.45; cursor: default; }
+.moi-story {
+  min-height: 160px;
+  padding: 14px 16px;
+  border: 1px solid var(--xo-border);
+  border-radius: 10px;
+  background: var(--xo-field-bg);
+  box-shadow: var(--xo-shadow);
+  color: var(--xo-text);
+  font: 14.5px/2.1 var(--xo-font);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  outline: none;
+}
+.moi-story:focus { border-color: var(--xo-accent); box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.12); }
+.moi-story.moi-locked { background: rgba(255, 255, 255, 0.55); }
+.moi-story-hint { margin-top: 6px; font: 12px/1.4 var(--xo-font); color: var(--xo-muted); }
+
+/* A dropdown inside the story: the portal's accent, not a different palette. */
+.moi-story .moi-chip {
+  display: inline-block;
+  margin: 0 2px;
+  padding: 0 8px;
+  border: 1px solid var(--xo-border);
+  border-radius: 7px;
+  background: rgba(0, 119, 182, 0.07);
+  color: var(--xo-text);
+  font: 600 14px/1.65 var(--xo-font);
+  cursor: pointer;
+  user-select: none;
+  white-space: normal;
+}
+.moi-story .moi-chip:hover { background: rgba(0, 119, 182, 0.13); border-color: var(--xo-accent); }
+.moi-story .moi-chip-empty { color: var(--xo-accent); font-weight: 500; font-style: italic; }
+.moi-chip .moi-caret { margin-left: 6px; font-style: normal; font-size: 10px; color: var(--xo-muted); }
+.moi-chip.moi-dragging { opacity: 0.4; }
+.moi-locked .moi-chip { cursor: default; }
+
+.moi-auto {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--xo-text);
+  font-weight: 600;
+  user-select: none;
+}
+
+.moi-blank-wrap { display: inline-block; }
+.moi-blank {
+  width: 200px;
+  max-width: 60vw;
+  padding: 2px 8px;
+  border: 1px solid var(--xo-border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--xo-text);
+  font: 14px/1.5 var(--xo-font);
+}
+.moi-blank:focus { outline: none; border-color: var(--xo-accent); box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.12); }
+
+/* --------------------------------------- extra questions: portal select look */
+.fg > .xq-chip {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 10px 13px;
+  border: 1px solid var(--xo-border);
+  border-radius: 10px;
+  background: var(--xo-field-bg);
+  box-shadow: var(--xo-shadow);
+  color: var(--xo-text);
+  font: 400 14.5px/1.35 var(--xo-font);
+  cursor: pointer;
+  user-select: none;
+}
+.fg > .xq-chip:hover { border-color: rgba(0, 119, 182, 0.5); }
+.fg > .xq-chip:focus { outline: none; border-color: var(--xo-accent); box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.12); }
+.fg > .xq-chip.moi-chip-empty { color: var(--xo-text); font-style: normal; font-weight: 400; }
+/* The chevron the browser draws on the portal's selects, as an image. */
+.fg > .xq-chip {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+}
+.fg > .xq-chip .moi-caret { display: none; }
+.fg > .xq-chip.xq-locked { cursor: default; opacity: 0.7; }
+
+/* ------------------------------------------------- the choice list popup */
+.moi-pop {
+  position: absolute;
+  z-index: 100000;
+  width: 460px;
+  max-width: calc(100vw - 24px);
+  padding: 10px;
+  border: 1px solid rgba(0, 119, 182, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+  color: var(--xo-text);
+  font: 14px/1.4 var(--xo-font);
+}
+.moi-pop-add { display: flex; gap: 6px; margin-bottom: 8px; }
+.moi-pop-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--xo-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--xo-text);
+  font: inherit;
+}
+.moi-pop-add input:focus { outline: none; border-color: var(--xo-accent); box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.12); }
+.moi-pop button {
+  padding: 6px 12px;
+  border: 1px solid var(--xo-border-soft);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--xo-text);
+  font: 600 13px/1.2 var(--xo-font);
+  cursor: pointer;
+}
+.moi-pop button:hover { border-color: var(--xo-accent); }
+.moi-pop-add button:first-of-type, .moi-pop-foot .moi-pop-done {
+  background: var(--xo-accent);
+  border-color: var(--xo-accent);
+  color: #fff;
+}
+.moi-pop-list { max-height: 260px; overflow-y: auto; margin: 0 -4px; }
+.moi-pop-item {
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer;
+  /* They are <label>s, and the portal styles field labels as grey 11px caps. */
+  margin: 0; color: var(--xo-text); font: 400 14px/1.4 var(--xo-font); text-transform: none; letter-spacing: normal;
+}
+.moi-pop-item:hover { background: rgba(0, 119, 182, 0.06); }
+.moi-pop-item input[type=checkbox] { width: 16px; height: 16px; margin: 0; accent-color: var(--xo-accent); flex: none; }
+.moi-pop-item span { flex: 1; }
+.moi-pop .moi-pop-del {
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--xo-muted);
+  font-size: 17px;
+  line-height: 1;
+}
+.moi-pop .moi-pop-del:hover { color: #b91c1c; }
+.moi-pop-none { padding: 8px; font-style: italic; color: var(--xo-muted); }
+.moi-pop-foot { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--xo-border-soft); }
+
+/* --------------------------- Day 1 in the EnableDoc order (day1-layout.js)
+   Wrappers flattened, items ordered with flex `order`. No !important on
+   .xo-flat, so a section hidden with an inline style stays hidden. */
+.card .card-body.xo-flex { display: flex; flex-direction: column; }
+.card .card-body.xo-flex .xo-flat { display: contents; }
+.card .card-body.xo-flex .fg { margin: 6px 0; }
+.card .card-body.xo-flex .sdiv { margin-top: 14px; }
+
+/* HPI and PMH in two columns (day1-layout.js places each item with an
+   explicit grid row/column, filling the left column first). One column on
+   narrow screens, where the items fall back to their flex `order`. */
+.card .card-body.xo-flex.xo-grid2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 8px;
+  align-items: start;
+}
+.card .card-body.xo-grid2 .xo-item.fg { margin: 0; }
+.card .card-body.xo-grid2 .xo-item.yn-row { margin: 0; }
+.card .card-body.xo-grid2 .xo-item.sdiv { margin: 10px 0 2px; }
+@media (max-width: 900px) {
+  .card .card-body.xo-flex.xo-grid2 { display: flex; flex-direction: column; }
+  .card .card-body.xo-grid2 .xo-item { grid-row: auto !important; grid-column: auto !important; }
+}
+
+/* Even columns: every cell is the same kind of box. Fields in the two-column
+   sections are drawn like the Yes/No rows (measured: 48px, 10px 14px padding,
+   white 78%, 1px border at 10%, 10px corners, 12px dark label), with a compact
+   control on the right; cells on the same line stretch to equal height. */
+.card .card-body.xo-flex.xo-grid2 { align-items: stretch; }
+.card .card-body.xo-grid2 .xo-item.yn-row { box-sizing: border-box; min-height: 48px; }
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(0, 119, 182, 0.1);
+  border-radius: 10px;
+}
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > label {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--xo-text);
+  font: 400 12px/1.55 var(--xo-font);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > select,
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > input[type=text],
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > .xq-chip {
+  flex: 0 0 min(52%, 340px);
+  width: auto;
+  min-height: 30px;
+  height: 30px;
+  align-self: center;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > .xq-chip {
+  padding-right: 30px;
+  background-position: right 10px center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: block;
+  line-height: 20px;
+}
+
+/* ---------------- Cleaner, consistent Day 1 (order untouched) ---------------- */
+/* The "not filled in yet" glow, the same values as Day 1's own .field-incomplete,
+   now on every unanswered question (day1-layout.js glowPass). */
+#aceFormHost .xo-unfilled {
+  border-color: rgba(3, 4, 94, 0.5) !important;
+  background-color: rgba(3, 4, 94, 0.05) !important;
+  box-shadow: 0 0 0 3px rgba(3, 4, 94, 0.1) !important;
+}
+/* Rows answered look calm; the glow alone says what is left. Day 1's own
+   required-only highlight would otherwise mark some rows and not others. */
+#aceFormHost .card-body.xo-grid2 .field-incomplete:not(.xo-unfilled) {
+  border-color: rgba(0, 119, 182, 0.1) !important;
+  background-color: rgba(255, 255, 255, 0.78) !important;
+  box-shadow: none !important;
+}
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > label,
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > label.label-incomplete { color: var(--xo-text) !important; }
+/* A little larger, easier to read across a wide row. */
+.card .card-body.xo-grid2 .xo-item .yn-label,
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > label { font-size: 13px !important; line-height: 1.5 !important; }
+/* Follow a row across the screen. */
+.card .card-body.xo-grid2 .xo-item.yn-row,
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) { transition: border-color .15s ease, box-shadow .15s ease; }
+.card .card-body.xo-grid2 .xo-item.yn-row:hover,
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide):hover { border-color: rgba(0, 119, 182, 0.38) !important; }
+/* One dropdown style in the rows: the browser's own selects drawn like the pick lists. */
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > select,
+.card .card-body.xo-grid2 .xo-item.yn-row #languageField {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 30px;
+  min-height: 30px;
+  padding: 4px 30px 4px 10px !important;
+  border: 1px solid var(--xo-border) !important;
+  border-radius: 8px !important;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230f172a' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center !important;
+  box-shadow: var(--xo-shadow) !important;
+  color: var(--xo-text) !important;
+  font: 400 13px/20px var(--xo-font) !important;
+  cursor: pointer;
+}
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > input[type=text] {
+  border: 1px solid var(--xo-border) !important;
+  background: #fff !important;
+  color: var(--xo-text);
+}
+/* A text box in a row: label above, box below, inside its cell. */
+/* Only a VISIBLE text box: pick-list questions keep a hidden one for their choices. */
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide):has(> textarea:not([hidden]):not([style*="display: none"])) { flex-direction: column; align-items: stretch; gap: 6px; }
+/* Location of Impact's own picker, the same width as the other dropdowns. */
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > .it-wrap { flex: 0 0 min(52%, 340px); }
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > .it-wrap .it-display { min-height: 30px; height: 30px; padding: 4px 10px; border-radius: 8px; box-sizing: border-box; background: #fff; }
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > textarea {
+  width: 100%; min-height: 58px; box-sizing: border-box; padding: 8px 10px;
+  border: 1px solid var(--xo-border); border-radius: 8px; background: #fff; font: 13px/1.45 var(--xo-font); color: var(--xo-text);
+}
+
+/* A row with an optional comment under its answer (Risk Factors for Protracted
+   Recovery, day1-extras.js): the comment box takes its own full-width line. */
+.card .card-body.xo-grid2 .xo-item.fg.xo-has-comment:not(.xo-wide) { flex-wrap: wrap; }
+.card .card-body.xo-grid2 .xo-item.fg.xo-has-comment:not(.xo-wide) > .rpr-comment { flex: 0 0 100%; margin-top: 2px; }
+/* ...while the label and its answer stay on the first line: a long label shrinks
+   rather than pushing the dropdown down. */
+.card .card-body.xo-grid2 .xo-item.fg.xo-has-comment:not(.xo-wide) > label { flex: 1 1 0; min-width: 0; }
+
+/* PMH Yes/No dropdowns drawn as Yes / No / N/A buttons (day1-extras.js). The
+   dropdown stays in the form out of sight - it holds the answer, and "fields
+   remaining" can still scroll to it - and the buttons sit where it was. */
+#aceFormHost select.xo-yn-select { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+#aceFormHost .fg:has(> select.xo-yn-select) { position: relative; }
+.card .card-body.xo-grid2 .xo-item.fg:not(.xo-wide) > .xo-yn-btns { flex: 0 0 auto; margin-left: auto; align-self: center; }
+
+/* Location of Impact (app.js aceLocEnsureAddRow): the same Type Here / Add /
+   Select All row as the other Day 1 pick lists, above its checkboxes. */
+.it-panel .ace-loc-add { display: flex; gap: 6px; padding: 8px 8px 4px; }
+.it-panel .ace-loc-add input {
+  flex: 1; min-width: 0; padding: 7px 10px;
+  border: 1px solid var(--xo-border); border-radius: 8px; background: #fff; color: var(--xo-text); font: 14px/1.4 var(--xo-font);
+}
+.it-panel .ace-loc-add input:focus { outline: none; border-color: var(--xo-accent); box-shadow: 0 0 0 3px rgba(0, 119, 182, 0.12); }
+.it-panel .ace-loc-add button {
+  padding: 6px 12px; border: 1px solid var(--xo-border-soft); border-radius: 8px;
+  background: #fff; color: var(--xo-text); font: 600 13px/1.2 var(--xo-font); cursor: pointer; white-space: nowrap;
+}
+.it-panel .ace-loc-add button:hover { border-color: var(--xo-accent); }
+.it-panel .ace-loc-add button:first-of-type { background: var(--xo-accent); border-color: var(--xo-accent); color: #fff; }
+html[data-theme="dark"] .it-panel .ace-loc-add input,
+html[data-theme="dark"] .it-panel .ace-loc-add button:not(:first-of-type) { background: var(--surface); color: var(--text); border-color: var(--border); }

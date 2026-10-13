@@ -1,0 +1,30 @@
+CTG One - offline version
+=========================
+
+1. Open index.html in Google Chrome or Microsoft Edge
+   (double-click it, or drag it into a browser window).
+   No internet, server or install is needed.
+
+2. Sign in:
+     Administrator   Username: CTG User   Password: CTGPassword
+     Provider        Username: Provider   Password: CTGPassword
+                     (Nicholas A. Grande)
+
+3. Work as normal: register a patient, fill in Day 1, exams, daily notes and
+   billing, then download the FCR from the patient's Final Case Report.
+
+   No form to fill? Use Upload Day 1 File (Patients Pending for Day 1, or a
+   patient's Day 1 tab) and Upload Billing File (the Billing tab). While a
+   billing file is attached, automatic billing from Day 1, Day 2 and notes
+   is paused for that patient; remove the file to turn it back on.
+
+Everything is saved in this browser on this device only, on this PC's own
+drive. Uploaded documents use the PC's free space (up to 150 MB a file and
+1 GB a patient), so they are not capped at a few MB. Clearing the browser's
+site data removes it all, and nothing copies to other PCs.
+
+Use made-up test patients only, not real patient information: this offline
+copy is not protected like the real CTG One.
+
+Not available offline: video meetings, messaging, texts/emails to patients,
+emailed sign-in codes, RecoverArc notes, backups.
