@@ -801,8 +801,8 @@ function cfPdfLibs(cb, fail) {
   var pending = (needCanvas ? 1 : 0) + (needPdf ? 1 : 0)
   if (!pending) { cb(); return }
   var done = function () { if (--pending <= 0) cb() }
-  if (needPdf) cfLoadScript('vendor/jspdf.umd.min.js', done, fail)
-  if (needCanvas) cfLoadScript('vendor/html2canvas.min.js', done, fail)
+  if (needPdf) cfLoadScript('./vendor/jspdf.umd.min.js', done, fail)
+  if (needCanvas) cfLoadScript('./vendor/html2canvas.min.js', done, fail)
 }
 
 function cfPdfName(pv) {

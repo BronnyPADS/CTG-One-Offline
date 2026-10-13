@@ -1,9 +1,15 @@
 # CTG One - offline version
 
-The latest offline copy of CTG One. It runs in Google Chrome or Microsoft Edge
-from your own computer: no internet, server or install is needed.
+A practice copy of CTG One that runs entirely in your browser (Google Chrome or
+Microsoft Edge). Nothing you enter is sent anywhere.
 
-## Get the latest version
+## Open it online
+
+**https://bronnypads.github.io/CTG-One-Offline/**
+
+Just open the link (bookmark it). It is always the latest version.
+
+## Or download it (works without internet)
 
 1. On this page, click the green **Code** button, then **Download ZIP**.
 2. Right-click the downloaded ZIP and choose **Extract All**.
@@ -15,6 +21,9 @@ When CTG One is updated, download the ZIP again the same way.
 Your saved work stays in the browser, not in the folder, so a newly downloaded
 version opens with it - as long as you use the same browser on the same
 computer. You can delete the old folder.
+
+The website and a downloaded copy keep separate saved work, even in the same
+browser.
 
 ## Sign in
 
@@ -43,4 +52,4 @@ Not available offline: video meetings, messaging, texts/emails to patients,
 emailed sign-in codes, RecoverArc notes, backups.
 
 ---
-Version: 2026-10-13 (CTG One 4c87970)
+Version: 2026-10-13 (CTG One 9629bb8)

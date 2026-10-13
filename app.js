@@ -938,8 +938,8 @@ async function ensurePdfJs(){
   if(window.pdfjsLib){return window.pdfjsLib}
   if(location.protocol==='file:')return loadClassicPdfJs()
   if(!_pdfjsPromise){
-    _pdfjsPromise=import('vendor/pdf.min.mjs').then(lib=>{
-      lib.GlobalWorkerOptions.workerSrc='vendor/pdf.worker.min.mjs'
+    _pdfjsPromise=import('./vendor/pdf.min.mjs').then(lib=>{
+      lib.GlobalWorkerOptions.workerSrc='./vendor/pdf.worker.min.mjs'
       window.pdfjsLib=lib
       return lib
     }).catch(e=>{_pdfjsPromise=null;console.error('pdf.js load failed',e);throw new Error('Could not load PDF text extractor')})
@@ -951,10 +951,10 @@ function loadClassicPdfJs(){
     const existing=document.querySelector('script[data-ctg-pdfjs="1"]')
     if(existing){existing.addEventListener('load',()=>resolve(window.pdfjsLib));existing.addEventListener('error',()=>reject(new Error('Could not load PDF text extractor')));return}
     const s=document.createElement('script')
-    s.src='vendor/pdfjs-legacy/pdf.min.js'
+    s.src='./vendor/pdfjs-legacy/pdf.min.js'
     s.dataset.ctgPdfjs='1'
     s.onload=()=>{
-      if(window.pdfjsLib&&window.pdfjsLib.GlobalWorkerOptions){window.pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdfjs-legacy/pdf.worker.min.js'}
+      if(window.pdfjsLib&&window.pdfjsLib.GlobalWorkerOptions){window.pdfjsLib.GlobalWorkerOptions.workerSrc='./vendor/pdfjs-legacy/pdf.worker.min.js'}
       resolve(window.pdfjsLib)
     }
     s.onerror=()=>reject(new Error('Could not load PDF text extractor'))
@@ -7578,7 +7578,7 @@ async function ensureJSZip(){
     const existing=document.querySelector('script[data-ctg-jszip="1"]')
     if(existing){existing.addEventListener('load',()=>resolve(window.JSZip));existing.addEventListener('error',()=>reject(new Error('Could not load Excel importer library')));return}
     const s=document.createElement('script')
-    s.src='vendor/jszip.min.js'
+    s.src='./vendor/jszip.min.js'
     s.dataset.ctgJszip='1'
     s.onload=()=>resolve(window.JSZip)
     s.onerror=()=>reject(new Error('Could not load Excel importer library'))
@@ -9930,7 +9930,7 @@ function buildCaseDischargeDoc(p){
 function loadPdfLib(cb){
   if(window.PDFLib){cb();return}
   const s=document.createElement('script')
-  s.src='vendor/pdf-lib.min.js'
+  s.src='./vendor/pdf-lib.min.js'
   s.onload=cb;s.onerror=()=>showToast('Could not load PDF merge library','err')
   document.head.appendChild(s)
 }
@@ -13546,7 +13546,7 @@ function buildPDF(name,opts){
 function loadJsPDF(cb){
   if(window.jspdf&&window.jspdf.jsPDF){cb();return}
   const s=document.createElement('script')
-  s.src='vendor/jspdf.umd.min.js'
+  s.src='./vendor/jspdf.umd.min.js'
   s.onload=cb;s.onerror=()=>showToast('Could not load PDF library','err')
   document.head.appendChild(s)
 }
