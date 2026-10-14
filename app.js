@@ -9854,14 +9854,17 @@ function getCaseDischargeData(p){
   if(p?.initialExam?.sessionDate)examDates.push(day2FormatAnyDate(p.initialExam.sessionDate))
   ;(Array.isArray(p?.reExams)?p.reExams:[]).forEach(rx=>{if(rx&&rx.sessionDate)examDates.push(day2FormatAnyDate(rx.sessionDate))})
   if(p?.finalExam?.sessionDate)examDates.push(day2FormatAnyDate(p.finalExam.sessionDate))
-  const dischargeDate=cd.dischargeDate||day2FormatAnyDate(p?.dischargeDate||'')||(p?.finalExam?.sessionDate?day2FormatAnyDate(p.finalExam.sessionDate):'')||''
+  const initialDOS=cd.initialDOS||day2FormatAnyDate(p?.ace?.dateOfService||p?.initialExam?.sessionDate||'')||''
+  // A Day 1 recommending no follow-up discharges the patient that day, so with no
+  // other discharge date the summary gives the Day 1 date rather than a dash.
+  const dischargeDate=cd.dischargeDate||day2FormatAnyDate(p?.dischargeDate||'')||(p?.finalExam?.sessionDate?day2FormatAnyDate(p.finalExam.sessionDate):'')||(isPatientAceNoFollowup(p)?initialDOS:'')||''
   let totalDates=cd.totalDates
   if(!totalDates){try{const t=computeTotalDatesOfService(p,{includeFinal:true});totalDates=t?String(t):''}catch(e){totalDates=''}}
   const injuryType=cd.injuryType||(p?.ace?.injuryType||'')||aceInjuryTypeText(p)
   return {
     name,dob,doi,
     age:fcrComputeAge(dob,dischargeDate),
-    initialDOS:cd.initialDOS||day2FormatAnyDate(p?.ace?.dateOfService||p?.initialExam?.sessionDate||'')||'',
+    initialDOS,
     examReportDates:cd.examReportDates||examDates.filter(Boolean).join(', ')||'',
     dischargeDate,
     totalDates:totalDates||'',

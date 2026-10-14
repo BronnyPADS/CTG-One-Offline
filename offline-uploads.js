@@ -72,15 +72,429 @@
     return new Promise(function (resolve) {
       var inp = document.createElement('input')
       inp.type = 'file'
-      inp.accept = 'application/pdf,image/*'
+      inp.accept = 'application/pdf,image/*,.docx,' + WORD_TYPE
       inp.addEventListener('change', function () { resolve((inp.files && inp.files[0]) || null) })
       inp.addEventListener('cancel', function () { resolve(null) })
       inp.click()
     })
   }
 
-  // Same preparation as the Documents tab: images shrunk, size checked.
+  /* ----------------------------- Word files ---------------------------- */
+  /* A Word (.docx) file - the portal's own Day 1 "Download Word", or a note
+     typed in Word - is turned into a PDF when it is uploaded: the Final Case
+     Report, View File and Documents all work with PDFs, and a .docx cannot go
+     into the FCR as it is (it used to be left out, so the FCR lost the Day 1).
+     The PDF is drawn from the Word file's own content: paragraphs with their
+     bold, italic, underline and sizes, tables with their borders, the page
+     header and the "Page X of Y" footer. Pictures are not carried over. The
+     text is kept as well, so a Day 1 is read from the Word file itself. */
+  var W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  var R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+  var WORD_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  function isWordFile(file) { return /wordprocessingml/i.test(file.type || '') || /\.docx$/i.test(file.name || '') }
+  function wKids(el, name) {
+    var out = []
+    for (var c = el && el.firstElementChild; c; c = c.nextElementSibling) if (c.namespaceURI === W_NS && (!name || c.localName === name)) out.push(c)
+    return out
+  }
+  function wKid(el, name) { return wKids(el, name)[0] || null }
+  function wAttr(el, name) { return el ? el.getAttributeNS(W_NS, name || 'val') : null }
+  // On/off properties (<w:b/>, <w:b w:val="0"/>): null when not set at all.
+  function wOn(el) { if (!el) return null; var v = wAttr(el); return v == null || v === '' || !/^(false|0|off)$/i.test(v) }
+  function twip(v, def) { var n = parseFloat(v); return isFinite(n) ? n / 20 : def }
+  function sum(a, b) { return a + b }
+
+  function readWordStyles(xml) {
+    var out = { size: 11, font: '', styles: {}, defaultStyle: null }
+    if (!xml) return out
+    var root = xml.documentElement
+    var rd = wKid(wKid(wKid(root, 'docDefaults'), 'rPrDefault'), 'rPr')
+    if (rd) {
+      var sz = wKid(rd, 'sz'); if (sz && +wAttr(sz)) out.size = +wAttr(sz) / 2
+      var f = wKid(rd, 'rFonts'); if (f) out.font = wAttr(f, 'ascii') || ''
+    }
+    wKids(root, 'style').forEach(function (s) {
+      if (wAttr(s, 'type') !== 'paragraph') return
+      var id = wAttr(s, 'styleId')
+      out.styles[id] = { basedOn: wAttr(wKid(s, 'basedOn')), rPr: wKid(s, 'rPr'), pPr: wKid(s, 'pPr') }
+      if (/^(1|true|on)$/i.test(s.getAttributeNS(W_NS, 'default') || '')) out.defaultStyle = id
+    })
+    return out
+  }
+  function applyRPr(st, rPr) {
+    if (!rPr) return st
+    var b = wOn(wKid(rPr, 'b')); if (b !== null) st.b = b
+    var i = wOn(wKid(rPr, 'i')); if (i !== null) st.i = i
+    var u = wKid(rPr, 'u'); if (u) st.u = !/^none$/i.test(wAttr(u) || 'single')
+    var sz = wKid(rPr, 'sz'); if (sz && +wAttr(sz)) st.sz = +wAttr(sz) / 2
+    var c = wKid(rPr, 'color'); if (c) st.color = /^[0-9a-f]{6}$/i.test(wAttr(c) || '') ? wAttr(c) : ''
+    var caps = wOn(wKid(rPr, 'caps')); if (caps !== null) st.caps = caps
+    var f = wKid(rPr, 'rFonts'); if (f && wAttr(f, 'ascii')) st.font = wAttr(f, 'ascii')
+    return st
+  }
+  function styleChain(S, id) {
+    var out = [], seen = {}
+    while (id && S.styles[id] && !seen[id]) { seen[id] = 1; out.unshift(S.styles[id]); id = S.styles[id].basedOn }
+    return out
+  }
+  function paraProps(S, p) {
+    var pPr = wKid(p, 'pPr')
+    var pp = { align: 'left', before: 0, after: 0, line: 1, indent: 0, firstLine: 0, keepNext: false, breakBefore: false, rightTab: null, bullet: false, base: { sz: S.size, font: S.font } }
+    styleChain(S, wAttr(wKid(pPr, 'pStyle')) || S.defaultStyle).concat([{ pPr: pPr }]).forEach(function (s) {
+      applyRPr(pp.base, s.rPr)
+      var x = s.pPr
+      if (!x) return
+      var jc = wAttr(wKid(x, 'jc')); if (jc) pp.align = /center/.test(jc) ? 'center' : /right|end/.test(jc) ? 'right' : 'left'
+      var sp = wKid(x, 'spacing')
+      if (sp) {
+        pp.before = twip(wAttr(sp, 'before'), pp.before); pp.after = twip(wAttr(sp, 'after'), pp.after)
+        var ln = wAttr(sp, 'line'), rule = wAttr(sp, 'lineRule')
+        if (ln && (!rule || rule === 'auto')) pp.line = (+ln / 240) || 1
+      }
+      var ind = wKid(x, 'ind')
+      if (ind) { pp.indent = twip(wAttr(ind, 'left') || wAttr(ind, 'start'), pp.indent); pp.firstLine = twip(wAttr(ind, 'firstLine'), 0) - twip(wAttr(ind, 'hanging'), 0) }
+      if (wOn(wKid(x, 'keepNext'))) pp.keepNext = true
+      if (wOn(wKid(x, 'pageBreakBefore'))) pp.breakBefore = true
+      wKids(wKid(x, 'tabs'), 'tab').forEach(function (t) { if (/right|end/.test(wAttr(t) || '')) pp.rightTab = twip(wAttr(t, 'pos'), null) })
+      if (wKid(x, 'numPr')) pp.bullet = true
+    })
+    // The paragraph mark's size sets the height of an empty paragraph.
+    pp.mark = applyRPr(Object.assign({}, pp.base), pPr && wKid(pPr, 'rPr'))
+    return pp
+  }
+  // PAGE / NUMPAGES fields become markers, filled in page by page when drawn.
+  function pageToken(instr) {
+    var m = /^\s*(PAGE|NUMPAGES|SECTIONPAGES)\b/i.exec(instr || '')
+    return m ? (/^PAGE$/i.test(m[1]) ? '\u0001' : '\u0002') : ''
+  }
+  function paraRuns(p, pp) {
+    var runs = [], field = null
+    var styleOf = function (rPr) { return applyRPr(Object.assign({}, pp.base), rPr) }
+    function run(r) {
+      var st = styleOf(wKid(r, 'rPr'))
+      wKids(r).forEach(function (c) {
+        var n = c.localName
+        if (n === 'fldChar') {
+          var ty = wAttr(c, 'fldCharType')
+          if (ty === 'begin') field = { instr: '', result: false, skip: false }
+          else if (ty === 'separate' && field) {
+            field.result = true
+            var tok = pageToken(field.instr)
+            if (tok) { runs.push({ t: tok, st: st }); field.skip = true }
+          } else if (ty === 'end') field = null
+          return
+        }
+        if (n === 'instrText') { if (field) field.instr += c.textContent; return }
+        if (field && (!field.result || field.skip)) return
+        if (n === 't') runs.push({ t: st.caps ? c.textContent.toUpperCase() : c.textContent, st: st })
+        else if (n === 'tab' || n === 'ptab') runs.push({ t: '\t', st: st })
+        else if (n === 'br' || n === 'cr') runs.push({ t: wAttr(c, 'type') === 'page' ? '\f' : '\n', st: st })
+        else if (n === 'noBreakHyphen') runs.push({ t: '-', st: st })
+      })
+    }
+    function walk(el) {
+      wKids(el).forEach(function (c) {
+        var n = c.localName
+        if (n === 'r') run(c)
+        else if (n === 'fldSimple') {
+          var tok = pageToken(wAttr(c, 'instr'))
+          if (tok) runs.push({ t: tok, st: styleOf(wKid(wKid(c, 'r'), 'rPr')) })
+          else walk(c)
+        } else if (/^(hyperlink|ins|smartTag|sdt|sdtContent|customXml|bdo|dir)$/.test(n)) walk(c)
+      })
+    }
+    walk(p)
+    return runs
+  }
+  function wordBlocks(S, container) {
+    var out = []
+    wKids(container).forEach(function (el) {
+      var n = el.localName
+      if (n === 'p') {
+        var pp = paraProps(S, el), runs = paraRuns(el, pp), cur = [], broke = false
+        if (pp.breakBefore) out.push({ k: 'break' })
+        runs.forEach(function (r) {
+          if (r.t !== '\f') { cur.push(r); return }
+          if (cur.length) out.push({ k: 'p', pp: pp, runs: cur })
+          out.push({ k: 'break' }); cur = []; broke = true
+        })
+        if (cur.length || !broke) out.push({ k: 'p', pp: pp, runs: cur })
+      } else if (n === 'tbl') out.push(wordTable(S, el))
+      else if (n === 'sdt') out = out.concat(wordBlocks(S, wKid(el, 'sdtContent')))
+    })
+    return out
+  }
+  function wordTable(S, tbl) {
+    var pr = wKid(tbl, 'tblPr')
+    var grid = wKids(wKid(tbl, 'tblGrid'), 'gridCol').map(function (g) { return twip(wAttr(g, 'w'), 0) })
+    var border = null
+    var sides = wKids(wKid(pr, 'tblBorders')).filter(function (s) { return !/^(nil|none)$/i.test(wAttr(s) || 'nil') })
+    if (sides.length) border = { w: Math.max(0.25, (+wAttr(sides[0], 'sz') || 4) / 8), color: /^[0-9a-f]{6}$/i.test(wAttr(sides[0], 'color') || '') ? wAttr(sides[0], 'color') : '000000' }
+    var mar = { l: 5.4, r: 5.4 }, cm = wKid(pr, 'tblCellMar')
+    if (cm) { mar.l = twip(wAttr(wKid(cm, 'left') || wKid(cm, 'start'), 'w'), mar.l); mar.r = twip(wAttr(wKid(cm, 'right') || wKid(cm, 'end'), 'w'), mar.r) }
+    var rows = wKids(tbl, 'tr').map(function (tr) {
+      var h = wKid(wKid(tr, 'trPr'), 'trHeight')
+      return {
+        minH: h ? twip(wAttr(h), 0) : 0,
+        cells: wKids(tr, 'tc').map(function (tc) {
+          var tcPr = wKid(tc, 'tcPr'), span = wKid(tcPr, 'gridSpan'), va = wKid(tcPr, 'vAlign'), vm = wKid(tcPr, 'vMerge')
+          return { span: span ? (+wAttr(span) || 1) : 1, valign: va ? wAttr(va) : 'top', cont: !!vm && wAttr(vm) !== 'restart', blocks: wordBlocks(S, tc) }
+        })
+      }
+    })
+    return { k: 'tbl', grid: grid, border: border, mar: mar, rows: rows }
+  }
+  // A table inside a table cell is drawn as its text, row by row.
+  function flatParas(blocks) {
+    var out = []
+    blocks.forEach(function (b) {
+      if (b.k === 'p') out.push(b)
+      else if (b.k === 'tbl') b.rows.forEach(function (r) { r.cells.forEach(function (c) { out = out.concat(flatParas(c.blocks)) }) })
+    })
+    return out
+  }
+  // The text, one line per paragraph and per table row (cells side by side), as
+  // readPdfText gives it for a PDF.
+  function wordText(blocks) {
+    var lines = []
+    blocks.forEach(function (b) {
+      if (b.k === 'p') lines.push(b.runs.map(function (r) { return r.t === '\t' ? ' ' : r.t }).join('').replace(/[\u0001\u0002]/g, ''))
+      else if (b.k === 'tbl') b.rows.forEach(function (r) { lines.push(r.cells.map(function (c) { return wordText(c.blocks).lines.join(' ') }).join(' ')) })
+    })
+    return { text: lines.join('\n'), lines: lines }
+  }
+
+  // jsPDF's built-in fonts carry Latin-1 and the Windows extras (dashes, curly quotes, bullet).
+  var WIN_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
+  var WIN_SWAP = { '≤': '<=', '≥': '>=', '→': '->', '✓': 'v', '✔': 'v', ' ': ' ', '‑': '-', '−': '-' }
+  function winSafe(t) {
+    return String(t).replace(/[≤≥→✓✔ ‑−]/g, function (c) { return WIN_SWAP[c] })
+      .replace(/[^\u0000-ÿ]/g, function (c) { return WIN_EXTRA.indexOf(c) >= 0 ? c : '?' })
+  }
+
+  function drawWord(blocks, header, footer, sect, S) {
+    var pg = wKid(sect, 'pgSz'), mg = wKid(sect, 'pgMar')
+    var W = twip(wAttr(pg, 'w'), 612), H = twip(wAttr(pg, 'h'), 792)
+    var M = { t: Math.abs(twip(wAttr(mg, 'top'), 72)), b: Math.abs(twip(wAttr(mg, 'bottom'), 72)), l: twip(wAttr(mg, 'left'), 72), r: twip(wAttr(mg, 'right'), 72), h: twip(wAttr(mg, 'header'), 36), f: twip(wAttr(mg, 'footer'), 36) }
+    var doc = new window.jspdf.jsPDF({ unit: 'pt', format: [W, H], orientation: W > H ? 'landscape' : 'portrait' })
+    var CW = W - M.l - M.r, bottom = H - M.b
+    var rgb = function (hex) { hex = hex || '000000'; return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)] }
+    function setFont(st) {
+      var f = st.font || S.font || ''
+      doc.setFont(/arial|helvetica|calibri|verdana|segoe|tahoma|sans/i.test(f) ? 'helvetica' : /courier|consolas|mono/i.test(f) ? 'courier' : 'times',
+        st.b && st.i ? 'bolditalic' : st.b ? 'bold' : st.i ? 'italic' : 'normal')
+      doc.setFontSize(st.sz || S.size)
+    }
+    function words(runs, sub) {
+      var out = []
+      runs.forEach(function (r) {
+        if (r.t === '\n' || r.t === '\t') { out.push({ t: r.t, st: r.st, w: 0, sp: 0 }); return }
+        var txt = winSafe(sub ? sub(r.t) : r.t.replace(/[\u0001\u0002]/g, ''))
+        setFont(r.st)
+        ;(txt.match(/\S+\s*|\s+/g) || []).forEach(function (t) { out.push({ t: t, st: r.st, w: doc.getTextWidth(t), sp: doc.getTextWidth(t.replace(/\s+$/, '')) }) })
+      })
+      return out
+    }
+    function breakLines(runs, width, first, sub) {
+      var out = [], cur = [], x = 0
+      var push = function () { out.push(cur); cur = []; x = 0 }
+      words(runs, sub).forEach(function (w) {
+        if (w.t === '\n') { push(); return }
+        if (w.t === '\t') { cur.push(w); return }
+        var avail = Math.max(10, width - (out.length ? 0 : first))
+        if (cur.length && x + w.sp > avail) push()
+        if (!cur.length && w.sp > avail) {
+          // A word wider than the line (a long web address) is cut to fit.
+          setFont(w.st)
+          var t = w.t
+          while (t && doc.getTextWidth(t.replace(/\s+$/, '')) > avail) {
+            var n = t.length
+            while (n > 1 && doc.getTextWidth(t.slice(0, n)) > avail) n--
+            var piece = t.slice(0, n)
+            out.push([{ t: piece, st: w.st, w: doc.getTextWidth(piece), sp: doc.getTextWidth(piece) }])
+            t = t.slice(n)
+          }
+          if (!t) return
+          w = { t: t, st: w.st, w: doc.getTextWidth(t), sp: doc.getTextWidth(t.replace(/\s+$/, '')) }
+        }
+        cur.push(w); x += w.w
+      })
+      out.push(cur)
+      return out
+    }
+    function layoutPara(b, width, sub) {
+      var pp = b.pp, runs = b.runs
+      if (pp.bullet && runs.length) runs = [{ t: '•  ', st: runs[0].st }].concat(runs)
+      var ls = breakLines(runs, width - pp.indent, Math.max(0, pp.firstLine), sub)
+      var hs = ls.map(function (l) {
+        var m = 0
+        l.forEach(function (w) { if (w.t !== '\t' && w.st.sz > m) m = w.st.sz })
+        return (m || pp.mark.sz || S.size) * 1.15 * pp.line
+      })
+      return { pp: pp, lines: ls, hs: hs, h: pp.before + hs.reduce(sum, 0) + pp.after }
+    }
+    function lineWidth(segs) { return segs.reduce(function (a, s, i) { return a + (i === segs.length - 1 ? s.sp : s.w) }, 0) }
+    var styleKey = function (st) { return [st.b, st.i, st.u, st.sz, st.color, st.font].join('|') }
+    function drawSegs(words, x, base, x0) {
+      // Words in one style go out as one string, as the portal's own PDFs draw
+      // them: a viewer measuring word by word with its own font can close the
+      // gap after a word ("EVALUATION(ACE)").
+      var segs = []
+      words.forEach(function (w) {
+        var g = segs[segs.length - 1]
+        if (w.t !== '\t' && g && g.t !== '\t' && styleKey(g.st) === styleKey(w.st)) { g.sp = g.w + w.sp; g.w += w.w; g.t += w.t }
+        else segs.push({ t: w.t, st: w.st, w: w.w, sp: w.sp })
+      })
+      segs.forEach(function (s, i) {
+        if (s.t === '\t') { x = x0 + (Math.floor((x - x0) / 36) + 1) * 36; return }
+        setFont(s.st)
+        var c = rgb(s.st.color)
+        doc.setTextColor(c[0], c[1], c[2])
+        doc.text(s.t, x, base)
+        if (s.st.u && s.t.trim()) {
+          doc.setDrawColor(c[0], c[1], c[2]); doc.setLineWidth(0.5)
+          doc.line(x, base + 1.5, x + (i === segs.length - 1 ? s.sp : s.w), base + 1.5)
+        }
+        x += s.w
+      })
+    }
+    function drawLine(segs, x0, width, top, lh, align, rightTab) {
+      var base = top + lh * 0.78
+      var tab = -1
+      for (var i = 0; i < segs.length; i++) if (segs[i].t === '\t') { tab = i; break }
+      if (tab >= 0 && rightTab != null) {
+        // Footer-style line: text, then the rest right-aligned on the tab stop.
+        drawSegs(segs.slice(0, tab), x0, base, x0)
+        var right = segs.slice(tab + 1)
+        drawSegs(right, x0 + Math.min(rightTab, width) - lineWidth(right), base, x0)
+        return
+      }
+      var w = lineWidth(segs)
+      drawSegs(segs, align === 'center' ? x0 + (width - w) / 2 : align === 'right' ? x0 + width - w : x0, base, x0)
+    }
+    function drawPara(L, x0, width, top, room) {
+      var y = top + L.pp.before
+      L.lines.forEach(function (ln, i) {
+        if (room) y = room(y, L.hs[i])
+        var ind = L.pp.indent + (i === 0 ? Math.max(0, L.pp.firstLine) : 0)
+        drawLine(ln, x0 + ind, width - ind, y, L.hs[i], L.pp.align, L.pp.rightTab)
+        y += L.hs[i]
+      })
+      return y + L.pp.after
+    }
+    function tableCols(t, width) {
+      var g = t.grid.filter(function (w) { return w > 0 })
+      if (!g.length) {
+        var n = Math.max.apply(null, t.rows.map(function (r) { return r.cells.reduce(function (a, c) { return a + c.span }, 0) }).concat([1]))
+        g = []; for (var i = 0; i < n; i++) g.push(width / n)
+      }
+      var tot = g.reduce(sum, 0)
+      return tot > width ? g.map(function (w) { return w * width / tot }) : g
+    }
+    function layoutRow(t, r, cols, sub) {
+      var ci = 0
+      var cells = r.cells.map(function (c) {
+        var x = cols.slice(0, ci).reduce(sum, 0), w = cols.slice(ci, ci + c.span).reduce(sum, 0)
+        ci += c.span
+        var inner = Math.max(10, w - t.mar.l - t.mar.r)
+        var paras = c.cont ? [] : flatParas(c.blocks).map(function (b) { return layoutPara(b, inner, sub) })
+        return { x: x, w: w, inner: inner, paras: paras, h: paras.reduce(function (a, L) { return a + L.h }, 0) + 2, valign: c.valign }
+      })
+      return { cells: cells, h: Math.max(r.minH, Math.max.apply(null, cells.map(function (c) { return c.h }).concat([10]))) }
+    }
+    function drawRow(t, R, x0, top) {
+      R.cells.forEach(function (c) {
+        var inner = c.h - 2, cy = top + 1
+        if (c.valign === 'center') cy = top + (R.h - inner) / 2
+        else if (c.valign === 'bottom') cy = top + R.h - inner - 1
+        c.paras.forEach(function (L) { cy = drawPara(L, x0 + c.x + t.mar.l, c.inner, cy) })
+        if (t.border) {
+          var bc = rgb(t.border.color)
+          doc.setDrawColor(bc[0], bc[1], bc[2]); doc.setLineWidth(t.border.w)
+          doc.rect(x0 + c.x, top, c.w, R.h)
+        }
+      })
+    }
+    // Lays blocks out from top; paged: new pages as the body fills them.
+    function flow(blocks, top, sub, paged) {
+      var y = top
+      var room = paged ? function (at, h) { if (at + h > bottom && at > M.t + 0.5) { doc.addPage([W, H], W > H ? 'landscape' : 'portrait'); return M.t } return at } : null
+      blocks.forEach(function (b, i) {
+        if (b.k === 'break') { if (paged) { doc.addPage([W, H], W > H ? 'landscape' : 'portrait'); y = M.t } return }
+        if (b.k === 'p') {
+          var L = layoutPara(b, CW, sub)
+          // A heading kept with what follows moves on with it.
+          if (paged && L.pp.keepNext && y + L.h + 30 > bottom && y > M.t + 0.5) y = room(bottom + 1, 0)
+          y = drawPara(L, M.l, CW, y, room)
+          return
+        }
+        var cols = tableCols(b, CW)
+        b.rows.forEach(function (r) {
+          var R = layoutRow(b, r, cols, sub)
+          if (room) y = room(y, R.h)
+          drawRow(b, R, M.l, y)
+          y += R.h
+        })
+      })
+      return y
+    }
+    function height(blocks, sub) {
+      return blocks.reduce(function (a, b) {
+        if (b.k === 'p') return a + layoutPara(b, CW, sub).h
+        if (b.k !== 'tbl') return a
+        var cols = tableCols(b, CW)
+        return a + b.rows.reduce(function (h, r) { return h + layoutRow(b, r, cols, sub).h }, 0)
+      }, 0)
+    }
+
+    flow(blocks, M.t, null, true)
+    var total = doc.getNumberOfPages()
+    for (var n = 1; n <= total; n++) {
+      doc.setPage(n)
+      var sub = (function (n) { return function (t) { return t.replace(/\u0001/g, String(n)).replace(/\u0002/g, String(total)) } })(n)
+      if (header.length) flow(header, M.h, sub, false)
+      if (footer.length) flow(footer, H - M.f - height(footer, sub), sub, false)
+    }
+    return doc
+  }
+
+  async function wordToPdf(file) {
+    var JSZip = await ensureJSZip()
+    var zip = await JSZip.loadAsync(await file.arrayBuffer())
+    var xml = async function (path) {
+      var e = zip.file(path)
+      return e ? new DOMParser().parseFromString(await e.async('string'), 'application/xml') : null
+    }
+    var docXml = await xml('word/document.xml')
+    var body = docXml && wKid(docXml.documentElement, 'body')
+    if (!body) throw new Error('"' + (file.name || 'That file') + '" could not be read as a Word document.')
+    var S = readWordStyles(await xml('word/styles.xml'))
+    var sect = wKid(body, 'sectPr')
+    var rels = await xml('word/_rels/document.xml.rels'), target = {}
+    if (rels) Array.prototype.forEach.call(rels.getElementsByTagName('Relationship'), function (r) { target[r.getAttribute('Id')] = r.getAttribute('Target') })
+    var part = async function (kind) {
+      var ref = wKids(sect, kind + 'Reference').filter(function (r) { return (wAttr(r, 'type') || 'default') === 'default' })[0]
+      var t = ref && target[ref.getAttributeNS(R_NS, 'id')]
+      var x = t && await xml('word/' + t.replace(/^\/?word\//, ''))
+      return x ? wordBlocks(S, x.documentElement) : []
+    }
+    var header = await part('header'), footer = await part('footer')
+    var blocks = wordBlocks(S, body)
+    await new Promise(function (res) { loadJsPDF(res) })
+    var pdf = drawWord(blocks, header, footer, sect, S)
+    var base = String(file.name || 'document').replace(/\.docx$/i, '')
+    return { name: base + '.pdf', type: 'application/pdf', dataUrl: pdf.output('datauristring'), fromWord: file.name || base + '.docx', wordText: wordText(blocks) }
+  }
+  window.ctgOfflineWordToPdf = wordToPdf
+
+  // Same preparation as the Documents tab: images shrunk, size checked. A Word
+  // file is uploaded as the PDF drawn from it.
   async function prepareFile(file) {
+    if (isWordFile(file)) {
+      var conv = await wordToPdf(file)
+      if (conv.dataUrl.length > DOC_FILE_MAX_BYTES) throw new Error('"' + conv.name + '" is ' + docBytesLabel(conv.dataUrl.length) + ', over the ' + docBytesLabel(DOC_FILE_MAX_BYTES) + ' limit.')
+      return conv
+    }
     var dataUrl = await fileToDataURL(file), type = file.type || ''
     if (/^image\//i.test(type)) {
       var smaller = await shrinkImageDataUrl(dataUrl, type)
@@ -280,7 +694,7 @@
     if (who.dob) out.dob = who.dob
 
     // "No further testing has been scheduled" is the Day 1's No follow-up.
-    if (/No further testing has been scheduled/i.test(t)) out.noFollowup = true
+    if (/No further testing has been scheduled|\bRecommendation\s*:\s*No follow-?\s?up\b/i.test(t)) out.noFollowup = true
     for (var k in out) if (out[k] === '') delete out[k]
     return out
   }
@@ -345,11 +759,13 @@
     try {
       showToast('Reading Day 1 file…')
       f = await prepareFile(file)
-      read = readDay1(await readPdfText(f))
+      // A Word file is read from its own text, not from the PDF drawn from it.
+      read = readDay1(f.wordText || await readPdfText(f))
     } catch (e) { console.error(e); showToast('Could not read the Day 1 file: ' + e.message, 'err'); return }
     if (!await confirmPatient(p, read, 'Day 1 file')) return
     var got = [read.injuryType ? 'injury incident' : '', read.dateOfInjury ? 'date of injury' : '', read.riskFactors ? 'risk factors' : '',
-      read.diagnosisCodes ? read.diagnosisCodes.length + ' diagnosis code' + (read.diagnosisCodes.length === 1 ? '' : 's') : ''].filter(Boolean)
+      read.diagnosisCodes ? read.diagnosisCodes.length + ' diagnosis code' + (read.diagnosisCodes.length === 1 ? '' : 's') : '',
+      read.noFollowup ? 'recommendation No follow-up' : ''].filter(Boolean)
     // No made-up date: with none in the file, staff type it in.
     var dos = await ctgPrompt('Date of service of this Day 1 (MM/DD/YYYY). Day 1 billing uses this date.', {
       title: 'Upload Day 1 File', subtitle: file.name,
@@ -369,7 +785,7 @@
       var keep = day1Info(p) ? p.ace.previousForm : (p.ace && p.ace.formState ? { ace: p.ace, aceComplete: p.aceComplete } : null)
       var doc = await storeUpload(p, f, DAY1_TYPE)
       if (old) await removeUpload(p, old)
-      p.ace = { uploadedFile: { docId: doc.id, name: doc.name, type: f.type, uploadedAt: doc.uploadedAt }, dateOfService: date, savedAt: new Date().toISOString() }
+      p.ace = { uploadedFile: { docId: doc.id, name: doc.name, type: f.type, uploadedAt: doc.uploadedAt, fromWord: f.fromWord || '' }, dateOfService: date, savedAt: new Date().toISOString() }
       // Read from the file, for the Case Discharge Summary (getCaseDischargeData).
       if (read.injuryType) p.ace.injuryType = read.injuryType
       if (read.riskFactors) p.ace.riskFactors = read.riskFactors
@@ -430,14 +846,29 @@
     } catch (e) { console.error(e); showToast('Could not remove the Day 1 file: ' + e.message, 'err') }
   }
 
+  /* "Fill Day 1 Form" opens the form; the file stays the Day 1 record until the
+     form is saved with Save. It used to stop being the record the moment the
+     form opened, and the form's 15-second autosave then put a blank form in its
+     place - the Final Case Report printed an empty ACE (score 0, "Continue
+     Treatment Plan") and a discharge summary with nothing from the file.
+     "Use Saved Form" brings back the form saved before the file, as before. */
   async function fillDay1Form(pid) {
     var p = getPatient(pid)
     if (!p) return
-    var ok = await ctgConfirm('Fill in the Day 1 form instead? Once the form is saved it becomes the Day 1 record. The uploaded file stays in Documents and in the Final Case Report.', { title: 'Fill Day 1 Form', okLabel: 'Open Day 1 Form' })
+    var prev = p.ace && p.ace.previousForm
+    var ok = await ctgConfirm(prev
+      ? 'Use the Day 1 form saved before the file? It becomes the Day 1 record again. The uploaded file stays in Documents and in the Final Case Report.'
+      : 'Fill in the Day 1 form instead? The uploaded file stays the Day 1 record until the form is saved; then the form takes its place. The file stays in Documents and in the Final Case Report.',
+      { title: prev ? 'Use Saved Form' : 'Fill Day 1 Form', okLabel: 'Open Day 1 Form' })
     if (!ok) return
-    restoreDay1(p)
-    saved(p)
+    if (prev) { restoreDay1(p); saved(p) }
     origStartAce(pid)
+  }
+  var origAutosaveTick = window.aceAutosaveTick
+  window.aceAutosaveTick = function () {
+    var id = typeof getActiveAcePatientId === 'function' ? getActiveAcePatientId() : null
+    if (id && day1Info(getPatient(id))) return
+    return origAutosaveTick.apply(this, arguments)
   }
 
   // Drop zone: a file dragged onto it, or Choose File, starts that upload.
@@ -474,7 +905,8 @@
     return '<div class="pld-panel"><div class="pld-card">' + head + '<span class="ctgo-pill">' + ICON.check + 'Completed by file upload</span></div></div>'
       + '<div class="ctgo-filecard"><div class="ctgo-filecard-top">' + fileBadge(doc)
       + '<div class="ctgo-doc-main"><div class="ctgo-doc-name">' + esc(doc.name) + '</div>'
-      + '<div class="ctgo-doc-meta"><span>Date of service <b>' + esc(p.ace.dateOfService || '—') + '</b></span><span>Uploaded ' + esc(uploaded) + '</span></div></div></div>'
+      + '<div class="ctgo-doc-meta"><span>Date of service <b>' + esc(p.ace.dateOfService || '—') + '</b></span><span>Uploaded ' + esc(uploaded) + '</span>'
+      + (info.fromWord ? '<span>Made from the Word file <b>' + esc(info.fromWord) + '</b></span>' : '') + '</div></div></div>'
       + '<div class="ctgo-actions">'
       + btn('view', p.id, 'View File', 'btn-primary', ' data-doc="' + esc(doc.id) + '"', 'eye')
       + btn('day1-upload', p.id, 'Replace', 'btn-ghost', '', 'swap')
@@ -493,7 +925,7 @@
     if (!p || currentUserIsLawyer()) return html
     if (!p.ace) {
       // No Day 1 yet: a drop zone under the header, beside Open Day 1 Form.
-      var zone = dropZone('day1-upload', p.id, 'Have the Day 1 as a file?', 'Drop a PDF or photo here, or choose one. It counts as Day 1 done; no form needed.')
+      var zone = dropZone('day1-upload', p.id, 'Have the Day 1 as a file?', 'Drop a PDF, Word file or photo here, or choose one. It counts as Day 1 done; no form needed.')
       return html.replace(/<\/div><\/div>\s*$/, zone + '</div></div>')
     }
     if (p.ace.formState && !p.ace.signedAt) {
@@ -726,7 +1158,7 @@
   window.renderPatientNotesPanel = function (p) {
     var html = origNotesPanel.apply(this, arguments)
     if (!p || currentUserIsLawyer() || currentUserIsProvider()) return html
-    var zone = dropZone('note-upload', p.id, 'Have a daily note as a file?', 'Drop a PDF or photo here, or choose one. It is saved as a daily note on the date you enter and billed like one.')
+    var zone = dropZone('note-upload', p.id, 'Have a daily note as a file?', 'Drop a PDF, Word file or photo here, or choose one. It is saved as a daily note on the date you enter and billed like one.')
     return html.replace('<div id="dailyNotesList">', tdosCard(p) + zone.replace('class="ctgo-drop"', 'class="ctgo-drop is-compact"') + '<div id="dailyNotesList">')
   }
 
@@ -776,7 +1208,7 @@
     var card = name.closest('.card')
     var zone = document.getElementById('ctgoNoteFormZone')
     if (!zone && card) {
-      card.insertAdjacentHTML('afterend', '<div id="ctgoNoteFormZone">' + dropZone('note-form-upload', '', 'Have this note as a file?', 'Drop a PDF or photo here, or choose one, instead of typing the note. It is saved for the patient and session date above.').replace('class="ctgo-drop"', 'class="ctgo-drop is-compact"') + '</div>')
+      card.insertAdjacentHTML('afterend', '<div id="ctgoNoteFormZone">' + dropZone('note-form-upload', '', 'Have this note as a file?', 'Drop a PDF, Word file or photo here, or choose one, instead of typing the note. It is saved for the patient and session date above.').replace('class="ctgo-drop"', 'class="ctgo-drop is-compact"') + '</div>')
       zone = document.getElementById('ctgoNoteFormZone')
     }
     // A patient's "+ New Note" page: the box goes above its form, new notes only.
@@ -784,7 +1216,7 @@
     var st = typeof patientDailyNoteState !== 'undefined' ? patientDailyNoteState : null
     var card = mount && mount.querySelector('.pdn-card')
     if (card && st && st.mode === 'edit' && st.index < 0 && !currentUserIsProvider() && !mount.querySelector('.ctgo-drop')) {
-      card.insertAdjacentHTML('beforebegin', '<div class="ctgo-pdn-zone">' + dropZone('note-form-upload', '', 'Have this note as a file?', 'Drop a PDF or photo here, or choose one, instead of typing the note. It is saved on the session date below.').replace('class="ctgo-drop"', 'class="ctgo-drop is-compact"') + '</div>')
+      card.insertAdjacentHTML('beforebegin', '<div class="ctgo-pdn-zone">' + dropZone('note-form-upload', '', 'Have this note as a file?', 'Drop a PDF, Word file or photo here, or choose one, instead of typing the note. It is saved on the session date below.').replace('class="ctgo-drop"', 'class="ctgo-drop is-compact"') + '</div>')
     }
     syncTdos(zone)
     syncTdos(mount && mount.querySelector('.ctgo-pdn-zone'))
