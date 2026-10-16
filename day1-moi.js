@@ -128,6 +128,7 @@
     return norm.indexOf('yes') !== -1 && norm.indexOf('no') !== -1 &&
       norm.every(function (o) { return o === 'yes' || o === 'no' || o === 'n/a' || o === 'na' })
   }
+  function isYesNoWord(o) { return /^(yes|no|n\/a|na)$/i.test(String(o).trim()) }
   function parseData(raw) {
     try { var d = JSON.parse(raw); return d && Array.isArray(d.tokens) ? d : null } catch (e) { return null }
   }
@@ -299,8 +300,12 @@
   /* The yellow checkbox list, shared with the extra Day 1 questions
      (day1-extras.js). c is {o: choices, s: selected}, changed in place;
      onChange runs after every change; onRemove (optional) adds the
-     "Remove this dropdown" button. */
-  function openPicker(chipEl, c, onChange, onRemove) {
+     "Remove this dropdown" button. opts.allowAdd: a Yes/No list that still
+     takes typed choices (Type Here / Add); its Yes, No and NA cannot be
+     removed, and Select All is left off - ticking Yes and No together says
+     nothing. */
+  function openPicker(chipEl, c, onChange, onRemove, opts) {
+    var allowAdd = !!(opts && opts.allowAdd)
     closePop()
     var ctx = ctxFromForm()
     var refreshChip = function () {}, commit = onChange
@@ -310,7 +315,9 @@
 
     var draw = function () {
       pop.replaceChildren()
-      if (!isYesNo(c.o)) {
+      var locked = isYesNo(c.o) && !allowAdd
+      var hasYesNo = allowAdd && c.o.some(isYesNoWord)
+      if (!locked) {
         var row = document.createElement('div'); row.className = 'moi-pop-add'
         var inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Type Here'
         var add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add'
@@ -330,7 +337,8 @@
           c.s = c.s.length === c.o.length ? [] : c.o.slice()
           refreshChip(chipEl); commit(); draw()
         })
-        row.appendChild(inp); row.appendChild(add); row.appendChild(all)
+        row.appendChild(inp); row.appendChild(add)
+        if (!hasYesNo) row.appendChild(all)
         pop.appendChild(row)
       }
       var list = document.createElement('div'); list.className = 'moi-pop-list'
@@ -348,7 +356,7 @@
         })
         var txt = document.createElement('span'); txt.textContent = fill(o, ctx)
         lab.appendChild(cb); lab.appendChild(txt)
-        if (!isYesNo(c.o)) {
+        if (!locked && !(hasYesNo && isYesNoWord(o))) {
           var del = document.createElement('button'); del.type = 'button'; del.className = 'moi-pop-del'; del.title = 'Remove this choice'; del.textContent = '×'
           del.addEventListener('click', function (e) {
             e.preventDefault()

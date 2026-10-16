@@ -182,7 +182,7 @@ textarea{resize:vertical;min-height:64px;line-height:1.6}
 .score-cat-val{font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--accent)}
 
 /* ICD CHECKBOXES */
-.icd-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:5px}
+.icd-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:5px}
 .icd-item{display:flex;align-items:flex-start;gap:7px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .12s;user-select:none}
 .icd-item:hover{border-color:var(--accent);background:var(--al)}
 .icd-item.checked{background:var(--al);border-color:var(--accent)}

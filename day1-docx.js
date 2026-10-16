@@ -41,11 +41,12 @@
       return run(s.t, { b: s.b || (o && o.b), i: s.i, u: s.u, sz: o && o.sz, color: o && o.color })
     }).join('')
   }
-  /* A paragraph. o: {before, after (points), align, keepNext, tabs} */
+  /* A paragraph. o: {before, after (points), align, keepNext, tabs, ind (twips)} */
   function para(runs, o) {
     o = o || {}
     var pr = (o.keepNext ? '<w:keepNext/>' : '') + (o.tabs || '') +
       '<w:spacing w:before="' + Math.round((o.before || 0) * 20) + '" w:after="' + Math.round((o.after || 0) * 20) + '"/>' +
+      (o.ind ? '<w:ind w:left="' + o.ind + '"/>' : '') +
       (o.align ? '<w:jc w:val="' + o.align + '"/>' : '')
     return '<w:p><w:pPr>' + pr + '</w:pPr>' + (runs || '') + '</w:p>'
   }
@@ -54,13 +55,16 @@
     var b = function (side) { return '<w:' + side + ' w:val="single" w:sz="' + size + '" w:space="0" w:color="' + color + '"/>' }
     return '<w:tblBorders>' + ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(b).join('') + '</w:tblBorders>'
   }
-  /* A table. rows: [[cellXml, ...], ...], each cellXml already paragraphs. */
+  /* A table. rows: [[cellXml, ...], ...], each cellXml already paragraphs.
+     o.width / o.ind (twips): another width than the page's, set in from the margin. */
   function table(widths, rows, o) {
     o = o || {}
+    var W = o.width || TEXT_W
     var total = widths.reduce(function (a, b) { return a + b }, 0)
-    var tw = widths.map(function (w) { return Math.round(TEXT_W * w / total) })
+    var tw = widths.map(function (w) { return Math.round(W * w / total) })
     var grid = '<w:tblGrid>' + tw.map(function (w) { return '<w:gridCol w:w="' + w + '"/>' }).join('') + '</w:tblGrid>'
-    var pr = '<w:tblPr><w:tblW w:w="' + TEXT_W + '" w:type="dxa"/>' +
+    var pr = '<w:tblPr><w:tblW w:w="' + W + '" w:type="dxa"/>' +
+      (o.ind ? '<w:tblInd w:w="' + o.ind + '" w:type="dxa"/>' : '') +
       (o.noBorders ? '<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>' : borders(o.color || '000000', o.size || 4)) +
       '<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr>'
     var body = rows.map(function (cells) {
@@ -78,7 +82,8 @@
       case 'h1':
         return para(run(b.t, { b: true, u: true }) + (b.trail ? run('   ' + b.trail) : ''), { before: 12, after: 8, keepNext: true })
       case 'h2':
-        return para(run(b.t, { b: true, u: b.u }), { before: 4, after: 2, keepNext: true })
+        // gap: a sub-heading that opens its own part gets a main heading's room (buildPDF H2).
+        return para(run(b.t, { b: true, u: b.u }), { before: b.gap ? 12 : 4, after: b.gap ? 8 : 2, keepNext: true })
       case 'p':
         return para(segRuns(b.segs), { after: 4 })
       case 'link': {
@@ -105,18 +110,24 @@
     }
   }
 
-  function headerXml() {
+  /* geo (the FCR's other reports, fcr-docx.js): {ind, width} in twips, the
+     letterhead set in from the margin to sit where that report's own did, and
+     no room taken under it - the report's text starts close below. */
+  function headerXml(geo) {
     var right = ['2411 Crofton Lane, Suite 13A', 'Crofton, MD, 21114-1336', 'Phone: 410-451-9870', 'Fax: 410-451-9872']
       .map(function (t) { return para(run(t, { sz: 11 }), { align: 'right' }) }).join('')
     var left = para(run('CONCUSSION THERAPY GROUP', { b: true, sz: 12 }))
+    var o = { noBorders: true, noTrail: true, valign: ['bottom', 'top'] }
+    if (geo) { o.width = geo.width; o.ind = geo.ind }
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '>' +
-      table([1, 1], [[left, right]], { noBorders: true, noTrail: true, valign: ['bottom', 'top'] }) +
-      para('', { after: 0 }) + '</w:hdr>'
+      table([1, 1], [[left, right]], o) +
+      (geo ? '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>' : para('', { after: 0 })) + '</w:hdr>'
   }
   /* total: NUMPAGES for the Day 1 file on its own; SECTIONPAGES when the
-     report is one section of a longer file (the FCR as Word). */
-  function footerXml(meta, total) {
-    var left = ['Concussion Therapy Group', meta.provider, meta.name, meta.dob].filter(Boolean).join(' / ')
+     report is one section of a longer file (the FCR as Word). geo: {ind, tab}
+     in twips and text, the footer line as another report's PDF wrote it. */
+  function footerXml(meta, total, geo) {
+    var left = geo && geo.text != null ? geo.text : ['Concussion Therapy Group', meta.provider, meta.name, meta.dob].filter(Boolean).join(' / ')
     var f = { sz: 8 }
     // A full field, every part sized: Word re-draws a simple field's number at the default size.
     var sz = '<w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
@@ -126,7 +137,7 @@
     }
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '>' +
       para(run(left, f) + '<w:r><w:tab/></w:r>' + run('Page ', f) + field('PAGE') + run(' of ', f) + field(total || 'NUMPAGES'),
-        { tabs: '<w:tabs><w:tab w:val="right" w:pos="' + TEXT_W + '"/></w:tabs>' }) + '</w:ftr>'
+        { tabs: '<w:tabs><w:tab w:val="right" w:pos="' + (geo ? geo.tab : TEXT_W) + '"/></w:tabs>', ind: geo && geo.ind }) + '</w:ftr>'
   }
   function patientBoxXml(meta) {
     var cell = function (label, value) { return para(run(label, { b: true }) + run(value || ''), { before: 2, after: 2 }) }
@@ -214,5 +225,9 @@
     })
   }
 
-  window.ctgDay1Docx = { build: build, download: download, parts: parts }
+  window.ctgDay1Docx = {
+    build: build, download: download, parts: parts,
+    // The same letterhead and footer for the FCR's other reports (fcr-docx.js).
+    letterhead: { header: headerXml, footer: footerXml, styles: stylesXml }
+  }
 })()

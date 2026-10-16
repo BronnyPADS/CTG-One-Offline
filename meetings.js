@@ -2639,6 +2639,12 @@
   function mtgLabel(key, fallback) {
     return (key && mtgNames[key]) || fallback;
   }
+  // A transcript line's speaker. The server marks a guest's lines "(guest)";
+  // the live name a guest can change would otherwise drop the mark here.
+  function mtgTxLabel(l) {
+    const label = mtgLabel(l.key, l.name) || '';
+    return /\(guest\)\s*$/i.test(l.name || '') && !/\(guest\)\s*$/i.test(label) ? label + ' (guest)' : label;
+  }
 
   let mtgChatLoading = false;
   let mtgChatQueued = false;
@@ -2794,7 +2800,7 @@
       d.setAttribute('data-seq', l.seq);
       d.style.setProperty('--life', life + 'ms');
       d.style.animationDelay = (-elapsed) + 'ms';
-      d.innerHTML = '<b>' + esc(mtgLabel(l.key, l.name)) + '</b>' + esc(shown);
+      d.innerHTML = '<b>' + esc(mtgTxLabel(l)) + '</b>' + esc(shown);
       d.addEventListener('animationend', function () {
         d.remove();
         if (!el.children.length) el.style.display = 'none';
@@ -3040,7 +3046,7 @@
              are kept: a clinician needs to be able to see what was actually
              said, not only what a machine made of it. */
           const shown = (mtgTxRead && l.tr && l.tr[mtgTxRead]) || '';
-          return '<div class="mtg-tx-row"><div class="mtg-tx-who">' + esc(mtgLabel(l.key, l.name))
+          return '<div class="mtg-tx-row"><div class="mtg-tx-who">' + esc(mtgTxLabel(l))
             + '<span class="mtg-tx-at">' + String(t.getHours()).padStart(2, '0') + ':'
             + String(t.getMinutes()).padStart(2, '0') + '</span></div>'
             + '<div class="mtg-tx-text">' + esc(shown || l.text) + '</div>'

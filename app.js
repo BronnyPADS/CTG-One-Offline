@@ -2677,7 +2677,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       inlineBoldNormal('Recommendation:',' Continue Treatment Plan',12)
     }
     notes.forEach((note,idx)=>drawOneNote(note,idx))
-    const total=doc.internal.getNumberOfPages(),footerY=PH-20,footerLeft='Concussion Therapy Group / '+safe(providerRaw)+'/ '+safe(patientName)+' / '+safe(dob)
+    const total=doc.internal.getNumberOfPages(),footerY=PH-20,footerLeft='Concussion Therapy Group / '+safe(providerRaw)+' / '+safe(patientName)+' / '+safe(dob)
     for(let i=1;i<=total;i++){doc.setPage(i);sf('normal',8);tc(0,0,0);const pageText='Page '+i+' of '+total;let left=footerLeft;while(doc.getTextWidth(left)>TW-doc.getTextWidth(pageText)-12&&left.length>10)left=left.slice(0,-1);if(left!==footerLeft)left+='...';doc.text(left,ML,footerY);doc.text(pageText,PW-MR,footerY,{align:'right'})}
     if(typeof onDoc==='function'){onDoc(doc);return}
     const fname='DailyNotes_'+safe(patientName).replace(/\s+/g,'_')+'_All.pdf'
@@ -2853,7 +2853,7 @@ function downloadDailyNotesPdf() {
     function drawFooters() {
       const total = doc.internal.getNumberOfPages()
       const footerY = PH - 20
-      const footerLeft = 'Concussion Therapy Group / '+safe(providerRaw)+'/ '+safe(patientName)+' / '+safe(dob)
+      const footerLeft = 'Concussion Therapy Group / '+safe(providerRaw)+' / '+safe(patientName)+' / '+safe(dob)
       for (let i=1; i<=total; i++) {
         doc.setPage(i)
         sf('normal', 8); tc(0,0,0)
@@ -5899,7 +5899,8 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultKVPresent('Max Total Symptoms',r.voms.maxTotal,{size:9.3,space:10})
       resultTable(['','Headache','Dizziness','Nausea','Fogging','Total','Comments'],r.voms.rows,[82,82,82,82,82,82,92])
       resultHeading('COGNITIVE THOUGHT AND REACTION TIME TESTING',10)
-      resultInline([{text:'Cognitive Thought Process and Reaction Time Outcomes Testing:',bold:false},{text:'        Date: '+initialExamSessionDate,bold:false}],9.2)
+      // One piece: clean() trims each piece, which ran "Testing:" into "Date:".
+      resultInline([{text:'Cognitive Thought Process and Reaction Time Outcomes Testing: Date: '+initialExamSessionDate,bold:false}],9.2)
       resultBoldText('Sway Medical Cognitive Testing System Explanation: COGNITIVE TESTING: The Sway System assesses cognitive function with tests of visual processing, reaction time and memory.',9.2)
       resultLink('https://www.swaymedical.com/product/cognitive')
       resultBoldText('Peer-Reviewed Validation Research for Accuracy of Sway Medical Cognitive Mobile App:',9.2)
@@ -9928,6 +9929,9 @@ function buildCaseDischargeDoc(p){
   richPara([{t:'The care and treatment rendered to the '+cd.name+' has been medically necessary for the injuries sustained in the '+cd.incidentPhrase+' that occurred on '+(cd.doi||'—')+'.'}],12,6)
   heading('Reasonableness',12)
   richPara([{t:'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'}],12,8)
+  /* No footer on this PDF; the FCR's Word copy gives every report page one
+     (fcr-docx.js), worded as the daily notes word theirs. */
+  doc.ctgFooterLeft='Concussion Therapy Group / '+(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'Nicholas Grande, DC')+' / '+cd.name+' / '+(cd.dob||'—')
   return doc
 }
 function loadPdfLib(cb){
@@ -12265,6 +12269,46 @@ function buildICD(){
 }
 buildICD()
 
+/* "Float list" (16 Oct 2026): the diagnosis card lifts into a panel fixed at
+   the bottom right (day1-enhance.css, #sec-dx.dx-floating), so codes can be
+   ticked while scrolling the rest of the Day 1 form. A note holds its place in
+   the form until "Put back". Wired with addEventListener, so ctg-actions.js
+   needs no allowlist entry. */
+function setupIcdFloat(){
+  const card=document.getElementById('sec-dx'),hd=card&&card.querySelector('.card-hd')
+  if(!hd||hd.querySelector('.dx-float-btn'))return
+  const btn=document.createElement('button');btn.type='button';btn.className='btn btn-ghost btn-sm dx-float-btn'
+  const note=document.createElement('div');note.className='card dx-float-note'
+  const noteText=document.createElement('span');noteText.textContent='The diagnosis list is floating at the bottom right of the screen.'
+  const back=document.createElement('button');back.type='button';back.className='btn btn-ghost btn-sm';back.textContent='Put it back here'
+  note.append(noteText,back)
+  card.parentNode.insertBefore(note,card)
+  // Clear of the Day 1 bar along the bottom (its Save buttons) and the progress strip along the top.
+  const shown=el=>!!el&&el.getBoundingClientRect().height>0
+  const place=()=>{
+    if(!card.classList.contains('dx-floating'))return
+    // Each page has its own action bar; the one on screen is the Day 1's.
+    const bar=[...document.querySelectorAll('.action-bar')].find(shown),strip=document.getElementById('aceProgressStrip')
+    const floor=shown(bar)?bar.getBoundingClientRect().top:innerHeight
+    const ceil=shown(strip)?strip.getBoundingClientRect().bottom:0
+    card.style.bottom=Math.max(12,innerHeight-floor+12)+'px'
+    card.style.maxHeight=Math.max(240,Math.min(innerHeight*0.7,floor-ceil-24))+'px'
+  }
+  window.addEventListener('resize',place)
+  const set=on=>{
+    card.classList.toggle('dx-floating',on);note.classList.toggle('on',on)
+    if(on)place();else{card.style.bottom='';card.style.maxHeight=''}
+    btn.textContent=on?'Put back':'Float list'
+    btn.setAttribute('aria-pressed',on?'true':'false')
+    btn.title=on?'Return the list to its place in the Day 1 form':'Keep this list on screen while you scroll the Day 1 form'
+  }
+  btn.addEventListener('click',()=>set(!card.classList.contains('dx-floating')))
+  back.addEventListener('click',()=>set(false))
+  hd.appendChild(btn)
+  set(false)
+}
+setupIcdFloat()
+
 function filterICD(){
   const q=document.getElementById('icdSearch').value.toLowerCase()
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>{
@@ -12979,23 +13023,30 @@ function buildPDF(name,opts){
     })
   }
 
-  function H2(text,underline){
-    rec({k:'h2',t:text,u:!!underline})
+  /* gap: the space of a main heading (H1) above and below it - a sub-heading
+     that opens its own part, which sat too close to the line before it
+     (16 Oct 2026). day1-docx.js gives the Word file the same. */
+  function H2(text,underline,gap){
+    rec({k:'h2',t:text,u:!!underline,gap:!!gap})
     needPage(30)
-    y+=4
+    y+=gap?12:4
     f('bold',12);col(0,0,0);lc(0,0,0)
     const h2lines=doc.splitTextToSize(text,TW)
     h2lines.forEach((line,idx)=>{
       needPage(16)
       tx(line,ML,y)
       if(underline){const w=doc.getTextWidth(line);doc.setLineWidth(0.75);doc.line(ML,y+2,ML+w,y+2)}
-      y+=idx<h2lines.length-1?14:16
+      y+=idx<h2lines.length-1?14:(gap?22:16)
     })
   }
 
+  /* plainParas: the Mechanism of Injury prints as plain text - no bold names,
+     dates or chosen words (16 Oct 2026). Set around that section only. */
+  let plainParas=false
   function para(segs){
     if(typeof segs==='string')segs=[{t:segs}]
     else segs=segs.map(s=>typeof s==='string'?{t:s}:s)
+    if(plainParas)segs=segs.map(s=>Object.assign({},s,{b:false}))
     rec({k:'p',segs:segs})
     const lines=wrapSegs(segs,TW)
     needPage(42)
@@ -13087,7 +13138,9 @@ function buildPDF(name,opts){
 
   function redFlagBox(){
     const staticText='Refer to the emergency department with sudden onset of any of the following: headaches that worsen, looks very drowsy or can\'t be awakened, cannot recognize people or places, increasing confusion or irritability, repeated vomiting, slurred speech, unsteadiness on feet, weakness or numbness in arms or legs, seizures or convulsions, less responsive than usual, neck pain, double vision, focal neurologic signs, change in state of consciousness.'
-    let fullText=staticText+'  Red Flag Screening: '+go('redFlagStatus')
+    // Nothing chosen: no "Red Flag Screening: —" in the box.
+    let fullText=staticText
+    if(go('redFlagStatus')!=='—')fullText+='  Red Flag Screening: '+go('redFlagStatus')
     if(gv('redFlagNotes')!=='—')fullText+='  Notes: '+gv('redFlagNotes')
     rec({k:'box',red:true,paras:[[{t:fullText}]]})
     f('normal',9)
@@ -13227,6 +13280,7 @@ function buildPDF(name,opts){
   kvRich('SOC 1','Stationary object collisions will similarly be identified as Stationary Object Collision (SOC 1), (SOC 2), (SOC 3), and so on.')
 
   H1('MECHANISM OF INJURY')
+  plainParas=true
   // A record with an MOI story prints the story; older and signed records print as before.
   const __moiStory=(window.ctgMoiStory&&window.ctgMoiStory.paragraphs)?window.ctgMoiStory.paragraphs({name,doi:doiEv,pn}):null
   if(__moiStory){__moiStory.forEach(seg=>para(seg))}else{
@@ -13288,6 +13342,7 @@ function buildPDF(name,opts){
   }
 
   }
+  plainParas=false
   H1('HISTORY OF PRESENT ILLNESS (HPI)')
   kvLine('Chief Complaint',gv('immediateSyms'))
   collectAll('hpiList',HPI_ITEMS).filter(([,ans])=>ans!=='N/A').forEach(([item,ans])=>kvLine(item,ans))
@@ -13352,13 +13407,15 @@ function buildPDF(name,opts){
   H1('FAMILY HISTORY')
   kvLine('Family History',(window.ctgXq?ctgXq('xq_familyHistory'):'')||'non-contributory')
 
-  H1('SUMMARY OF MOTOR VEHICLE COLLISIONS (MVC), STATIONARY OBJECT COLLISIONS (SOC), DIRECT HEAD IMPACTS (DHI), INDIRECT HEAD IMPACTS (IHI)')
+  // No stationary-object collisions: the heading leaves SOC out too.
+  H1('SUMMARY OF MOTOR VEHICLE COLLISIONS (MVC), '+(go('totalSOC')!=='0'?'STATIONARY OBJECT COLLISIONS (SOC), ':'')+'DIRECT HEAD IMPACTS (DHI), INDIRECT HEAD IMPACTS (IHI)')
   H2('MOTOR VEHICLE COLLISIONS:')
-  H2('COLLISIONS TO UNIT 1',true)
+  H2('COLLISIONS TO UNIT 1',true,true)
   kvLine('Total MVCs',go('totalMVC'))
-  kvLine('Total SOCs',go('totalSOC'))
+  // No stationary-object collisions: leave the line out rather than print "Total SOCs: 0".
+  if(go('totalSOC')!=='0')kvLine('Total SOCs',go('totalSOC'))
   {const mvcN=parseInt(go('totalMVC')),socN=parseInt(go('totalSOC'));kvLine('Total Collisions to Unit 1',(isNaN(mvcN)||isNaN(socN))?(go('totalMVC')+' / '+go('totalSOC')):String(mvcN+socN))}
-  H2('HEAD IMPACTS:',true)
+  H2('HEAD IMPACTS:',true,true)
   kvLine('Head Impacts',[(window.ctgXq?ctgXq('xq_headImpacts'):''),(window.ctgXqText?ctgXqText('xq_headImpactsText'):'')].filter(Boolean).join('. '))
   kvLine('IHI 1',gv('ihi1'))
   kvLine('IHI 2',gv('ihi2'))
@@ -13387,7 +13444,7 @@ function buildPDF(name,opts){
   kvLine('EARLY SIGNS',earlySigns.length>0?earlySigns.join(', '):'None observed')
   {let seizTxt=go('ace_seiz');if(gv('ace_seiz_detail')!=='—')seizTxt+=' — '+gv('ace_seiz_detail');kvLine('Seizures observed?',seizTxt)}
 
-  H2('B. Symptom Check List*')
+  H2('B. Symptom Check List*',false,true)
   para([{t:'Since the injury, has the person experienced any of these symptoms any more than usual today or in the past day? Indicate presence of each symptom (0=No, 1=Yes). '},{t:'*Lovell & Collins, 1998 JHTR',b:true,i:true}])
   symptomTable('PHYSICAL (10)',ACE_PHYSICAL,'acePhysical')
   symptomTable('COGNITIVE (4)',ACE_COGNITIVE,'aceCognitive')
@@ -13398,7 +13455,7 @@ function buildPDF(name,opts){
   kvLine('Exertion — Physical Activity',go('ace_physact'))
   kvLine('Exertion — Cognitive Activity',go('ace_cogact'))
 
-  H2('C. Risk Factors for Protracted Recovery (Yes or No)')
+  H2('C. Risk Factors for Protracted Recovery (Yes or No)',false,true)
   // An answer with its optional comment (day1-extras.js adds <id>_cmt), as "Yes — comment".
   const rc=(id,v)=>{const s=document.getElementById(id),c=document.getElementById(id+'_cmt');const t=c?c.value.trim():'';return t&&s&&s.value?v+' — '+t:v}
   quadTable([
@@ -13425,19 +13482,23 @@ function buildPDF(name,opts){
   ])
   kvLine('List other comorbid medical disorders or medication usage',gv('rpr_comorbid')!=='—'?gv('rpr_comorbid'):'None')
 
-  H2('D. RED FLAGS for acute emergency management')
+  H2('D. RED FLAGS for acute emergency management',false,true)
   redFlagBox()
 
-  H2('E. Diagnosis (ICD-10)')
+  H2('E. Diagnosis (ICD-10)',false,true)
   {
-    if(dxCodes.length>0){
-      dxCodes.forEach(d=>para([{t:'('+d.code+')  ',b:true},{t:d.desc}]))
+    /* E. names the concussion only: Concussion w/o LOC (S06.0X0A) or w LOC
+       (S06.0X1A), both if both are ticked (16 Oct 2026). Every ticked code
+       still prints under ASSESSMENT > Diagnosis. */
+    const aceDx=dxCodes.filter(d=>d.code.trim()==='S06.0X0A'||d.code.trim()==='S06.0X1A')
+    if(aceDx.length>0){
+      aceDx.forEach(d=>para([{t:'('+d.code+')  ',b:true},{t:d.desc}]))
     }else{
       para(['No diagnosis code selected'])
     }
   }
 
-  H2('F. Follow-Up Action Plan')
+  H2('F. Follow-Up Action Plan',false,true)
   {
     const fBlocks=[
       [{t:'Complete '},{t:'ACE Care Plan',i:true},{t:' and provide copy to patient/family.'}],

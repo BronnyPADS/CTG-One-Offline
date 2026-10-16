@@ -340,3 +340,18 @@ html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiPostImpactSection { display: no
 .it-panel .ace-loc-add button:first-of-type { background: var(--xo-accent); border-color: var(--xo-accent); color: #fff; }
 html[data-theme="dark"] .it-panel .ace-loc-add input,
 html[data-theme="dark"] .it-panel .ace-loc-add button:not(:first-of-type) { background: var(--surface); color: var(--text); border-color: var(--border); }
+
+/* Diagnosis - ICD-10 Codes (app.js setupIcdFloat): "Float list" lifts the
+   whole card into a panel fixed at the bottom right, so codes can be ticked
+   while scrolling the rest of the Day 1 form; a note keeps its place. */
+#sec-dx .card-hd .dx-float-btn { flex: 0 0 auto; }
+#sec-dx.dx-floating {
+  position: fixed; right: 20px; bottom: 20px; z-index: 900; margin: 0;
+  width: min(480px, calc(100vw - 32px)); max-height: min(70vh, 640px);
+  display: flex; flex-direction: column;
+  box-shadow: 0 18px 48px rgba(0, 40, 80, 0.28);
+}
+#sec-dx.dx-floating .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-top: 0; }
+#sec-dx.dx-floating .icd-search { position: sticky; top: 0; z-index: 1; margin-top: 12px; box-shadow: 0 6px 10px -6px rgba(0, 40, 80, 0.18); }
+.dx-float-note { display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; color: var(--muted); font-size: 13px; }
+.dx-float-note.on { display: flex; }

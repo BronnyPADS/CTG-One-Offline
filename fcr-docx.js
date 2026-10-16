@@ -141,8 +141,43 @@
     return { items: items, w: vp.width, h: vp.height }
   }
 
-  // Words -> visual lines (same baseline) -> columns (a wide gap) -> runs.
-  function toLines(items) {
+  /* The upright lines the page draws (table cell edges): [{x, y0, y1}] in PDF
+     points. Stroked paths only - a shaded box's edge is not a column line. */
+  function verticalRules(gfx) {
+    var rules = [], path = [], m = [1, 0, 0, 1, 0, 0], stack = [], at = null, start = null
+    var pt = function (x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] }
+    var seg = function (p, q) { if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) > 2) path.push({ x: (p[0] + q[0]) / 2, y0: Math.min(p[1], q[1]), y1: Math.max(p[1], q[1]) }) }
+    ;(gfx || []).forEach(function (g) {
+      var a = g.a
+      switch (g.op) {
+        case 'q': stack.push(m.slice()); break
+        case 'Q': if (stack.length) m = stack.pop(); break
+        case 'cm': m = [a[0] * m[0] + a[1] * m[2], a[0] * m[1] + a[1] * m[3], a[2] * m[0] + a[3] * m[2], a[2] * m[1] + a[3] * m[3],
+          a[4] * m[0] + a[5] * m[2] + m[4], a[4] * m[1] + a[5] * m[3] + m[5]]; break
+        case 'm': at = start = pt(a[0], a[1]); break
+        case 'l': { var p = pt(a[0], a[1]); if (at) seg(at, p); at = p; break }
+        case 'h': if (at && start) seg(at, start); at = start; break
+        case 're': {
+          var c0 = pt(a[0], a[1]), c1 = pt(a[0], a[1] + a[3]), c2 = pt(a[0] + a[2], a[1]), c3 = pt(a[0] + a[2], a[1] + a[3])
+          seg(c0, c1); seg(c2, c3); break
+        }
+        case 'n': path = []; at = start = null; break
+        default:
+          if (PAINT.test(g.op)) {
+            if (/^(S|s|B|b)/.test(g.op)) rules.push.apply(rules, path)
+            path = []; at = start = null
+          }
+      }
+    })
+    return rules
+  }
+
+  // Words -> visual lines (same baseline) -> columns (a wide gap, or a table line between) -> runs.
+  function toLines(items, rules) {
+    rules = rules || []
+    var ruled = function (x0, x1, y) {
+      return rules.some(function (r) { return r.x > x0 + 0.5 && r.x < x1 - 0.5 && y >= r.y0 - 1 && y <= r.y1 + 1 })
+    }
     items.sort(function (a, b) { return (b.y - a.y) || (a.x - b.x) })
     var lines = []
     items.forEach(function (it) {
@@ -160,7 +195,11 @@
       var cols = [], col = null, prevEnd = -1e9, prevText = ''
       ln.items.forEach(function (it) {
         var gap = it.x - prevEnd
-        if (!col || gap > Math.max(6, ln.size * 0.9)) {
+        /* A cell whose words nearly fill it leaves less than the usual gap
+           before the next cell; the line between them still makes it a new
+           column, or the next cell's text joined this one and ran over the
+           line ("VOR Vertical 0"). */
+        if (!col || gap > Math.max(6, ln.size * 0.9) || ruled(prevEnd, it.x, it.y)) {
           col = { x: it.x, parts: [] }; cols.push(col)
         } else if (gap > ln.size * 0.12 && !/\s$/.test(prevText) && !/^\s/.test(it.s)) {
           col.parts.push({ s: ' ', f: it.f, size: it.size })
@@ -219,16 +258,24 @@
   /* One report page -> Word paragraphs, each placed where the PDF has it: the
      space above a paragraph and an exact line height put every baseline at the
      PDF's own height on the page. Returns [{pPr, runs}] for the caller to add
-     the page break and section end. */
-  function textPageParagraphs(tp) {
-    var paras = toParagraphs(toLines(tp.items))
-    var avail = tp.h - 2 * M_PT - 1      // a point to spare against Word's rounding
+     the page break and section end. box: {top, bottom} in points, where the
+     page's text area starts and ends (a report under a Word header and footer);
+     the 0.25in margin otherwise. */
+  function textPageParagraphs(tp, box) {
+    var TOP = (box && box.top) || M_PT, BOTTOM = (box && box.bottom) || M_PT
+    var paras = toParagraphs(toLines(tp.items, tp.gfx ? verticalRules(tp.gfx) : []))
+    var avail = tp.h - TOP - BOTTOM - 1      // a point to spare against Word's rounding
     var out = [], T = 0
     paras.forEach(function (p) {
       var first = p.lines[0], size = first.size
-      var lineH = p.gap !== null ? Math.max(p.gap, size) : Math.max(size * 1.15, size + 1)
       var desc = size * 0.22
-      var baselineFromTop = (tp.h - first.y) - M_PT
+      var baselineFromTop = (tp.h - first.y) - TOP
+      /* A one-line paragraph is no taller than the room above it (down to its
+         size plus a point): a heading 13pt under the line before it, as the
+         daily notes set them, took 13.8 and pushed the rest of the page down a
+         little more at every heading (16 Oct 2026). */
+      var lineH = p.gap !== null ? Math.max(p.gap, size)
+        : Math.max(size + 1, Math.min(size * 1.15, baselineFromTop + desc - T))
       var before = Math.max(0, baselineFromTop + desc - lineH - T)
       T += before + p.lines.length * lineH
       var parts = []
@@ -245,12 +292,16 @@
       var rightInd = 0
       out.push({ before: before, lineH: lineH, tabs: tabs, left: tw(first.left - M_PT), right: rightInd, runs: runsXml(parts) })
     })
-    // Taller than the page (Word's spacing rounds up): take it out of the gaps, never the text.
+    /* Taller than the page: take it out of the gaps, never the text, starting
+       from the bottom. What runs over is the page's last line - a report's
+       footer sits inside Word's bottom margin - so the gap above it gives way
+       and the rest of the page stays on its lines and boxes. Shrinking every
+       gap lifted all the text off them instead, and a heading under a table
+       landed on the table's bottom line (16 Oct 2026). */
     var over = T - avail
-    if (over > 0) {
-      var gaps = out.reduce(function (s, p) { return s + p.before }, 0)
-      var k = gaps > 0 ? Math.max(0, (gaps - over) / gaps) : 1
-      out.forEach(function (p) { p.before *= k })
+    for (var oi = out.length - 1; over > 0 && oi >= 0; oi--) {
+      var cut = Math.min(out[oi].before, over)
+      out[oi].before -= cut; over -= cut
     }
     /* Word drops the space above the first paragraph of a page that starts on
        a page break, which lifted a whole page's text off its lines and boxes.
@@ -369,7 +420,9 @@
     var c = document.createElement('canvas')
     c.width = Math.ceil(W * sc); c.height = Math.ceil(H * sc)
     var cx = c.getContext('2d')
-    cx.fillStyle = '#FFFFFF'; cx.fillRect(0, 0, c.width, c.height)
+    /* See-through, not white: Word draws a page's header and footer beneath
+       this picture, and a white sheet over the whole page hid the letterhead
+       and the footer line. */
     cx.setTransform(sc, 0, 0, -sc, 0, H * sc)       // PDF space: points, y up
     cx.strokeStyle = '#000000'; cx.fillStyle = '#000000'
     var lineW = 1, minW = 0.75 / sc
@@ -431,6 +484,53 @@
       '</a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>'
   }
 
+  /* ------------------- a report's letterhead and footer ------------------- */
+  /* The reports the portal writes (case discharge summary, exams, daily notes)
+     draw the practice letterhead at the top of every page and a footer line,
+     "Concussion Therapy Group / provider / patient / DOB ... Page X of Y", at
+     the bottom. In the Word copy both move into a real Word header and footer -
+     the Day 1's - one section per report with its own page count, so editing a
+     page cannot carry them along (16 Oct 2026). The Medical Bill has no such
+     letterhead and stays as it is. */
+  var LETTERHEAD = /^(CONCUSSION THERAPY GROUP|2411 Crofton Lane, Suite \w+|Crofton, MD, 21114-1336|Phone: 410-451-9870|Fax: 410-451-9872)$/
+  var REPORT_TOP = 84, REPORT_BOTTOM = 36   // points: the text area under the header, above the footer
+  function splitReportPage(jp) {
+    var head = [], body = [], pageNo = null
+    jp.items.forEach(function (it) {
+      var s = it.s.trim(), fromTop = jp.h - it.y
+      if (fromTop < 112 && LETTERHEAD.test(s)) head.push(it)
+      else if (fromTop > jp.h - 40 && /^Page \d+ of \d+$/.test(s)) pageNo = it
+      else body.push(it)
+    })
+    // The footer line is everything on the page number's baseline.
+    var foot = []
+    if (pageNo) body = body.filter(function (it) { var on = Math.abs(it.y - pageNo.y) < 1.5; if (on) foot.push(it); return !on })
+    foot.sort(function (a, b) { return a.x - b.x })
+    return { head: head, body: body, foot: foot, pageNo: pageNo }
+  }
+  /* Whether a report's pages carry the letterhead, and where it and the footer
+     sit (read from its first page), or null. doc.ctgFooterLeft: the footer
+     line for a report whose PDF has none (the case discharge summary). */
+  function reportOf(doc) {
+    if (doc.__ctgReport !== undefined) return doc.__ctgReport
+    var info = null
+    try {
+      var sp = splitReportPage(readJsPdfPage(doc, 1))
+      var name = sp.head.filter(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' })[0]
+      if (name) {
+        var right = sp.head.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, name.x + name.w)
+        info = {
+          left: name.x, right: right,
+          footLeft: sp.foot.length ? sp.foot[0].x : name.x,
+          footRight: sp.pageNo ? sp.pageNo.x + sp.pageNo.w : right,
+          footText: sp.foot.length ? sp.foot.map(function (it) { return it.s }).join(' ').trim() : String(doc.ctgFooterLeft || '')
+        }
+      }
+    } catch (e) { info = null }
+    doc.__ctgReport = info
+    return info
+  }
+
   /* ------------------------------- the file ------------------------------- */
 
   /* pdfBytes: the compiled FCR (buildFCRDoc), carrying ctgPageKinds - 'text' or
@@ -442,9 +542,32 @@
     var ace = (aceRecord && window.ctgDay1Docx && window.ctgDay1Docx.parts)
       ? window.ctgDay1Docx.parts(aceRecord, { inSection: true, headerId: 'rIdHA', footerId: 'rIdFA' })
       : null
-    // Every other section names an empty header and footer, or Word would carry the Day 1's into it.
-    var hfEmpty = ace ? '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFE"/>' : ''
     var aceDone = false
+    /* A Word section for each report that carries the letterhead, with its
+       header and footer parts (written once each: reports with the same
+       margins and footer line share them). */
+    var L = window.ctgDay1Docx && window.ctgDay1Docx.letterhead
+    var reportSecs = [], hdrParts = [], ftrParts = []
+    var partFor = function (list, prefix, xml) {
+      var i = list.indexOf(xml)
+      if (i < 0) { list.push(xml); i = list.length - 1 }
+      return prefix + (i + 1)
+    }
+    var reportSection = function (doc, rep) {
+      for (var i = 0; i < reportSecs.length; i++) if (reportSecs[i].doc === doc) return reportSecs[i]
+      // The letterhead's table cells keep 5pt (100 twips) inside their edges: set it out by that much.
+      var hId = partFor(hdrParts, 'rIdHR', L.header({ ind: tw(rep.left - M_PT) - 100, width: tw(rep.right - rep.left) + 200 }))
+      var fId = partFor(ftrParts, 'rIdFR', L.footer({}, 'SECTIONPAGES', { ind: tw(rep.footLeft - M_PT), tab: tw(rep.footRight - M_PT), text: rep.footText }))
+      var sec = {
+        doc: doc, key: 'R' + reportSecs.length,
+        sect: '<w:sectPr><w:headerReference w:type="default" r:id="' + hId + '"/><w:footerReference w:type="default" r:id="' + fId + '"/>' +
+          '<w:pgSz w:w="' + PAGE_W + '" w:h="' + PAGE_H + '"/>' +
+          '<w:pgMar w:top="' + tw(REPORT_TOP) + '" w:right="' + MARGIN + '" w:bottom="' + tw(REPORT_BOTTOM) + '" w:left="' + MARGIN + '" w:header="600" w:footer="400" w:gutter="0"/>' +
+          '<w:pgNumType w:start="1"/></w:sectPr>'
+      }
+      reportSecs.push(sec)
+      return sec
+    }
     var lib = await ensurePdfJs()
     // A copy: pdf.js hands the buffer to its worker, which would empty the caller's.
     var task = lib.getDocument({ data: new Uint8Array(pdfBytes), isEvalSupported: false })
@@ -463,16 +586,20 @@
         }
         if (!done && (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace') && sources[n - 1]) {
           try {
-            var jp = readJsPdfPage(sources[n - 1].doc, sources[n - 1].page)
-            if (jp.items.length) {
-              var jparas = textPageParagraphs(jp)
+            var src = sources[n - 1]
+            var rep = L ? reportOf(src.doc) : null
+            var jp = readJsPdfPage(src.doc, src.page)
+            // A report's letterhead and footer line go to its Word header and footer, not the page.
+            if (rep) jp.items = splitReportPage(jp).body
+            if (jp.items.length || rep) {
+              var jparas = textPageParagraphs(jp, rep ? { top: REPORT_TOP, bottom: REPORT_BOTTOM } : null)
               var bg = await drawGraphics(jp.gfx, jp.w, jp.h)
               if (bg) {
                 zip.file('word/media/lines-' + n + '.png', bg, { compression: 'STORE' })
                 rels += '<Relationship Id="rIdB' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/lines-' + n + '.png"/>'
                 jparas[0].runs = backgroundXml(n, jp.w, jp.h) + jparas[0].runs
               }
-              pages.push({ w: jp.w, h: jp.h, paras: jparas }); done = true
+              pages.push({ w: jp.w, h: jp.h, paras: jparas, sec: rep ? reportSection(src.doc, rep) : null }); done = true
             }
           } catch (e) { console.error('FCR Word: page ' + n + ' could not be read from its report, trying the PDF', e) }
         }
@@ -501,12 +628,16 @@
       task.destroy()   // the loading task, not the document: pdf.js 4 has no document.destroy()
     }
 
-    /* Page by page, in sections: the Day 1 is one section, and the other pages
-       group by which way they turn. breakBefore: a new page in the same
-       section. The last page of a section carries that section's end (the
-       section break itself starts the next page). */
-    var key = function (pg) { return pg.ace ? 'ace' : (wide(pg.w, pg.h) ? 'L' : 'P') }
-    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : sectPr(wide(pg.w, pg.h), hfEmpty) }
+    /* Page by page, in sections: the Day 1 is one section, each report with
+       the letterhead is one, and the other pages group by which way they turn.
+       breakBefore: a new page in the same section. The last page of a section
+       carries that section's end (the section break itself starts the next
+       page). */
+    var anyHF = !!ace || reportSecs.length > 0
+    // Every other section names an empty header and footer, or Word would carry the one before into it.
+    var hfEmpty = anyHF ? '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFE"/>' : ''
+    var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (wide(pg.w, pg.h) ? 'L' : 'P') }
+    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfEmpty) }
     var body = ''
     for (var i = 0; i < pages.length; i++) {
       var pgi = pages[i]
@@ -526,6 +657,26 @@
     var lastSect = pages.length ? sectFor(pages[pages.length - 1]) : sectPr(false, hfEmpty)
     var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body +
       lastSect + '</w:body></w:document>'
+    var R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
+    var CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.'
+    var overrides = ''
+    var addPart = function (name, xml, kind, id) {
+      zip.file('word/' + name + '.xml', xml)
+      overrides += '<Override PartName="/word/' + name + '.xml" ContentType="' + CT + kind + '+xml"/>'
+      if (id) rels += '<Relationship Id="' + id + '" Type="' + R + kind + '" Target="' + name + '.xml"/>'
+    }
+    if (anyHF) {
+      addPart('styles', ace ? ace.styles : L.styles(), 'styles', 'rIdS')
+      addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>', 'header', 'rIdHE')
+      addPart('footer2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p/></w:ftr>', 'footer', 'rIdFE')
+    }
+    if (ace) {
+      addPart('header1', ace.header, 'header', 'rIdHA')
+      addPart('footer1', ace.footer, 'footer', 'rIdFA')
+      rels += ace.links.map(function (l) { return '<Relationship Id="' + l.id + '" Type="' + R + 'hyperlink" Target="' + esc(l.url) + '" TargetMode="External"/>' }).join('')
+    }
+    hdrParts.forEach(function (xml, i) { addPart('headerR' + (i + 1), xml, 'header', 'rIdHR' + (i + 1)) })
+    ftrParts.forEach(function (xml, i) { addPart('footerR' + (i + 1), xml, 'footer', 'rIdFR' + (i + 1)) })
     zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
@@ -533,22 +684,7 @@
       '<Default Extension="png" ContentType="image/png"/>' +
       '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
       '<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>' +
-      (ace ? '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
-        ['header1', 'header2'].map(function (h) { return '<Override PartName="/word/' + h + '.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' }).join('') +
-        ['footer1', 'footer2'].map(function (h) { return '<Override PartName="/word/' + h + '.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' }).join('') : '') +
-      '</Types>')
-    if (ace) {
-      zip.file('word/styles.xml', ace.styles)
-      zip.file('word/header1.xml', ace.header)
-      zip.file('word/footer1.xml', ace.footer)
-      zip.file('word/header2.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>')
-      zip.file('word/footer2.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p/></w:ftr>')
-      var R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
-      rels += '<Relationship Id="rIdS" Type="' + R + 'styles" Target="styles.xml"/>' +
-        '<Relationship Id="rIdHA" Type="' + R + 'header" Target="header1.xml"/><Relationship Id="rIdFA" Type="' + R + 'footer" Target="footer1.xml"/>' +
-        '<Relationship Id="rIdHE" Type="' + R + 'header" Target="header2.xml"/><Relationship Id="rIdFE" Type="' + R + 'footer" Target="footer2.xml"/>' +
-        ace.links.map(function (l) { return '<Relationship Id="' + l.id + '" Type="' + R + 'hyperlink" Target="' + esc(l.url) + '" TargetMode="External"/>' }).join('')
-    }
+      overrides + '</Types>')
     zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
     zip.file('word/document.xml', doc)

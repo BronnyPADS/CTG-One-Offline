@@ -3,7 +3,8 @@
  *
  * The "pick" questions use the same checkbox list as the MOI story
  * (window.ctgPicker from day1-moi.js): Type Here / Add / Select All, no
- * adding on a Yes/No list. Each one is stored as JSON {o: choices, s: ticked}
+ * adding on a Yes/No list unless the question says add: true (Residual
+ * Effects of Concussion, 16 Oct 2026). Each one is stored as JSON {o: choices, s: ticked}
  * in a hidden textarea inside the Day 1 form, so Day 1's own save, draft and
  * restore carry it. Choices added are kept for that patient only.
  *
@@ -44,7 +45,7 @@
   var PICKS = [
     { id: 'xq_visionProblems', label: 'Vision Problems', after: 'adlLimit' },
     { id: 'xq_nativeCountry', label: 'Native Country/Region', into: 'pmhExtra' },
-    { id: 'xq_residualConc', label: 'Residual Effects of Concussion', into: 'pmhExtra' },
+    { id: 'xq_residualConc', label: 'Residual Effects of Concussion', into: 'pmhExtra', add: true },
     { id: 'xq_prevConcResult', label: 'Previous Concussions Resulting in', into: 'pmhExtra' },
     { id: 'xq_priorLoc', label: 'Loss of Consciousness (previous concussions)', into: 'pmhExtra' },
     { id: 'xq_otherMedHx', label: 'Other Significant Medical History', into: 'pmhExtra', full: true },
@@ -150,7 +151,7 @@
     var open = function () {
       if (ta.disabled || !window.ctgPicker) return
       var m = model(q.id)
-      window.ctgPicker.open(chip, m, function () { write(q.id, m) })
+      window.ctgPicker.open(chip, m, function () { write(q.id, m) }, null, { allowAdd: !!q.add })
     }
     chip.addEventListener('click', open)
     chip.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })
