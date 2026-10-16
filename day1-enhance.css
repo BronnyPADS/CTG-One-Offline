@@ -341,17 +341,136 @@ html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiPostImpactSection { display: no
 html[data-theme="dark"] .it-panel .ace-loc-add input,
 html[data-theme="dark"] .it-panel .ace-loc-add button:not(:first-of-type) { background: var(--surface); color: var(--text); border-color: var(--border); }
 
-/* Diagnosis - ICD-10 Codes (app.js setupIcdFloat): "Float list" lifts the
-   whole card into a panel fixed at the bottom right, so codes can be ticked
-   while scrolling the rest of the Day 1 form; a note keeps its place. */
-#sec-dx .card-hd .dx-float-btn { flex: 0 0 auto; }
-#sec-dx.dx-floating {
-  position: fixed; right: 20px; bottom: 20px; z-index: 900; margin: 0;
-  width: min(480px, calc(100vw - 32px)); max-height: min(70vh, 640px);
-  display: flex; flex-direction: column;
-  box-shadow: 0 18px 48px rgba(0, 40, 80, 0.28);
+/* Diagnosis - ICD-10 Codes as a floating panel (app.js setupIcdFloat).
+   Docked it is the ordinary card; floating it is pinned bottom right with
+   the ticked codes as chips under its header, a resize grip at its top-left
+   corner, and a minimized state that is just the header as a bar. "Diagnosis
+   codes" in the progress strip opens it from the top of the form. */
+
+/* the header's buttons: "Float list" docked; Minimize + Put back floating */
+.dxf-tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.dxf-tools svg, .dxf-launch svg, .dxf-float-btn svg {
+  width: 15px; height: 15px; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
-#sec-dx.dx-floating .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-top: 0; }
-#sec-dx.dx-floating .icd-search { position: sticky; top: 0; z-index: 1; margin-top: 12px; box-shadow: 0 6px 10px -6px rgba(0, 40, 80, 0.18); }
-.dx-float-note { display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; color: var(--muted); font-size: 13px; }
-.dx-float-note.on { display: flex; }
+.dxf-tool {
+  display: none; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer;
+}
+.dxf-tool:hover { border-color: var(--accent); color: var(--accent); }
+.dxf-tool:focus-visible, .dxf-chip:focus-visible, .dxf-launch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dxf-chosen, .dxf-grip { display: none; }
+
+/* floating */
+#sec-dx.dxf-floating {
+  position: fixed; right: 20px; bottom: 20px; z-index: 900; margin: 0;
+  width: 460px; height: 620px;          /* app.js sets both from the saved size and the room on screen */
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid rgba(0, 119, 182, 0.22); border-radius: 16px;
+  box-shadow: 0 28px 64px -16px rgba(0, 40, 80, 0.38), 0 4px 14px rgba(0, 40, 80, 0.1);
+  /* Solid, over a form full of text: the portal's cards are frosted glass (52% white, blurred) and
+     --surface is 82% white in the light theme, so both let the form show through. No lift or
+     animation either - it floats already. */
+  background: #fff !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  transform: none !important; animation: none !important;
+}
+html[data-theme="dark"] #sec-dx.dxf-floating { background: #03045E !important; }
+#sec-dx.dxf-floating.dxf-away { display: none !important; }   /* another page is on screen */
+#sec-dx.dxf-floating .dxf-tool { display: inline-flex; }
+#sec-dx.dxf-floating .dxf-float-btn { display: none; }
+#sec-dx.dxf-floating > .card-hd { flex: 0 0 auto; padding: 12px 12px 12px 18px; }
+#sec-dx.dxf-floating > .card-hd .card-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-weight: 600; }
+/* One quiet surface while it floats: no hover underline (styles.css .card-hd::after) and the
+   section badge without its glow, which smudged the bar's rounded left end. */
+#sec-dx.dxf-floating > .card-hd::after { display: none; }
+#sec-dx.dxf-floating .card-ico { box-shadow: none !important; }
+#sec-dx.dxf-floating > .card-hd .card-sub {
+  padding: 3px 9px; border-radius: 999px; background: var(--al); color: var(--accent); font-weight: 600; white-space: nowrap;
+}
+#sec-dx.dxf-floating .dxf-chosen {
+  display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; max-height: 96px; overflow-y: auto;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+/* The portal sets one font on every button (styles.css "font back to what it
+   was"), so the code's own face goes on the span inside the chip. */
+#sec-dx .dxf-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px;
+  border: 1px solid rgba(0, 119, 182, 0.28); border-radius: 999px; background: var(--al); color: var(--accent);
+  font-size: 11.5px; font-weight: 600; line-height: 1.2; cursor: pointer;
+}
+#sec-dx .dxf-chip-code { font-family: 'DM Mono', monospace; letter-spacing: 0; }
+/* styles.css lifts every button in a page to 14.5px !important ("bigger text
+   in the content area"); the chips and the strip's launcher keep their size. */
+#sec-dx .dxf-chip { font-size: 12px !important; }
+#aceProgressStrip .dxf-launch { font-size: 13px !important; }
+#sec-dx .dxf-chip:hover { border-color: var(--accent); }
+#sec-dx .dxf-chip:disabled { cursor: default; padding-right: 10px; }
+.dxf-chip-x {
+  display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%;
+  font: 600 13px/1 'Plus Jakarta Sans', 'Inter', sans-serif;
+}
+#sec-dx .dxf-chip:hover .dxf-chip-x { background: var(--accent); color: #fff; }
+.dxf-chosen-empty { font-size: 12px; color: var(--muted); }
+#sec-dx.dxf-floating > .card-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 14px 14px; }
+/* The search stays at the top of the list as it scrolls: solid, with a ring of
+   the panel's own colour so the rows do not show around its rounded corners. */
+#sec-dx.dxf-floating { --dxf-solid: #fff; }
+html[data-theme="dark"] #sec-dx.dxf-floating { --dxf-solid: #03045E; }
+#sec-dx.dxf-floating .icd-search {
+  position: sticky; top: 0; z-index: 1; margin: 12px 0 10px;
+  background: var(--dxf-solid) !important;
+  box-shadow: 0 -12px 0 0 var(--dxf-solid), 0 0 0 4px var(--dxf-solid), 0 12px 14px -10px rgba(0, 40, 80, 0.35) !important;
+}
+#sec-dx.dxf-floating .icd-search:focus {
+  box-shadow: 0 -12px 0 0 var(--dxf-solid), 0 0 0 3px rgba(0, 119, 182, 0.25), 0 12px 14px -10px rgba(0, 40, 80, 0.35) !important;
+}
+#sec-dx.dxf-floating .icd-selected-count { display: none; }
+
+/* the grip: two short strokes in the top-left corner */
+#sec-dx.dxf-floating .dxf-grip { display: block; position: absolute; left: 0; top: 0; z-index: 2; width: 20px; height: 20px; cursor: nwse-resize; touch-action: none; }
+#sec-dx.dxf-floating .dxf-grip::before,
+#sec-dx.dxf-floating .dxf-grip::after {
+  content: ''; position: absolute; left: 4px; height: 2px; border-radius: 2px; background: var(--muted); opacity: 0.8;
+  transform: rotate(-45deg); transform-origin: left center;
+}
+#sec-dx.dxf-floating .dxf-grip::before { top: 13px; width: 11px; }
+#sec-dx.dxf-floating .dxf-grip::after { top: 9px; width: 6px; }
+#sec-dx.dxf-floating .dxf-grip:hover::before,
+#sec-dx.dxf-floating .dxf-grip:hover::after { background: var(--accent); opacity: 1; }
+#sec-dx.dxf-resizing { user-select: none; }
+
+/* minimized: the header alone, as a bar */
+#sec-dx.dxf-floating.dxf-min { width: auto !important; height: auto !important; max-width: calc(100vw - 32px); border-radius: 999px; }
+#sec-dx.dxf-floating.dxf-min > .card-body,
+#sec-dx.dxf-floating.dxf-min .dxf-chosen,
+#sec-dx.dxf-floating.dxf-min .dxf-grip { display: none; }
+/* The header's own tint drew a lighter box inside the pill; minimized it is the pill's white, edge to edge. */
+#sec-dx.dxf-floating.dxf-min > .card-hd {
+  padding: 6px 6px 6px 8px; gap: 8px; border-bottom: 0; cursor: pointer; background: transparent !important;
+}
+#sec-dx.dxf-floating.dxf-min > .card-hd .card-sub { margin-left: 4px; }
+#sec-dx.dxf-floating.dxf-min .dxf-tool { border-radius: 50%; }
+
+/* "Diagnosis codes" in the progress strip */
+.dxf-launch {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: auto; padding: 5px 6px 5px 11px;
+  border: 1px solid rgba(0, 119, 182, 0.22); border-radius: 999px; background: var(--surface); color: var(--accent);
+  font-size: 12px; font-weight: 600; line-height: 1; cursor: pointer;
+}
+.dxf-launch:hover { border-color: var(--accent); background: var(--al); }
+.dxf-launch.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+.dxf-launch-n {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--al); color: var(--accent); font: 600 11px/1 'DM Mono', monospace;
+}
+.dxf-launch-n.zero { background: transparent; color: var(--muted); }
+.dxf-launch.on .dxf-launch-n { background: rgba(255, 255, 255, 0.22); color: #fff; }
+
+/* the note that holds the card's place in the form */
+.dxf-float-note { display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; color: var(--muted); font-size: 13px; }
+.dxf-float-note.on { display: flex; }
+
+@media (max-width: 640px) {
+  #sec-dx.dxf-floating { right: 12px; }
+  .dxf-launch { margin-left: 0; }
+}

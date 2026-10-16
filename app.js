@@ -12269,43 +12269,170 @@ function buildICD(){
 }
 buildICD()
 
-/* "Float list" (16 Oct 2026): the diagnosis card lifts into a panel fixed at
-   the bottom right (day1-enhance.css, #sec-dx.dx-floating), so codes can be
-   ticked while scrolling the rest of the Day 1 form. A note holds its place in
-   the form until "Put back". Wired with addEventListener, so ctg-actions.js
-   needs no allowlist entry. */
+/* Floating diagnosis list (16 Oct 2026). The diagnosis card lifts into a
+   panel fixed at the bottom right (day1-enhance.css, #sec-dx.dxf-floating), so
+   codes can be ticked anywhere in the Day 1 form. "Diagnosis codes" in the
+   progress strip opens it from the top of the form; it minimizes to a bar,
+   resizes from its top-left corner (the size is kept in this browser), and
+   "Put back" returns it to section 6. The codes ticked so far ride along its
+   top as chips. Wired with addEventListener, so ctg-actions.js needs no
+   allowlist entry. */
 function setupIcdFloat(){
-  const card=document.getElementById('sec-dx'),hd=card&&card.querySelector('.card-hd')
-  if(!hd||hd.querySelector('.dx-float-btn'))return
-  const btn=document.createElement('button');btn.type='button';btn.className='btn btn-ghost btn-sm dx-float-btn'
-  const note=document.createElement('div');note.className='card dx-float-note'
+  const card=document.getElementById('sec-dx'),hd=card&&card.querySelector('.card-hd'),grid=document.getElementById('icdGrid')
+  if(!hd||!grid||card.querySelector('.dxf-tools'))return
+  const SIZE_KEY='ctgDxPanelSize',MIN_W=340,MIN_H=260
+  const NS='http://www.w3.org/2000/svg'
+  const ICON={
+    float:'M14 3h7v7|M10 14 21 3|M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5',
+    min:'M5 12h14',
+    max:'M6 15l6-6 6 6',
+    dock:'M12 3v12|M7 10l5 5 5-5|M5 21h14',
+    list:'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2|M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z|M9 12h6|M9 16h4'
+  }
+  const svg=name=>{
+    const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('aria-hidden','true')
+    ICON[name].split('|').forEach(d=>{const p=document.createElementNS(NS,'path');p.setAttribute('d',d);s.appendChild(p)})
+    return s
+  }
+  const iconBtn=(name,cls)=>{const b=document.createElement('button');b.type='button';b.className='dxf-tool '+cls;b.appendChild(svg(name));return b}
+  const labelBtn=(b,label)=>{b.title=label;b.setAttribute('aria-label',label)}
+
+  // Floating, the title reads "Diagnosis codes" - the launcher's name, and it fits the narrow panel.
+  const titleEl=hd.querySelector('.card-title'),fullTitle=titleEl?titleEl.textContent:''
+  // In the card header: "Float list" while it sits in the form; Minimize and Put back while it floats.
+  const tools=document.createElement('div');tools.className='dxf-tools'
+  const floatBtn=document.createElement('button');floatBtn.type='button';floatBtn.className='btn btn-ghost btn-sm dxf-float-btn'
+  floatBtn.title='Keep this list on screen while you scroll the Day 1 form'
+  floatBtn.append(svg('float'),document.createTextNode('Float list'))
+  const minBtn=iconBtn('min','dxf-min-btn'),dockBtn=iconBtn('dock','dxf-dock-btn')
+  labelBtn(dockBtn,'Put back in the form')
+  tools.append(floatBtn,minBtn,dockBtn)
+  hd.appendChild(tools)
+  // The codes ticked so far, under the header; a chip's x unticks it.
+  const tray=document.createElement('div');tray.className='dxf-chosen';tray.setAttribute('aria-label','Codes selected')
+  hd.insertAdjacentElement('afterend',tray)
+  const grip=document.createElement('div');grip.className='dxf-grip';grip.title='Drag to resize';grip.setAttribute('aria-hidden','true')
+  card.appendChild(grip)
+  // A note holds the card's place in the form while it floats.
+  const note=document.createElement('div');note.className='card dxf-float-note'
   const noteText=document.createElement('span');noteText.textContent='The diagnosis list is floating at the bottom right of the screen.'
   const back=document.createElement('button');back.type='button';back.className='btn btn-ghost btn-sm';back.textContent='Put it back here'
   note.append(noteText,back)
   card.parentNode.insertBefore(note,card)
+  // "Diagnosis codes" in the progress strip, which stays at the top of the Day 1 form.
+  const launch=document.createElement('button');launch.type='button';launch.className='dxf-launch'
+  const badge=document.createElement('span');badge.className='dxf-launch-n'
+  launch.append(svg('list'),document.createTextNode('Diagnosis codes'),badge)
+  const lastSaved=document.getElementById('progressLastSaved')
+  if(lastSaved)lastSaved.parentNode.insertBefore(launch,lastSaved)
+
+  const st={on:false,min:false}
+  /* A signed Day 1 disables the inputs of its page (ctgApplyRecordLock). The
+     floating card is not in the page then, so read the lock off the patient's
+     name, a field that stays in the form; the chips and the search follow it. */
+  const locked=()=>!!document.getElementById('ptName')?.disabled
+  const sync=()=>{
+    const items=[...grid.querySelectorAll('.icd-item.checked')],lock=locked()
+    tray.replaceChildren()
+    if(!items.length){const e=document.createElement('span');e.className='dxf-chosen-empty';e.textContent='No codes selected yet';tray.appendChild(e)}
+    items.forEach(it=>{
+      const code=it.querySelector('.icd-code').textContent.trim(),desc=it.querySelector('.icd-desc').textContent.trim()
+      const chip=document.createElement('button');chip.type='button';chip.className='dxf-chip'
+      const t=document.createElement('span');t.className='dxf-chip-code';t.textContent=code;chip.appendChild(t)
+      if(lock){chip.disabled=true;chip.title=code+' - '+desc}
+      else{
+        chip.title='Remove '+code+' - '+desc
+        const x=document.createElement('span');x.className='dxf-chip-x';x.setAttribute('aria-hidden','true');x.textContent='×';chip.appendChild(x)
+        chip.addEventListener('click',()=>{if(!locked())it.click()})
+      }
+      tray.appendChild(chip)
+    })
+    badge.textContent=String(items.length)
+    badge.classList.toggle('zero',!items.length)
+    if(st.on){const s=document.getElementById('icdSearch');if(s)s.disabled=lock}
+  }
+  // Ticks come from clicks, a restored draft or Clear; all of them change the rows' class.
+  new MutationObserver(sync).observe(grid,{subtree:true,attributes:true,attributeFilter:['class']})
+
+  const loadSize=()=>{try{const s=JSON.parse(localStorage.getItem(SIZE_KEY)||'null');return s&&s.w>0&&s.h>0?s:null}catch(e){return null}}
+  const saveSize=s=>{try{localStorage.setItem(SIZE_KEY,JSON.stringify(s))}catch(e){}}
+  /* Until resized by hand it opens narrow and tall: the narrowest width, and every
+     bit of height between the progress strip and the Save bar (place() caps the
+     height to that room) - the shape the practice asked for (16 Oct 2026). */
+  let size=loadSize()||{w:MIN_W,h:9999}
   // Clear of the Day 1 bar along the bottom (its Save buttons) and the progress strip along the top.
   const shown=el=>!!el&&el.getBoundingClientRect().height>0
   const place=()=>{
-    if(!card.classList.contains('dx-floating'))return
+    if(!st.on||card.classList.contains('dxf-away'))return
     // Each page has its own action bar; the one on screen is the Day 1's.
     const bar=[...document.querySelectorAll('.action-bar')].find(shown),strip=document.getElementById('aceProgressStrip')
     const floor=shown(bar)?bar.getBoundingClientRect().top:innerHeight
-    const ceil=shown(strip)?strip.getBoundingClientRect().bottom:0
+    const ceil=shown(strip)?Math.max(0,strip.getBoundingClientRect().bottom):0
     card.style.bottom=Math.max(12,innerHeight-floor+12)+'px'
-    card.style.maxHeight=Math.max(240,Math.min(innerHeight*0.7,floor-ceil-24))+'px'
+    card.style.width=Math.round(Math.min(Math.max(size.w,MIN_W),Math.max(MIN_W,innerWidth-40)))+'px'
+    card.style.height=Math.round(Math.min(Math.max(size.h,MIN_H),Math.max(MIN_H,floor-ceil-24)))+'px'
   }
-  window.addEventListener('resize',place)
-  const set=on=>{
-    card.classList.toggle('dx-floating',on);note.classList.toggle('on',on)
-    if(on)place();else{card.style.bottom='';card.style.maxHeight=''}
-    btn.textContent=on?'Put back':'Float list'
-    btn.setAttribute('aria-pressed',on?'true':'false')
-    btn.title=on?'Return the list to its place in the Day 1 form':'Keep this list on screen while you scroll the Day 1 form'
+  let placeQueued=false
+  const placeSoon=()=>{if(!st.on||placeQueued)return;placeQueued=true;requestAnimationFrame(()=>{placeQueued=false;place()})}
+  window.addEventListener('resize',placeSoon)
+  window.addEventListener('scroll',placeSoon,{passive:true})
+
+  /* Floating, the card lives at the top of the document, out of the form: the
+     page's entrance animation (ctgRise, fill both) leaves a transform on the
+     form, and a transformed ancestor turns position:fixed into "scroll with
+     the form". The note keeps its place; the card goes back after it. */
+  const away=()=>{const pg=note.closest('.page');return document.body.classList.contains('auth-active')||!(pg&&pg.classList.contains('active'))}
+  let awayTimer=0,lastLock=null
+  const watchAway=()=>{
+    const gone=st.on&&away(),was=card.classList.contains('dxf-away')
+    card.classList.toggle('dxf-away',gone)
+    // Back on the Day 1 page: measure again (its Save bar was not on screen while away).
+    if(was&&!gone)place()
+    // Signed (or opened to amend) while floating: the chips and the search follow.
+    const l=locked();if(l!==lastLock){lastLock=l;if(st.on)sync()}
   }
-  btn.addEventListener('click',()=>set(!card.classList.contains('dx-floating')))
-  back.addEventListener('click',()=>set(false))
-  hd.appendChild(btn)
-  set(false)
+  const render=()=>{
+    const open=st.on&&!st.min
+    if(st.on&&card.parentNode!==document.body)document.body.appendChild(card)
+    if(!st.on&&card.previousElementSibling!==note)note.parentNode.insertBefore(card,note.nextSibling)
+    card.classList.toggle('dxf-floating',st.on);card.classList.toggle('dxf-min',st.on&&st.min);note.classList.toggle('on',st.on)
+    // Hidden whenever the Day 1 page is not the one on screen (another page, signed out).
+    clearInterval(awayTimer);watchAway()
+    if(st.on)awayTimer=setInterval(watchAway,400)
+    if(st.on)place();else ['bottom','width','height'].forEach(p=>{card.style[p]=''})
+    if(titleEl)titleEl.textContent=st.on?'Diagnosis codes':fullTitle
+    minBtn.replaceChildren(svg(st.min?'max':'min'));labelBtn(minBtn,st.min?'Expand':'Minimize')
+    launch.classList.toggle('on',open);launch.setAttribute('aria-expanded',open?'true':'false')
+    launch.title=open?'Minimize the diagnosis codes':'Show the diagnosis codes'
+  }
+  const openPanel=()=>{st.on=true;st.min=false;render();sync();const s=document.getElementById('icdSearch');if(s&&!s.disabled)s.focus({preventScroll:true})}
+  const dock=()=>{st.on=false;st.min=false;render()}
+  floatBtn.addEventListener('click',openPanel)
+  // Kept from the header: render() swaps this button's icon, and a click on the
+  // detached icon would read as a click on the bar and open it straight back up.
+  minBtn.addEventListener('click',e=>{e.stopPropagation();st.min=!st.min;render()})
+  dockBtn.addEventListener('click',dock)
+  back.addEventListener('click',dock)
+  launch.addEventListener('click',()=>{if(!st.on||st.min)openPanel();else{st.min=true;render()}})
+  // The minimized bar opens again from anywhere on it.
+  hd.addEventListener('click',e=>{if(st.on&&st.min&&!e.target.closest('button'))openPanel()})
+  card.addEventListener('keydown',e=>{if(e.key==='Escape'&&st.on&&!st.min){st.min=true;render();launch.focus()}})
+
+  // Drag the top-left corner: the panel is pinned bottom right, so it grows up and to the left.
+  grip.addEventListener('pointerdown',e=>{
+    if(!st.on||st.min)return
+    e.preventDefault();grip.setPointerCapture(e.pointerId)
+    const r=card.getBoundingClientRect(),x0=e.clientX,y0=e.clientY,w0=r.width,h0=r.height
+    card.classList.add('dxf-resizing')
+    const move=ev=>{size={w:w0+(x0-ev.clientX),h:h0+(y0-ev.clientY)};place()}
+    const up=()=>{
+      grip.removeEventListener('pointermove',move);grip.removeEventListener('pointerup',up);grip.removeEventListener('pointercancel',up)
+      card.classList.remove('dxf-resizing')
+      const r2=card.getBoundingClientRect();size={w:Math.round(r2.width),h:Math.round(r2.height)};saveSize(size)
+    }
+    grip.addEventListener('pointermove',move);grip.addEventListener('pointerup',up);grip.addEventListener('pointercancel',up)
+  })
+  render();sync()
 }
 setupIcdFloat()
 
@@ -13365,7 +13492,8 @@ function buildPDF(name,opts){
     if(idx===0){
       const lang=gv('languageField')
       if(lang){
-        const segs=[{t:'Language: ',b:true},{t:lang,u:true}]
+        // Plain, like every other answer - no underline (16 Oct 2026). The Word copy reads the same segments.
+        const segs=[{t:'Language: ',b:true},{t:lang}]
         rec({k:'p',segs:segs})
         const lines=wrapSegs(segs,TW)
         needPage(Math.min(lines.length*14,pageUsable))
