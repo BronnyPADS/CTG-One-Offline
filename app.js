@@ -9933,11 +9933,11 @@ function buildCaseDischargeDoc(p){
   richPara([{t:'The care and treatment rendered to the '+cd.name+' has been medically necessary for the injuries sustained in the '+cd.incidentPhrase+' that occurred on '+(cd.doi||'—')+'.'}],12,6)
   heading('Reasonableness',12)
   richPara([{t:'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'}],12,8)
-  /* No footer on this PDF; the FCR's Word copy gives every report page one
-     (fcr-docx.js), worded as the daily notes word theirs. The FCR's page
-     number goes where the other reports have theirs. */
-  doc.ctgFooterLeft='Concussion Therapy Group / '+(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'Nicholas Grande, DC')+' / '+cd.name+' / '+(cd.dob||'—')
-  fcrPageNoAt(doc,PW-MR,20)
+  /* No footer on this PDF of its own; inside the FCR the FCR writes the whole
+     footer line where the other reports have theirs, and the Word copy gives
+     it a Word footer (fcr-docx.js), worded as the daily notes word theirs. */
+  doc.ctgFooterLeft=fcrFooterLeft(p)
+  fcrPageNoAt(doc,PW-MR,20,{full:true,left:ML})
   return doc
 }
 function loadPdfLib(cb){
@@ -9974,45 +9974,107 @@ function fcrSegmentDateKey(value){
   const t=Date.parse(s)
   return isNaN(t)?Number.MAX_SAFE_INTEGER:t
 }
-/* The FCR numbers its pages from the first to the last, every page counted and
-   marked, uploads included (asked for 19 Oct 2026: each report used to start
-   again at Page 1, and uploads had no number). While an FCR is compiled,
+/* The FCR numbers its pages from the first to the last, and every page carries
+   the reports' footer line, "Concussion Therapy Group / provider / patient /
+   DOB ... Page N of M" (asked for 19 Oct 2026: each report used to start again
+   at Page 1, uploads had no footer, and a test report's own "Name / DOB / Page
+   10 of 10" had the FCR's number written over it). While an FCR is compiled,
    window.ctgFcrPaging is set and its pieces leave their own numbers out: a
    report keeps its footer line and notes where its "Page X of Y" went
    (doc.ctgPageNoAt), a signed form drops its own (intake.js), and the billing
    statement's Page box counts from the page it starts on. buildFCRDoc then
-   writes "Page N of M" on every page; the Word copy has Word count them. */
+   writes the footer on every page - the number beside a report's own line,
+   the whole line on the rest. An uploaded file's pages are made a little
+   smaller first, so nothing of theirs is under the footer. The Word copy has
+   Word count the pages (fcr-docx.js). */
 const FCR_PAGE_ROOM='Page 888 of 888'   // the room a report's footer keeps for the FCR's number
-// Inside an FCR: notes where this report's page number goes and returns true.
-function fcrPageNoAt(doc,right,y,font){
+const FCR_FOOT_ROOM=36                  // points kept clear at the foot of an uploaded page
+/* Inside an FCR: notes where this report's page number goes and returns true.
+   more.full: the page has no footer line of its own - the FCR writes the
+   whole line, from more.left. */
+function fcrPageNoAt(doc,right,y,more){
   if(!window.ctgFcrPaging)return false
-  doc.ctgPageNoAt={right:right,y:y,size:8,font:font||'times'}   // points from the page's left and bottom
+  doc.ctgPageNoAt=Object.assign({right:right,y:y,size:8},more||{})   // points from the page's left and bottom
   return true
 }
-/* "Page N of M" on every page of the compiled FCR. at[i]: where that page's
-   report or form keeps its number; an uploaded page has it at the foot, half
-   an inch in from the right, the way up the page is read (a scan stored
-   sideways is turned to be read). */
-async function stampFCRPageNumbers(merged,at){
+// The footer line's left part, as the case discharge summary words it, for the pages without a line of their own.
+function fcrFooterLeft(p){
+  const cd=getCaseDischargeData(p)
+  return 'Concussion Therapy Group / '+(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'Nicholas Grande, DC')+' / '+cd.name+' / '+(cd.dob||'—')
+}
+// (u, v) from the bottom left of a page as it is read -> the page's own coordinates (a scan may be stored sideways).
+function fcrPagePoint(box,rot,u,v){
+  const x=rot===90?box.width-v:rot===180?box.width-u:rot===270?v:u
+  const y=rot===90?u:rot===180?box.height-v:rot===270?box.height-u:v
+  return [box.x+x,box.y+y]
+}
+/* An uploaded page made smaller - kept at the top, centred - so FCR_FOOT_ROOM
+   at its foot is clear for the footer; its links and form fields move with it.
+   Done before anything is drawn on the page: pdf-lib's own scaleContent would
+   shrink the footer drawn after it too. */
+function fcrShrinkUpload(merged,pg,box,rot){
   const PDFLib=window.PDFLib
-  const fonts={}
-  const fontFor=async name=>fonts[name]||(fonts[name]=await merged.embedFont(name==='helvetica'?PDFLib.StandardFonts.Helvetica:PDFLib.StandardFonts.TimesRoman))
+  const turned=rot===90||rot===270
+  const W=turned?box.height:box.width,H=turned?box.width:box.height
+  if(H<=FCR_FOOT_ROOM*3)return
+  const s=(H-FCR_FOOT_ROOM)/H
+  const a=fcrPagePoint(box,rot,0,0),b=fcrPagePoint(box,rot,(W-s*W)/2,FCR_FOOT_ROOM)   // the bottom left corner moves to b
+  const tx=b[0]-s*a[0],ty=b[1]-s*a[1]
+  const ctx=merged.context
+  pg.node.normalize()
+  const start=ctx.register(ctx.contentStream([PDFLib.pushGraphicsState(),PDFLib.concatTransformationMatrix(s,0,0,s,tx,ty)]))
+  const end=ctx.register(ctx.contentStream([PDFLib.popGraphicsState()]))
+  pg.node.wrapContentStreams(start,end)
+  const annots=pg.node.Annots()
+  if(!annots)return
+  for(let i=0;i<annots.size();i++){
+    try{
+      const an=annots.lookup(i,PDFLib.PDFDict)
+      ;['Rect','QuadPoints'].forEach(key=>{
+        const arr=an.lookup(PDFLib.PDFName.of(key))
+        if(!(arr instanceof PDFLib.PDFArray))return
+        const n=[]
+        for(let j=0;j<arr.size();j++)n.push(arr.lookup(j,PDFLib.PDFNumber).asNumber())
+        an.set(PDFLib.PDFName.of(key),ctx.obj(n.map((v,j)=>j%2?v*s+ty:v*s+tx)))
+      })
+    }catch(e){/* an annotation it cannot read stays where it was */}
+  }
+}
+/* The footer on every page of the compiled FCR. at[i]: where that page's
+   report or form keeps its number (with .full, the whole line goes there); no
+   at[i]: an uploaded page - made smaller, then the whole line at its foot,
+   half an inch in from each side, the way up the page is read. footLeft: the
+   line's left part. One look throughout: Times, 8pt. */
+async function stampFCRPageNumbers(merged,at,footLeft){
+  const PDFLib=window.PDFLib
+  const font=await merged.embedFont(PDFLib.StandardFonts.TimesRoman)
+  // Times writes Latin letters only: anything else in a name becomes '?' rather than costing the footer.
+  const drawable=t=>{try{font.encodeText(t);return t}catch(e){return String(t).replace(/[^\x20-\x7E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D]/g,'?')}}
+  const left0=drawable(footLeft||'')
   const pages=merged.getPages(),total=pages.length
   for(let i=0;i<total;i++){
     try{
-      const pg=pages[i],spot=at[i]||{size:8,font:'times'}
-      const font=await fontFor(spot.font)
-      const text='Page '+(i+1)+' of '+total
+      const pg=pages[i],spot=at[i],upload=!spot
       const box=pg.getCropBox()
       const rot=((pg.getRotation().angle%360)+360)%360
+      if(upload)fcrShrinkUpload(merged,pg,box,rot)
+      const size=(spot&&spot.size)||8
       const across=(rot===90||rot===270)?box.height:box.width
-      // (u, v): from the bottom left of the page as it is read
-      const u=Math.max(4,(spot.right!=null?spot.right:across-36)-font.widthOfTextAtSize(text,spot.size))
-      const v=spot.y!=null?spot.y:20
-      const x=rot===90?box.width-v:rot===180?box.width-u:rot===270?v:u
-      const y=rot===90?u:rot===180?box.height-v:rot===270?box.height-u:v
-      pg.drawText(text,{x:box.x+x,y:box.y+y,size:spot.size,font:font,color:PDFLib.rgb(0,0,0),rotate:PDFLib.degrees(rot)})
-    }catch(e){console.error('FCR page number failed on page '+(i+1),e)}
+      const right=spot&&spot.right!=null?spot.right:across-36
+      const v=spot&&spot.y!=null?spot.y:20
+      const put=(t,u)=>{const q=fcrPagePoint(box,rot,u,v);pg.drawText(t,{x:q[0],y:q[1],size:size,font:font,color:PDFLib.rgb(0,0,0),rotate:PDFLib.degrees(rot)})}
+      const text='Page '+(i+1)+' of '+total
+      const tw=font.widthOfTextAtSize(text,size)
+      put(text,Math.max(4,right-tw))
+      if(upload||spot.full){
+        const lx=spot&&spot.left!=null?spot.left:36
+        const maxW=right-tw-18-lx
+        let l=left0
+        while(l.length>12&&font.widthOfTextAtSize(l+'...',size)>maxW)l=l.slice(0,-1)
+        if(l!==left0)l+='...'
+        if(l)put(l,lx)
+      }
+    }catch(e){console.error('FCR footer failed on page '+(i+1),e)}
   }
 }
 /* One FCR at a time: the page numbering above is set for the whole build, and
@@ -10030,8 +10092,10 @@ async function compileFCR(p,opts){
   window.ctgFcrPaging={next:()=>merged.getPageCount()+1}
   try{
     const out=await compileFCRPages(p,merged)
-    if(!opts.word)await stampFCRPageNumbers(merged,out.pageNoAt)
+    const footLeft=fcrFooterLeft(p)
+    if(!opts.word)await stampFCRPageNumbers(merged,out.pageNoAt,footLeft)
     const bytes=await merged.save()
+    bytes.ctgFooterLeft=footLeft   // the Word copy's footer line on pages without their own
     bytes.ctgPageKinds=out.kinds
     bytes.ctgPageSources=out.sources
     bytes.ctgAceRecord=out.aceRecord
@@ -10049,7 +10113,7 @@ async function compileFCRPages(p,merged){
      still separate and exactly placed (read back from the PDF, table cells run
      together). */
   const sources=[]
-  // Where each page's FCR number goes (stampFCRPageNumbers); null: an upload's.
+  // Where each page's footer goes (stampFCRPageNumbers); null: an uploaded page.
   const pageNoAt=[]
   let aceRecord=null
   async function addBytes(bytes,kind,numAt){
@@ -10092,7 +10156,8 @@ async function compileFCRPages(p,merged){
         img=await merged.embedJpg(await bytesToJpegBytes(bytes,mime))
       }
       const pw=612,ph=792,page=merged.addPage([pw,ph])
-      kinds.push('picture');sources.push(null);pageNoAt.push(null)
+      // The picture keeps half an inch round it: the footer fits under it as it is.
+      kinds.push('picture');sources.push(null);pageNoAt.push({right:pw-36,y:20,size:8,full:true,left:36})
       const scale=Math.min((pw-72)/img.width,(ph-72)/img.height,1)
       const w=img.width*scale,h=img.height*scale
       page.drawImage(img,{x:(pw-w)/2,y:(ph-h)/2,width:w,height:h})
@@ -14034,7 +14099,7 @@ function buildBillingStatementDoc(data){
   /* Inside an FCR the Page box counts from the FCR page the statement starts
      on, the same number the FCR prints at the foot of the page. */
   const firstPageNo=window.ctgFcrPaging?window.ctgFcrPaging.next():1
-  fcrPageNoAt(doc,PW-MR,20,'helvetica')
+  fcrPageNoAt(doc,PW-MR,20,{full:true,left:ML})   // the FCR writes the whole footer line under the statement
   function f(style,size){doc.setFont('helvetica',style||'normal');doc.setFontSize(size||9)}
   function drawHeader(pageNum){
     doc.setTextColor(0,0,0);doc.setDrawColor(0,0,0);doc.setLineWidth(0.7)

@@ -115,18 +115,20 @@
       '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
   }
 
-  /* The footer of a page without the letterhead: its page number alone at the
-     right margin, in the reports' footer type. */
-  function numberFooterXml() {
+  /* The footer of a page without the letterhead (an upload, the Medical Bill):
+     the reports' footer line - left, its text; right, "Page X of Y" at the
+     margin (land: a sideways page) - in the reports' footer type. */
+  function numberFooterXml(left, land) {
     var rp = '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
-    var text = function (s) { return '<w:r>' + rp + '<w:t xml:space="preserve">' + s + '</w:t></w:r>' }
+    var text = function (s) { return '<w:r>' + rp + '<w:t xml:space="preserve">' + esc(s) + '</w:t></w:r>' }
     // A full field, every part sized, as the reports' footers have theirs (day1-docx.js).
     var field = function (instr) {
       return '<w:r>' + rp + '<w:fldChar w:fldCharType="begin"/></w:r><w:r>' + rp + '<w:instrText xml:space="preserve"> ' + instr + ' \\* MERGEFORMAT </w:instrText></w:r>' +
         '<w:r>' + rp + '<w:fldChar w:fldCharType="separate"/></w:r>' + text('1') + '<w:r>' + rp + '<w:fldChar w:fldCharType="end"/></w:r>'
     }
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="right"/></w:pPr>' +
-      text('Page ') + field('PAGE') + text(' of ') + field('NUMPAGES') + '</w:p></w:ftr>'
+    var tab = (land ? PAGE_H : PAGE_W) - 2 * MARGIN
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="' + tab + '"/></w:tabs><w:spacing w:before="0" w:after="0"/></w:pPr>' +
+      (left ? text(left) : '') + '<w:r>' + rp + '<w:tab/></w:r>' + text('Page ') + field('PAGE') + text(' of ') + field('NUMPAGES') + '</w:p></w:ftr>'
   }
 
   /* ------------------------------ text pages ------------------------------ */
@@ -662,9 +664,9 @@
        page). */
     /* Every other section names an empty header, or Word would carry the one
        before into it, and the footer with the page number alone. */
-    var hfPlain = '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFN"/>'
+    var hfPlain = function (land) { return '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="' + (land ? 'rIdFNL' : 'rIdFN') + '"/>' }
     var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (wide(pg.w, pg.h) ? 'L' : 'P') }
-    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfPlain) }
+    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfPlain(wide(pg.w, pg.h))) }
     var body = ''
     for (var i = 0; i < pages.length; i++) {
       var pgi = pages[i]
@@ -681,7 +683,7 @@
           (pi === paras.length - 1 ? endSection : '') + '</w:pPr>' + p.runs + '</w:p>'
       })
     }
-    var lastSect = pages.length ? sectFor(pages[pages.length - 1]) : sectPr(false, hfPlain)
+    var lastSect = pages.length ? sectFor(pages[pages.length - 1]) : sectPr(false, hfPlain(false))
     var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body +
       lastSect + '</w:body></w:document>'
     var R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
@@ -694,7 +696,9 @@
     }
     if (ace || L) addPart('styles', ace ? ace.styles : L.styles(), 'styles', 'rIdS')
     addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>', 'header', 'rIdHE')
-    addPart('footer2', numberFooterXml(), 'footer', 'rIdFN')
+    var footLeft = (pdfBytes && pdfBytes.ctgFooterLeft) || ''
+    addPart('footer2', numberFooterXml(footLeft, false), 'footer', 'rIdFN')
+    addPart('footer3', numberFooterXml(footLeft, true), 'footer', 'rIdFNL')
     if (ace) {
       addPart('header1', ace.header, 'header', 'rIdHA')
       addPart('footer1', ace.footer, 'footer', 'rIdFA')
