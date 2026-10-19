@@ -2678,7 +2678,9 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
     }
     notes.forEach((note,idx)=>drawOneNote(note,idx))
     const total=doc.internal.getNumberOfPages(),footerY=PH-20,footerLeft='Concussion Therapy Group / '+safe(providerRaw)+' / '+safe(patientName)+' / '+safe(dob)
-    for(let i=1;i<=total;i++){doc.setPage(i);sf('normal',8);tc(0,0,0);const pageText='Page '+i+' of '+total;let left=footerLeft;while(doc.getTextWidth(left)>TW-doc.getTextWidth(pageText)-12&&left.length>10)left=left.slice(0,-1);if(left!==footerLeft)left+='...';doc.text(left,ML,footerY);doc.text(pageText,PW-MR,footerY,{align:'right'})}
+    // Inside an FCR the FCR numbers the page, in the same place (buildFCRDoc).
+    const inFcr=fcrPageNoAt(doc,PW-MR,PH-footerY)
+    for(let i=1;i<=total;i++){doc.setPage(i);sf('normal',8);tc(0,0,0);const pageText=inFcr?FCR_PAGE_ROOM:'Page '+i+' of '+total;let left=footerLeft;while(doc.getTextWidth(left)>TW-doc.getTextWidth(pageText)-12&&left.length>10)left=left.slice(0,-1);if(left!==footerLeft)left+='...';doc.text(left,ML,footerY);if(!inFcr)doc.text(pageText,PW-MR,footerY,{align:'right'})}
     if(typeof onDoc==='function'){onDoc(doc);return}
     const fname='DailyNotes_'+safe(patientName).replace(/\s+/g,'_')+'_All.pdf'
     const url=URL.createObjectURL(doc.output('blob'))
@@ -5532,16 +5534,18 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
         while(out.length>12&&doc.getTextWidth(out+'...')>maxW){out=out.slice(0,-1)}
         return out+'...'
       }
+      // Inside an FCR the FCR numbers the page, in the same place (buildFCRDoc).
+      const inFcr=fcrPageNoAt(doc,PW-MR,PH-footerY)
       for(let i=1;i<=total;i++){
         doc.setPage(i)
         doc.setTextColor(0,0,0)
-        const pageText='Page '+i+' of '+total
+        const pageText=inFcr?FCR_PAGE_ROOM:'Page '+i+' of '+total
         setF('normal',8)
         const rightW=doc.getTextWidth(pageText)+18
         const leftText=fitFooterText(footerLeft,TW-rightW)
         doc.text(leftText,ML,footerY)
         setF('normal',8)
-        doc.text(pageText,PW-MR,footerY,{align:'right'})
+        if(!inFcr)doc.text(pageText,PW-MR,footerY,{align:'right'})
       }
     }
     function asRows(arr){return (arr||[]).map(r=>(r||[]).map(clean))}
@@ -9930,8 +9934,10 @@ function buildCaseDischargeDoc(p){
   heading('Reasonableness',12)
   richPara([{t:'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'}],12,8)
   /* No footer on this PDF; the FCR's Word copy gives every report page one
-     (fcr-docx.js), worded as the daily notes word theirs. */
+     (fcr-docx.js), worded as the daily notes word theirs. The FCR's page
+     number goes where the other reports have theirs. */
   doc.ctgFooterLeft='Concussion Therapy Group / '+(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'Nicholas Grande, DC')+' / '+cd.name+' / '+(cd.dob||'—')
+  fcrPageNoAt(doc,PW-MR,20)
   return doc
 }
 function loadPdfLib(cb){
@@ -9968,9 +9974,72 @@ function fcrSegmentDateKey(value){
   const t=Date.parse(s)
   return isNaN(t)?Number.MAX_SAFE_INTEGER:t
 }
-async function buildFCRDoc(p){
+/* The FCR numbers its pages from the first to the last, every page counted and
+   marked, uploads included (asked for 19 Oct 2026: each report used to start
+   again at Page 1, and uploads had no number). While an FCR is compiled,
+   window.ctgFcrPaging is set and its pieces leave their own numbers out: a
+   report keeps its footer line and notes where its "Page X of Y" went
+   (doc.ctgPageNoAt), a signed form drops its own (intake.js), and the billing
+   statement's Page box counts from the page it starts on. buildFCRDoc then
+   writes "Page N of M" on every page; the Word copy has Word count them. */
+const FCR_PAGE_ROOM='Page 888 of 888'   // the room a report's footer keeps for the FCR's number
+// Inside an FCR: notes where this report's page number goes and returns true.
+function fcrPageNoAt(doc,right,y,font){
+  if(!window.ctgFcrPaging)return false
+  doc.ctgPageNoAt={right:right,y:y,size:8,font:font||'times'}   // points from the page's left and bottom
+  return true
+}
+/* "Page N of M" on every page of the compiled FCR. at[i]: where that page's
+   report or form keeps its number; an uploaded page has it at the foot, half
+   an inch in from the right, the way up the page is read (a scan stored
+   sideways is turned to be read). */
+async function stampFCRPageNumbers(merged,at){
+  const PDFLib=window.PDFLib
+  const fonts={}
+  const fontFor=async name=>fonts[name]||(fonts[name]=await merged.embedFont(name==='helvetica'?PDFLib.StandardFonts.Helvetica:PDFLib.StandardFonts.TimesRoman))
+  const pages=merged.getPages(),total=pages.length
+  for(let i=0;i<total;i++){
+    try{
+      const pg=pages[i],spot=at[i]||{size:8,font:'times'}
+      const font=await fontFor(spot.font)
+      const text='Page '+(i+1)+' of '+total
+      const box=pg.getCropBox()
+      const rot=((pg.getRotation().angle%360)+360)%360
+      const across=(rot===90||rot===270)?box.height:box.width
+      // (u, v): from the bottom left of the page as it is read
+      const u=Math.max(4,(spot.right!=null?spot.right:across-36)-font.widthOfTextAtSize(text,spot.size))
+      const v=spot.y!=null?spot.y:20
+      const x=rot===90?box.width-v:rot===180?box.width-u:rot===270?v:u
+      const y=rot===90?u:rot===180?box.height-v:rot===270?box.height-u:v
+      pg.drawText(text,{x:box.x+x,y:box.y+y,size:spot.size,font:font,color:PDFLib.rgb(0,0,0),rotate:PDFLib.degrees(rot)})
+    }catch(e){console.error('FCR page number failed on page '+(i+1),e)}
+  }
+}
+/* One FCR at a time: the page numbering above is set for the whole build, and
+   the Day 1 step borrows the Day 1 form on screen. opts.word: for the Word
+   copy, which has Word number the pages (fcr-docx.js) - no numbers drawn. */
+let _fcrQueue=Promise.resolve()
+function buildFCRDoc(p,opts){
+  const run=_fcrQueue.then(()=>compileFCR(p,opts||{}))
+  _fcrQueue=run.catch(()=>{})
+  return run
+}
+async function compileFCR(p,opts){
   const PDFLib=window.PDFLib
   const merged=await PDFLib.PDFDocument.create()
+  window.ctgFcrPaging={next:()=>merged.getPageCount()+1}
+  try{
+    const out=await compileFCRPages(p,merged)
+    if(!opts.word)await stampFCRPageNumbers(merged,out.pageNoAt)
+    const bytes=await merged.save()
+    bytes.ctgPageKinds=out.kinds
+    bytes.ctgPageSources=out.sources
+    bytes.ctgAceRecord=out.aceRecord
+    return bytes
+  }finally{window.ctgFcrPaging=null}
+}
+async function compileFCRPages(p,merged){
+  const PDFLib=window.PDFLib
   /* What each page is, for the Word copy (fcr-docx.js): 'text' for a report
      the portal writes, 'ace' for the Day 1 report, 'picture' for anything
      uploaded or signed - those stay exactly as they are. */
@@ -9980,16 +10049,18 @@ async function buildFCRDoc(p){
      still separate and exactly placed (read back from the PDF, table cells run
      together). */
   const sources=[]
+  // Where each page's FCR number goes (stampFCRPageNumbers); null: an upload's.
+  const pageNoAt=[]
   let aceRecord=null
-  async function addBytes(bytes,kind){
-    try{const src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});const pages=await merged.copyPages(src,src.getPageIndices());pages.forEach(pg=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null)})}
+  async function addBytes(bytes,kind,numAt){
+    try{const src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});const pages=await merged.copyPages(src,src.getPageIndices());pages.forEach(pg=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null);pageNoAt.push(numAt||null)})}
     catch(e){console.error('FCR merge (pdf) failed',e)}
   }
   async function addJsPdf(doc,kind){
     if(!doc)return
     try{
       const before=kinds.length
-      await addBytes(doc.output('arraybuffer'),kind||'text')
+      await addBytes(doc.output('arraybuffer'),kind||'text',doc.ctgPageNoAt)
       for(let i=before;i<kinds.length;i++)sources[i]={doc:doc,page:i-before+1}
     }catch(e){console.error('FCR jsPDF convert failed',e)}
   }
@@ -10021,7 +10092,7 @@ async function buildFCRDoc(p){
         img=await merged.embedJpg(await bytesToJpegBytes(bytes,mime))
       }
       const pw=612,ph=792,page=merged.addPage([pw,ph])
-      kinds.push('picture');sources.push(null)
+      kinds.push('picture');sources.push(null);pageNoAt.push(null)
       const scale=Math.min((pw-72)/img.width,(ph-72)/img.height,1)
       const w=img.width*scale,h=img.height*scale
       page.drawImage(img,{x:(pw-w)/2,y:(ph-h)/2,width:w,height:h})
@@ -10067,8 +10138,10 @@ async function buildFCRDoc(p){
   //    Same list the Documents tab shows, so the packet matches the chart.
   for(const fd of patientFormDocuments(p)){
     try{
+      window.ctgFcrPaging.formPageNoAt=null
       const blob=await fd.gen(p,patientFormIntakeData(p))
-      if(blob)await addBytes(new Uint8Array(await blob.arrayBuffer()))
+      // The form left its own page number out and noted where it goes (intake.js).
+      if(blob)await addBytes(new Uint8Array(await blob.arrayBuffer()),'picture',window.ctgFcrPaging.formPageNoAt)
     }catch(e){console.error('FCR patient form failed —',fd.key,e)}
   }
   // 4. Billing Statement (offline copy: an uploaded billing file stands in for it)
@@ -10133,18 +10206,14 @@ async function buildFCRDoc(p){
   // 9. Final Examination Report (always last)
   if(p.finalExam&&p.finalExam.savedAt)await addJsPdf(buildInitialExamPDF(null,p.id,null,p.finalExam,{returnDoc:true}))
   if(merged.getPageCount()===0)throw new Error('No reports or documents are available to compile yet.')
-  const out=await merged.save()
-  out.ctgPageKinds=kinds
-  out.ctgPageSources=sources
-  out.ctgAceRecord=aceRecord
-  return out
+  return {kinds,sources,pageNoAt,aceRecord}
 }
-function _withFCR(pid,cb){
+function _withFCR(pid,cb,opts){
   const p=getPatient(pid)
   if(!p){showToast('Patient not found','err');return}
   showToast('Compiling FCR… this may take a moment')
   loadJsPDF(()=>loadPdfLib(async()=>{
-    try{const bytes=await buildFCRDoc(p);cb(bytes,p)}
+    try{const bytes=await buildFCRDoc(p,opts);cb(bytes,p)}
     catch(e){console.error(e);showToast('FCR error: '+e.message,'err')}
   }))
 }
@@ -10204,7 +10273,7 @@ function downloadFCRWord(pid){
       ctgAuditExport(p.id,'fcr_word')
       showToast('FCR Word file downloaded ✓')
     }catch(e){console.error(e);showToast('Word file error: '+e.message,'err')}
-  })
+  },{word:true})
 }
 
 const CHART_VIEW_WINDOW_MS=10*60*1000
@@ -13079,14 +13148,16 @@ function buildPDF(name,opts){
   function drawFooters(){
     const total=doc.internal.getNumberOfPages()
     const left=['Concussion Therapy Group',provider,real(name),real(dob)].filter(Boolean).join(' / ')
+    // Inside an FCR the FCR numbers the page, in the same place (buildFCRDoc).
+    const inFcr=fcrPageNoAt(doc,PW-MR,20)
     for(let i=1;i<=total;i++){
       doc.setPage(i);f('normal',8);col(0,0,0)
-      const pageText='Page '+i+' of '+total
+      const pageText=inFcr?FCR_PAGE_ROOM:'Page '+i+' of '+total
       const maxW=TW-doc.getTextWidth(pageText)-18
       let l=left
       while(doc.getTextWidth(l)>maxW&&l.length>12)l=l.slice(0,-1)
       tx(l===left?l:l+'...',ML,PH-20)
-      tx(pageText,PW-MR,PH-20,{align:'right'})
+      if(!inFcr)tx(pageText,PW-MR,PH-20,{align:'right'})
     }
   }
 
@@ -13931,6 +14002,10 @@ function buildBillingStatementDoc(data){
   const colX=k=>X[COLS.findIndex(c=>c.k===k)]
   const colW=k=>COLS.find(c=>c.k===k).w
   let y=0, page=0
+  /* Inside an FCR the Page box counts from the FCR page the statement starts
+     on, the same number the FCR prints at the foot of the page. */
+  const firstPageNo=window.ctgFcrPaging?window.ctgFcrPaging.next():1
+  fcrPageNoAt(doc,PW-MR,20,'helvetica')
   function f(style,size){doc.setFont('helvetica',style||'normal');doc.setFontSize(size||9)}
   function drawHeader(pageNum){
     doc.setTextColor(0,0,0);doc.setDrawColor(0,0,0);doc.setLineWidth(0.7)
@@ -13946,7 +14021,7 @@ function buildBillingStatementDoc(data){
     doc.text('Date Of Accident: '+(data.patient.doa||''),ML,ly); ly+=12
     const w3=[110,80,62], RX=PW-MR-(w3[0]+w3[1]+w3[2])
     let by=48, rh=20
-    const cells=[['Statement Date',data.statement.date||''],['Account No',data.statement.accountNo||''],['Page',String(pageNum)]]
+    const cells=[['Statement Date',data.statement.date||''],['Account No',data.statement.accountNo||''],['Page',String(firstPageNo+pageNum-1)]]
     let bx=RX
     cells.forEach((c,i)=>{
       doc.setFillColor(241,241,241); doc.rect(bx,by,w3[i],rh,'FD')

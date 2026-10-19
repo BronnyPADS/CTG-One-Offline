@@ -1098,6 +1098,8 @@ function pdfLetterhead(leftX, rightX, y) {
   return c
 }
 function pdfFooterPageNum(rightX, pageNo, total) {
+  // Inside a Final Case Report the FCR numbers every page itself, here (buildFCRDoc in app.js).
+  if (window.ctgFcrPaging) { window.ctgFcrPaging.formPageNoAt = { right: rightX, y: 40, size: 9, font: 'times' }; return '' }
   return pdfTextRightSerif(rightX, 40, 'Page ' + pageNo + ' of ' + total, PDF_F.times, 9)
 }
 // Signature-and-rule block shared by all three documents: drawn image / typed

@@ -15,6 +15,9 @@
  *    tables, its letterhead header and "Page X of Y" footer, in its own section.
  *  - an uploaded page is a picture of that page (pdf.js draws it at 150 dpi):
  *    nobody edits a scan, and a signature has to stay exactly as signed.
+ *  - every page says "Page X of Y", numbered from the first page of the file
+ *    to the last (19 Oct 2026): Word fields in each section's footer, so the
+ *    numbers stay right when an edit moves the pages.
  *
  * The practice asked for editable text on 9 Oct 2026, after first choosing
  * pictures of every page. Sideways pictures get sideways Word pages; other
@@ -32,6 +35,11 @@
   var MAX_SIDE = 2400           // pixels; caps an oversized uploaded page
   var PAGE_W = 12240, PAGE_H = 15840, MARGIN = 360   // twips: Letter, 0.25in margins
   var M_PT = MARGIN / 20
+  /* A page without the letterhead (an upload, the Medical Bill) keeps a little
+     more room at the bottom for its page number, and a picture leaves room
+     under it for the line it stands on. */
+  var NUM_BOTTOM = 600, NUM_FOOTER = 320, PIC_SLACK = 80   // twips
+  var NUM_BOX = { top: M_PT, bottom: NUM_BOTTOM / 20 }      // points: the text area of such a page
   var EMU_PER_TWIP = 635
   var NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
     'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
@@ -84,11 +92,11 @@
   // hf: header/footer references for this section ('' when the file has none).
   function sectPr(land, hf) {
     return '<w:sectPr>' + (hf || '') + '<w:pgSz w:w="' + (land ? PAGE_H : PAGE_W) + '" w:h="' + (land ? PAGE_W : PAGE_H) + '"' + (land ? ' w:orient="landscape"' : '') + '/>' +
-      '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + MARGIN + '" w:left="' + MARGIN + '" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>'
+      '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + NUM_BOTTOM + '" w:left="' + MARGIN + '" w:header="0" w:footer="' + NUM_FOOTER + '" w:gutter="0"/></w:sectPr>'
   }
   function fit(w, h) {
     var land = wide(w, h)
-    var boxW = (land ? PAGE_H : PAGE_W) - 2 * MARGIN, boxH = (land ? PAGE_W : PAGE_H) - 2 * MARGIN
+    var boxW = (land ? PAGE_H : PAGE_W) - 2 * MARGIN, boxH = (land ? PAGE_W : PAGE_H) - MARGIN - NUM_BOTTOM - PIC_SLACK
     var tw_ = boxW, th = boxW * h / w
     if (th > boxH) { th = boxH; tw_ = boxH * w / h }
     return { cx: Math.round(tw_ * EMU_PER_TWIP), cy: Math.round(th * EMU_PER_TWIP) }
@@ -105,6 +113,20 @@
       '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + size.cx + '" cy="' + size.cy + '"/></a:xfrm>' +
       '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
       '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
+  }
+
+  /* The footer of a page without the letterhead: its page number alone at the
+     right margin, in the reports' footer type. */
+  function numberFooterXml() {
+    var rp = '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
+    var text = function (s) { return '<w:r>' + rp + '<w:t xml:space="preserve">' + s + '</w:t></w:r>' }
+    // A full field, every part sized, as the reports' footers have theirs (day1-docx.js).
+    var field = function (instr) {
+      return '<w:r>' + rp + '<w:fldChar w:fldCharType="begin"/></w:r><w:r>' + rp + '<w:instrText xml:space="preserve"> ' + instr + ' \\* MERGEFORMAT </w:instrText></w:r>' +
+        '<w:r>' + rp + '<w:fldChar w:fldCharType="separate"/></w:r>' + text('1') + '<w:r>' + rp + '<w:fldChar w:fldCharType="end"/></w:r>'
+    }
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="right"/></w:pPr>' +
+      text('Page ') + field('PAGE') + text(' of ') + field('NUMPAGES') + '</w:p></w:ftr>'
   }
 
   /* ------------------------------ text pages ------------------------------ */
@@ -489,12 +511,14 @@
      draw the practice letterhead at the top of every page and a footer line,
      "Concussion Therapy Group / provider / patient / DOB ... Page X of Y", at
      the bottom. In the Word copy both move into a real Word header and footer -
-     the Day 1's - one section per report with its own page count, so editing a
-     page cannot carry them along (16 Oct 2026). The Medical Bill has no such
-     letterhead and stays as it is. */
+     the Day 1's - one section per report, so editing a page cannot carry them
+     along (16 Oct 2026). The Medical Bill has no such letterhead and stays as
+     it is. */
   var LETTERHEAD = /^(CONCUSSION THERAPY GROUP|2411 Crofton Lane, Suite \w+|Crofton, MD, 21114-1336|Phone: 410-451-9870|Fax: 410-451-9872)$/
   var REPORT_TOP = 84, REPORT_BOTTOM = 36   // points: the text area under the header, above the footer
-  function splitReportPage(jp) {
+  /* at: where the report would print its page number (doc.ctgPageNoAt) - a
+     report inside the FCR leaves the number out (buildFCRDoc in app.js). */
+  function splitReportPage(jp, at) {
     var head = [], body = [], pageNo = null
     jp.items.forEach(function (it) {
       var s = it.s.trim(), fromTop = jp.h - it.y
@@ -503,8 +527,9 @@
       else body.push(it)
     })
     // The footer line is everything on the page number's baseline.
+    var footY = pageNo ? pageNo.y : at ? at.y : null
     var foot = []
-    if (pageNo) body = body.filter(function (it) { var on = Math.abs(it.y - pageNo.y) < 1.5; if (on) foot.push(it); return !on })
+    if (footY !== null) body = body.filter(function (it) { var on = Math.abs(it.y - footY) < 1.5; if (on) foot.push(it); return !on })
     foot.sort(function (a, b) { return a.x - b.x })
     return { head: head, body: body, foot: foot, pageNo: pageNo }
   }
@@ -515,14 +540,15 @@
     if (doc.__ctgReport !== undefined) return doc.__ctgReport
     var info = null
     try {
-      var sp = splitReportPage(readJsPdfPage(doc, 1))
+      var at = doc.ctgPageNoAt
+      var sp = splitReportPage(readJsPdfPage(doc, 1), at)
       var name = sp.head.filter(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' })[0]
       if (name) {
         var right = sp.head.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, name.x + name.w)
         info = {
           left: name.x, right: right,
           footLeft: sp.foot.length ? sp.foot[0].x : name.x,
-          footRight: sp.pageNo ? sp.pageNo.x + sp.pageNo.w : right,
+          footRight: sp.pageNo ? sp.pageNo.x + sp.pageNo.w : at ? at.right : right,
           footText: sp.foot.length ? sp.foot.map(function (it) { return it.s }).join(' ').trim() : String(doc.ctgFooterLeft || '')
         }
       }
@@ -540,7 +566,7 @@
     var sources = (pdfBytes && pdfBytes.ctgPageSources) || []
     var aceRecord = pdfBytes && pdfBytes.ctgAceRecord
     var ace = (aceRecord && window.ctgDay1Docx && window.ctgDay1Docx.parts)
-      ? window.ctgDay1Docx.parts(aceRecord, { inSection: true, headerId: 'rIdHA', footerId: 'rIdFA' })
+      ? window.ctgDay1Docx.parts(aceRecord, { headerId: 'rIdHA', footerId: 'rIdFA' })
       : null
     var aceDone = false
     /* A Word section for each report that carries the letterhead, with its
@@ -557,13 +583,14 @@
       for (var i = 0; i < reportSecs.length; i++) if (reportSecs[i].doc === doc) return reportSecs[i]
       // The letterhead's table cells keep 5pt (100 twips) inside their edges: set it out by that much.
       var hId = partFor(hdrParts, 'rIdHR', L.header({ ind: tw(rep.left - M_PT) - 100, width: tw(rep.right - rep.left) + 200 }))
-      var fId = partFor(ftrParts, 'rIdFR', L.footer({}, 'SECTIONPAGES', { ind: tw(rep.footLeft - M_PT), tab: tw(rep.footRight - M_PT), text: rep.footText }))
+      // "Page X of Y" counts the whole file: no section starts again at 1.
+      var fId = partFor(ftrParts, 'rIdFR', L.footer({}, 'NUMPAGES', { ind: tw(rep.footLeft - M_PT), tab: tw(rep.footRight - M_PT), text: rep.footText }))
       var sec = {
         doc: doc, key: 'R' + reportSecs.length,
         sect: '<w:sectPr><w:headerReference w:type="default" r:id="' + hId + '"/><w:footerReference w:type="default" r:id="' + fId + '"/>' +
           '<w:pgSz w:w="' + PAGE_W + '" w:h="' + PAGE_H + '"/>' +
           '<w:pgMar w:top="' + tw(REPORT_TOP) + '" w:right="' + MARGIN + '" w:bottom="' + tw(REPORT_BOTTOM) + '" w:left="' + MARGIN + '" w:header="600" w:footer="400" w:gutter="0"/>' +
-          '<w:pgNumType w:start="1"/></w:sectPr>'
+          '</w:sectPr>'
       }
       reportSecs.push(sec)
       return sec
@@ -590,9 +617,9 @@
             var rep = L ? reportOf(src.doc) : null
             var jp = readJsPdfPage(src.doc, src.page)
             // A report's letterhead and footer line go to its Word header and footer, not the page.
-            if (rep) jp.items = splitReportPage(jp).body
+            if (rep) jp.items = splitReportPage(jp, src.doc.ctgPageNoAt).body
             if (jp.items.length || rep) {
-              var jparas = textPageParagraphs(jp, rep ? { top: REPORT_TOP, bottom: REPORT_BOTTOM } : null)
+              var jparas = textPageParagraphs(jp, rep ? { top: REPORT_TOP, bottom: REPORT_BOTTOM } : NUM_BOX)
               var bg = await drawGraphics(jp.gfx, jp.w, jp.h)
               if (bg) {
                 zip.file('word/media/lines-' + n + '.png', bg, { compression: 'STORE' })
@@ -606,7 +633,7 @@
         if (!done && (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace')) {
           try {
             var tp = await readTextPage(pdf, n)
-            if (tp.items.length) { pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp) }); done = true }
+            if (tp.items.length) { pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, NUM_BOX) }); done = true }
           } catch (e) { console.error('FCR Word: page ' + n + ' text could not be read, using its picture', e) }
         }
         if (!done) {
@@ -633,11 +660,11 @@
        breakBefore: a new page in the same section. The last page of a section
        carries that section's end (the section break itself starts the next
        page). */
-    var anyHF = !!ace || reportSecs.length > 0
-    // Every other section names an empty header and footer, or Word would carry the one before into it.
-    var hfEmpty = anyHF ? '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFE"/>' : ''
+    /* Every other section names an empty header, or Word would carry the one
+       before into it, and the footer with the page number alone. */
+    var hfPlain = '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFN"/>'
     var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (wide(pg.w, pg.h) ? 'L' : 'P') }
-    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfEmpty) }
+    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfPlain) }
     var body = ''
     for (var i = 0; i < pages.length; i++) {
       var pgi = pages[i]
@@ -654,7 +681,7 @@
           (pi === paras.length - 1 ? endSection : '') + '</w:pPr>' + p.runs + '</w:p>'
       })
     }
-    var lastSect = pages.length ? sectFor(pages[pages.length - 1]) : sectPr(false, hfEmpty)
+    var lastSect = pages.length ? sectFor(pages[pages.length - 1]) : sectPr(false, hfPlain)
     var doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body +
       lastSect + '</w:body></w:document>'
     var R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/'
@@ -665,11 +692,9 @@
       overrides += '<Override PartName="/word/' + name + '.xml" ContentType="' + CT + kind + '+xml"/>'
       if (id) rels += '<Relationship Id="' + id + '" Type="' + R + kind + '" Target="' + name + '.xml"/>'
     }
-    if (anyHF) {
-      addPart('styles', ace ? ace.styles : L.styles(), 'styles', 'rIdS')
-      addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>', 'header', 'rIdHE')
-      addPart('footer2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p/></w:ftr>', 'footer', 'rIdFE')
-    }
+    if (ace || L) addPart('styles', ace ? ace.styles : L.styles(), 'styles', 'rIdS')
+    addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>', 'header', 'rIdHE')
+    addPart('footer2', numberFooterXml(), 'footer', 'rIdFN')
     if (ace) {
       addPart('header1', ace.header, 'header', 'rIdHA')
       addPart('footer1', ace.footer, 'footer', 'rIdFA')

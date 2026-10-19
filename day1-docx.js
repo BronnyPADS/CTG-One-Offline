@@ -123,9 +123,10 @@
       table([1, 1], [[left, right]], o) +
       (geo ? '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>' : para('', { after: 0 })) + '</w:hdr>'
   }
-  /* total: NUMPAGES for the Day 1 file on its own; SECTIONPAGES when the
-     report is one section of a longer file (the FCR as Word). geo: {ind, tab}
-     in twips and text, the footer line as another report's PDF wrote it. */
+  /* total: the field for "of Y" - NUMPAGES, the whole file's pages, for the
+     Day 1 on its own and in the FCR as Word, which numbers its pages from
+     first to last. geo: {ind, tab} in twips and text, the footer line as
+     another report's PDF wrote it. */
   function footerXml(meta, total, geo) {
     var left = geo && geo.text != null ? geo.text : ['Concussion Therapy Group', meta.provider, meta.name, meta.dob].filter(Boolean).join(' / ')
     var f = { sz: 8 }
@@ -158,8 +159,10 @@
 
   /* The report as Word pieces, for this file and for the FCR's Word copy
      (fcr-docx.js), which places it as one section among the other reports.
-     opts.inSection: page numbers count within the section ("Page 2 of 6"),
-     starting at 1. opts.headerId / footerId: relationship ids to use. */
+     Its page numbers carry on from the pages before it: until 19 Oct 2026 an
+     FCR section started again at 1 ("Page 2 of 6", SECTIONPAGES - which
+     Google Docs cannot count and showed as "of 1"). opts.headerId / footerId:
+     relationship ids to use. */
   function parts(record, opts) {
     opts = opts || {}
     var meta = record.meta || {}
@@ -167,11 +170,10 @@
     var body = patientBoxXml(meta) + record.map(function (b) { return blockXml(b, links) }).join('')
     var sect = '<w:headerReference w:type="default" r:id="' + (opts.headerId || 'rIdH') + '"/>' +
       '<w:footerReference w:type="default" r:id="' + (opts.footerId || 'rIdF') + '"/>' +
-      '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="2100" w:right="960" w:bottom="1000" w:left="960" w:header="600" w:footer="400" w:gutter="0"/>' +
-      (opts.inSection ? '<w:pgNumType w:start="1"/>' : '')
+      '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="2100" w:right="960" w:bottom="1000" w:left="960" w:header="600" w:footer="400" w:gutter="0"/>'
     return {
       body: body, sectPrInner: sect, links: links, styles: stylesXml(),
-      header: headerXml(), footer: footerXml(meta, opts.inSection ? 'SECTIONPAGES' : 'NUMPAGES')
+      header: headerXml(), footer: footerXml(meta, 'NUMPAGES')
     }
   }
 
