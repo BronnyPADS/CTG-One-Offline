@@ -7427,7 +7427,7 @@ function pregnancyReportAnswer(ans){
   if(ov&&ov.status==='pregnant'){
     const st=pregnancyStatus(p)
     if(!st)return ''
-    return st.days!=null?('Yes — '+pregnancyFormat(st.days)):'Yes'
+    return st.days!=null?answerWithNote('Yes',pregnancyFormat(st.days)):'Yes'
   }
   return /^Yes/.test(ans)?ans:''
 }
@@ -13060,6 +13060,21 @@ function pron(gender){
   if(gender==='Female')return{subj:'she',poss:'her',obj:'her'}
   return{subj:'they',poss:'their',obj:'them'}
 }
+/* How the Day 1 report writes an answer (the practice's rules, 19 Oct 2026):
+   every answer starts with a capital letter, an answer that reads as a
+   sentence ends with a full stop, and a Yes or No with more to say takes a
+   comma before the note and a full stop after it - "Yes, decreased." The
+   note keeps the capitals it was typed with. */
+function reportCap(v){
+  const s=String(v==null?'':v).trim()
+  if(/^(https?:\/\/|www\.)/i.test(s))return s   // a link is written exactly as it is
+  return s.charAt(0).toUpperCase()+s.slice(1)
+}
+function reportSentence(v){const s=reportCap(v);return !s||/[.!?]$/.test(s)?s:s+'.'}
+function answerWithNote(ans,note){
+  const n=String(note==null?'':note).trim()
+  return n?reportSentence(ans+', '+n):ans
+}
 function collectAll(containerId,items){
   const out=[]
   document.querySelectorAll('#'+containerId+' .yn-row').forEach((row,i)=>{
@@ -13073,7 +13088,7 @@ function collectAll(containerId,items){
     const cmt=row.querySelector('.yn-comment-input')?.value?.trim()
     // Printed with the answer it was written under; the pregnancy follow-up is Yes-only.
     const structured=!!row.querySelector('.yn-comment-structured')
-    if(cmt&&(ans==='Yes'||(ans==='No'&&!structured)))ans+=' — '+cmt
+    if(cmt&&(ans==='Yes'||(ans==='No'&&!structured)))ans=answerWithNote(ans,cmt)
     out.push([item,ans])
   })
   return out
@@ -13273,10 +13288,15 @@ function buildPDF(name,opts){
   /* An unanswered field is left OUT of the report rather than printed with a
      dash. A line of questions answered " - " is noise in a document that goes
      to a law firm, and it reads as though the clinician skipped things rather
-     than that the question did not apply. */
-  function kvLine(label,value){
+     than that the question did not apply. So is a count of none: an answer of
+     0 leaves the question out too (19 Oct 2026), except o.zero - a score.
+     o.sentence: the answer reads as a sentence and ends with a full stop. */
+  function kvLine(label,value,o){
     if(isUnanswered(value)) return
-    const segs=[{t:label+': ',b:true},{t:String(value).trim()}]
+    let v=String(value).trim()
+    if(v==='0'&&!(o&&o.zero))return
+    v=(o&&o.sentence)?reportSentence(v):reportCap(v)
+    const segs=[{t:label+': ',b:true},{t:v}]
     rec({k:'p',segs:segs})
     const lines=wrapSegs(segs,TW)
     needPage(Math.min(lines.length*14,pageUsable))
@@ -13542,12 +13562,14 @@ function buildPDF(name,opts){
   }
   plainParas=false
   H1('HISTORY OF PRESENT ILLNESS (HPI)')
-  kvLine('Chief Complaint',gv('immediateSyms'))
+  // Answers that read as a sentence end with a full stop (19 Oct 2026).
+  const SENTENCE={sentence:true}
+  kvLine('Chief Complaint',gv('immediateSyms'),SENTENCE)
   collectAll('hpiList',HPI_ITEMS).filter(([,ans])=>ans!=='N/A').forEach(([item,ans])=>kvLine(item,ans))
-  kvLine('Activity of Daily Living (ADL) Limitations',go('adlLimit'))
-  kvLine('Vision Problems',(window.ctgXq?ctgXq('xq_visionProblems'):''))
-  kvLine('Employment Status',go('employStatus'))
-  kvLine('Patient Goals',gv('ptGoals'))
+  kvLine('Activity of Daily Living (ADL) Limitations',go('adlLimit'),SENTENCE)
+  kvLine('Vision Problems',(window.ctgXq?ctgXq('xq_visionProblems'):''),SENTENCE)
+  kvLine('Employment Status',go('employStatus'),SENTENCE)
+  kvLine('Patient Goals',gv('ptGoals'),SENTENCE)
   kvLine('Risk Factors for Injury Severity and Prolonged Recovery',risks.length>0?risks.join(', '):'None reported')
 
   H1('PAST MEDICAL HISTORY (PMH)')
@@ -13594,25 +13616,25 @@ function buildPDF(name,opts){
   kvLine('Residual Effects of Concussion',(window.ctgXq?ctgXq('xq_residualConc'):''))
   kvLine('Previous Concussions Resulting in',(window.ctgXq?ctgXq('xq_prevConcResult'):''))
   kvLine('Loss of Consciousness (previous concussions)',(window.ctgXq?ctgXq('xq_priorLoc'):''))
-  kvLine('Other Significant Medical History',(window.ctgXq?ctgXq('xq_otherMedHx'):''))
+  kvLine('Other Significant Medical History',(window.ctgXq?ctgXq('xq_otherMedHx'):''),SENTENCE)
 
   H1('SOCIAL HISTORY')
-  kvLine('Job Duties',gv('jobDuties'))
-  kvLine('Employment Status',go('employStatus'))
-  kvLine('Social Habits',(window.ctgXq?ctgXq('xq_socialHabits'):'')||'None')
+  kvLine('Job Duties',gv('jobDuties'),SENTENCE)
+  kvLine('Employment Status',go('employStatus'),SENTENCE)
+  kvLine('Social Habits',(window.ctgXq?ctgXq('xq_socialHabits'):'')||'None',SENTENCE)
   kvLine('Diet and Nutrition',go('diet'))
   kvLine('Exercise Habits',go('exercise'))
 
   H1('FAMILY HISTORY')
-  kvLine('Family History',(window.ctgXq?ctgXq('xq_familyHistory'):'')||'non-contributory')
+  kvLine('Family History',(window.ctgXq?ctgXq('xq_familyHistory'):'')||'non-contributory',SENTENCE)
 
   // No stationary-object collisions: the heading leaves SOC out too.
   H1('SUMMARY OF MOTOR VEHICLE COLLISIONS (MVC), '+(go('totalSOC')!=='0'?'STATIONARY OBJECT COLLISIONS (SOC), ':'')+'DIRECT HEAD IMPACTS (DHI), INDIRECT HEAD IMPACTS (IHI)')
   H2('MOTOR VEHICLE COLLISIONS:')
   H2('COLLISIONS TO UNIT 1',true,true)
+  // A count of 0 leaves its line out (kvLine): no "Total SOCs: 0".
   kvLine('Total MVCs',go('totalMVC'))
-  // No stationary-object collisions: leave the line out rather than print "Total SOCs: 0".
-  if(go('totalSOC')!=='0')kvLine('Total SOCs',go('totalSOC'))
+  kvLine('Total SOCs',go('totalSOC'))
   {const mvcN=parseInt(go('totalMVC')),socN=parseInt(go('totalSOC'));kvLine('Total Collisions to Unit 1',(isNaN(mvcN)||isNaN(socN))?(go('totalMVC')+' / '+go('totalSOC')):String(mvcN+socN))}
   H2('HEAD IMPACTS:',true,true)
   kvLine('Head Impacts',[(window.ctgXq?ctgXq('xq_headImpacts'):''),(window.ctgXqText?ctgXqText('xq_headImpactsText'):'')].filter(Boolean).join('. '))
@@ -13627,21 +13649,26 @@ function buildPDF(name,opts){
   kvLine('Date of Injury',doi)
   kvLine('Reporter',reporterVal)
   kvLine('1. Injury Description (see above Mechanism of Injury)',injType)
-  kvLine('1a. Is there evidence of a forcible blow to the head (direct or indirect)?',(()=>{const v=go('ace_blow'),c=(document.getElementById('ace_blow_comment')?.value||'').trim();return v==='Yes'&&c?v+', '+c:v})())
+  kvLine('1a. Is there evidence of a forcible blow to the head (direct or indirect)?',(()=>{const v=go('ace_blow'),c=(document.getElementById('ace_blow_comment')?.value||'').trim();return v==='Yes'&&c?answerWithNote(v,c):v})())
   kvLine('1b. Is there evidence of intracranial injury or skull fracture?',go('ace_icf'))
   kvLine('1c. Location of Impact',gv('ace_loc'))
   kvLine('Cause: MVC',go('assessCollisionType'))
   {
-    let retroTxt=go('ace_retro')
-    if(gv('ace_retro_dur')!=='—')retroTxt+=' — Duration: '+gv('ace_retro_dur')
-    kvLine('1. Amnesia Before (Retrograde)',retroTxt)
-    let anteroTxt=go('ace_antero')
-    if(gv('ace_antero_dur')!=='—')anteroTxt+=' — Duration: '+gv('ace_antero_dur')
-    kvLine('2. Amnesia After (Anterograde)',anteroTxt)
+    // "Yes, duration: 5 minutes." - a duration is the note on its Yes or No.
+    const withDur=(ans,dur)=>dur==='—'?ans:ans==='—'?'Duration: '+dur:answerWithNote(ans,'duration: '+dur)
+    kvLine('1. Amnesia Before (Retrograde)',withDur(go('ace_retro'),gv('ace_retro_dur')))
+    kvLine('2. Amnesia After (Anterograde)',withDur(go('ace_antero'),gv('ace_antero_dur')))
   }
-  kvLine('3. Loss of Consciousness',(()=>{const v=go('ace_loc2'),d=(window.ctgXqText?ctgXqText('ace_loc_dur'):'');return d&&v!=='—'?v+' — Duration: '+d:v})())
+  kvLine('3. Loss of Consciousness',(()=>{
+    // The choices read "Yes — brief (seconds)": printed "Yes, brief (seconds)." like any Yes with a note.
+    const v=go('ace_loc2'),d=(window.ctgXqText?ctgXqText('ace_loc_dur'):'')
+    if(v==='—')return v
+    const parts=v.split(' — ')
+    const notes=[parts.slice(1).join(' — '),d?'duration: '+d:''].filter(Boolean).join(', ')
+    return answerWithNote(parts[0],notes)
+  })())
   kvLine('EARLY SIGNS',earlySigns.length>0?earlySigns.join(', '):'None observed')
-  {let seizTxt=go('ace_seiz');if(gv('ace_seiz_detail')!=='—')seizTxt+=' — '+gv('ace_seiz_detail');kvLine('Seizures observed?',seizTxt)}
+  {const seiz=go('ace_seiz'),sd=gv('ace_seiz_detail');kvLine('Seizures observed?',sd!=='—'&&seiz!=='—'?answerWithNote(seiz,sd):sd!=='—'?sd:seiz)}
 
   H2('B. Symptom Check List*',false,true)
   para([{t:'Since the injury, has the person experienced any of these symptoms any more than usual today or in the past day? Indicate presence of each symptom (0=No, 1=Yes). '},{t:'*Lovell & Collins, 1998 JHTR',b:true,i:true}])
@@ -13649,15 +13676,17 @@ function buildPDF(name,opts){
   symptomTable('COGNITIVE (4)',ACE_COGNITIVE,'aceCognitive')
   symptomTable('SLEEP (4)',ACE_SLEEP,'aceSleep')
   symptomTable('EMOTIONAL (4)',ACE_EMOTIONAL,'aceEmotional')
-  kvLine('Total Symptom Score (0-22)',aceScore)
+  kvLine('Total Symptom Score (0-22)',aceScore,{zero:true})   // a test result: 0 still prints
   kvLine('Overall Rating (Normal 0 1 2 3 4 5 6 Different)',go('ace_rating'))
   kvLine('Exertion — Physical Activity',go('ace_physact'))
   kvLine('Exertion — Cognitive Activity',go('ace_cogact'))
 
   H2('C. Risk Factors for Protracted Recovery (Yes or No)',false,true)
-  // An answer with its optional comment (day1-extras.js adds <id>_cmt), as "Yes — comment".
-  const rc=(id,v)=>{const s=document.getElementById(id),c=document.getElementById(id+'_cmt');const t=c?c.value.trim():'';return t&&s&&s.value?v+' — '+t:v}
-  quadTable([
+  // An answer with its optional comment (day1-extras.js adds <id>_cmt), as "Yes, comment."
+  const rc=(id,v)=>{const s=document.getElementById(id),c=document.getElementById(id+'_cmt');const t=c?c.value.trim():'';v=reportCap(v);return t&&s&&s.value?answerWithNote(v,t):v}
+  // A question answered 0 is left out of the table, as from the lines above.
+  const noZero=cols=>cols.map(c=>Object.assign({},c,{rows:c.rows.filter(r=>String(r[1]).trim()!=='0')}))
+  quadTable(noZero([
     {header:'Concussion History? '+rc('rpr_priorConc',go('rpr_priorConc')),rows:[
       ['Previous #',rc('rpr_concNum',go('rpr_concNum'))],
       ['Longest symptom duration',rc('rpr_concDur',go('rpr_concDur'))],
@@ -13678,8 +13707,8 @@ function buildPDF(name,opts){
       ['Sleep disorder',rc('rpr_sleepDisorder',go('rpr_sleepDisorder'))],
       ['Other psychiatric disorder',rc('rpr_otherPsychYN',gv('rpr_otherPsychDx')!=='—'?gv('rpr_otherPsychDx'):go('rpr_otherPsychYN'))]
     ]}
-  ])
-  kvLine('List other comorbid medical disorders or medication usage',gv('rpr_comorbid')!=='—'?gv('rpr_comorbid'):'None')
+  ]))
+  kvLine('List other comorbid medical disorders or medication usage',gv('rpr_comorbid')!=='—'?gv('rpr_comorbid'):'None',SENTENCE)
 
   H2('D. RED FLAGS for acute emergency management',false,true)
   redFlagBox()
