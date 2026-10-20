@@ -56,7 +56,9 @@
 
   /* ------------------------------ pictures ------------------------------ */
 
-  async function renderPage(pdf, n) {
+  // coverFootPt: paint white over the bottom this-many points, to hide an
+  // uploaded report's own footer so the FCR's own footer is the only one.
+  async function renderPage(pdf, n, coverFootPt) {
     var page = await pdf.getPage(n)
     var natural = page.getViewport({ scale: 1 })
     var scale = Math.min(DPI / 72, MAX_SIDE / Math.max(natural.width, natural.height))
@@ -66,6 +68,7 @@
     var cx = c.getContext('2d')
     cx.fillStyle = '#FFFFFF'; cx.fillRect(0, 0, c.width, c.height)
     await page.render({ canvasContext: cx, viewport: vp }).promise
+    if (coverFootPt) { var h = Math.ceil(coverFootPt * scale); cx.fillStyle = '#FFFFFF'; cx.fillRect(0, c.height - h, c.width, h) }
     var blob = await new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.85) })
     var bytes = new Uint8Array(await blob.arrayBuffer())
     page.cleanup()
@@ -813,7 +816,7 @@
   async function build(pdfBytes, onProgress) {
     var kinds = (pdfBytes && pdfBytes.ctgPageKinds) || []
     // Uploaded pages that already print their own footer: leave them without one here too.
-    var keepAsIs = (pdfBytes && pdfBytes.ctgPageKeepAsIs) || []
+    var coverFooter = (pdfBytes && pdfBytes.ctgPageCoverFooter) || []
     var sources = (pdfBytes && pdfBytes.ctgPageSources) || []
     var aceRecord = pdfBytes && pdfBytes.ctgAceRecord
     var ace = (aceRecord && window.ctgDay1Docx && window.ctgDay1Docx.parts)
@@ -891,7 +894,8 @@
         if (!done) {
           var pg
           try {
-            pg = await renderPage(pdf, n)
+            // An uploaded report's own footer is painted out so the FCR's footer is the only one.
+            pg = await renderPage(pdf, n, coverFooter[n - 1] ? 42 : 0)
           } catch (e) {
             // One page pdf.js cannot draw must not cost the whole file: it says so on its page.
             console.error('FCR Word: page ' + n + ' could not be drawn', e)
@@ -899,7 +903,7 @@
           }
           zip.file('word/media/page-' + n + '.jpg', pg.bytes, { compression: 'STORE' })
           rels += '<Relationship Id="rIdP' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page-' + n + '.jpg"/>'
-          pages.push({ w: pg.w, h: pg.h, keep: !!keepAsIs[n - 1], picture: pictureXml(n, total, fit(pg.w, pg.h)) })
+          pages.push({ w: pg.w, h: pg.h, picture: pictureXml(n, total, fit(pg.w, pg.h)) })
         }
         if (onProgress) onProgress(n, total)
       }
@@ -915,10 +919,8 @@
     /* Every other section names an empty header, or Word would carry the one
        before into it, and the footer with the page number alone. */
     var hfPlain = function (land) { return '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="' + (land ? 'rIdFNL' : 'rIdFN') + '"/>' }
-    // A kept upload: empty header and empty footer, so the picture's own footer is the only one.
-    var hfKeep = '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="rIdFEMP"/>'
-    var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (pg.keep ? 'k' : '') + (wide(pg.w, pg.h) ? 'L' : 'P') }
-    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), pg.keep ? hfKeep : hfPlain(wide(pg.w, pg.h))) }
+    var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (wide(pg.w, pg.h) ? 'L' : 'P') }
+    var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfPlain(wide(pg.w, pg.h))) }
     var body = ''
     for (var i = 0; i < pages.length; i++) {
       var pgi = pages[i]
@@ -961,8 +963,6 @@
     var footLeft = (pdfBytes && pdfBytes.ctgFooterLeft) || ''
     addPart('footer2', numberFooterXml(footLeft, false), 'footer', 'rIdFN')
     addPart('footer3', numberFooterXml(footLeft, true), 'footer', 'rIdFNL')
-    // Empty footer for a kept upload (its own footer is on the picture already).
-    addPart('footer4', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ' + NS + '><w:p/></w:ftr>', 'footer', 'rIdFEMP')
     if (ace) {
       addPart('header1', ace.header, 'header', 'rIdHA')
       addPart('footer1', ace.footer, 'footer', 'rIdFA')

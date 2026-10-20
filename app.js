@@ -9990,9 +9990,10 @@ function fcrSegmentDateKey(value){
 const FCR_PAGE_ROOM='Page 888 of 888'   // the room a report's footer keeps for the FCR's number
 const FCR_FOOT_ROOM=36                  // points kept clear at the foot of an uploaded page
 /* An uploaded page that already prints its own footer (a report someone
-   uploaded, e.g. a Day 1) is left exactly as it is - the FCR adds nothing, so
-   it does not end up with two "Page X of Y" lines (asked for 19 Oct 2026). */
-const FCR_KEEP={keep:true}
+   uploaded, e.g. a Day 1): the FCR hides that footer and writes its own
+   continuous one in its place, so every page of the file reads "Page N of M"
+   with no doubled or restarting page numbers (19 Oct 2026). */
+const FCR_COVER={cover:true}
 /* Which pages of an uploaded PDF already carry a CTG footer near the foot
    ("Concussion Therapy Group ... Page X of Y"), as opposed to a raw
    test-result scan that has none. Read with pdf.js; a page it cannot read, or
@@ -10089,16 +10090,23 @@ async function stampFCRPageNumbers(merged,at,footLeft){
   for(let i=0;i<total;i++){
     try{
       const pg=pages[i],spot=at[i]
-      // An uploaded page that already has its own footer: add nothing, leave it as it is.
-      if(spot&&spot.keep)continue
-      const upload=!spot
       const box=pg.getCropBox()
       const rot=((pg.getRotation().angle%360)+360)%360
-      if(upload)fcrShrinkUpload(merged,pg,box,rot)
-      const size=(spot&&spot.size)||8
+      /* An uploaded report that prints its own footer: paint over that footer
+         and write the FCR's continuous one in its place (upright pages only -
+         a sideways report is left with its own footer rather than cover the
+         wrong edge). */
+      if(spot&&spot.cover){
+        if(rot!==0)continue
+        pg.drawRectangle({x:box.x,y:box.y+4,width:box.width,height:34,color:PDFLib.rgb(1,1,1)})
+      }
+      // A raw scan has no footer and may run to the edge, so it is made smaller first; a covered report is not.
+      const upload=!spot||!!spot.cover
+      if(!spot)fcrShrinkUpload(merged,pg,box,rot)
+      const size=8
       const across=(rot===90||rot===270)?box.height:box.width
-      const right=spot&&spot.right!=null?spot.right:across-36
-      const v=spot&&spot.y!=null?spot.y:20
+      const right=(spot&&spot.right!=null&&!spot.cover)?spot.right:across-36
+      const v=(spot&&spot.y!=null&&!spot.cover)?spot.y:20
       const put=(t,u)=>{const q=fcrPagePoint(box,rot,u,v);pg.drawText(t,{x:q[0],y:q[1],size:size,font:font,color:PDFLib.rgb(0,0,0),rotate:PDFLib.degrees(rot)})}
       const text='Page '+(i+1)+' of '+total
       const tw=font.widthOfTextAtSize(text,size)
@@ -10133,8 +10141,8 @@ async function compileFCR(p,opts){
     if(!opts.word)await stampFCRPageNumbers(merged,out.pageNoAt,footLeft)
     const bytes=await merged.save()
     bytes.ctgFooterLeft=footLeft   // the Word copy's footer line on pages without their own
-    // Uploaded pages that already print their own footer: the Word copy leaves them without one too.
-    bytes.ctgPageKeepAsIs=out.pageNoAt.map(x=>!!(x&&x.keep))
+    // Uploaded pages that print their own footer: the Word copy hides it and writes its own there too.
+    bytes.ctgPageCoverFooter=out.pageNoAt.map(x=>!!(x&&x.cover))
     bytes.ctgPageKinds=out.kinds
     bytes.ctgPageSources=out.sources
     bytes.ctgAceRecord=out.aceRecord
@@ -10163,7 +10171,7 @@ async function compileFCRPages(p,merged){
          is left exactly as it is (FCR_KEEP); one that does not gets the FCR's
          footer as before (null). A report (numAt) keeps its given spot. */
       const own=numAt?null:await fcrUploadOwnFooterPages(bytes)
-      pages.forEach((pg,i)=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null);pageNoAt.push(numAt||(own&&own.has(i)?FCR_KEEP:null))})
+      pages.forEach((pg,i)=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null);pageNoAt.push(numAt||(own&&own.has(i)?FCR_COVER:null))})
     }
     catch(e){console.error('FCR merge (pdf) failed',e)}
   }
