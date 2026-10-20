@@ -9989,6 +9989,37 @@ function fcrSegmentDateKey(value){
    Word count the pages (fcr-docx.js). */
 const FCR_PAGE_ROOM='Page 888 of 888'   // the room a report's footer keeps for the FCR's number
 const FCR_FOOT_ROOM=36                  // points kept clear at the foot of an uploaded page
+/* An uploaded page that already prints its own footer (a report someone
+   uploaded, e.g. a Day 1) is left exactly as it is - the FCR adds nothing, so
+   it does not end up with two "Page X of Y" lines (asked for 19 Oct 2026). */
+const FCR_KEEP={keep:true}
+/* Which pages of an uploaded PDF already carry a CTG footer near the foot
+   ("Concussion Therapy Group ... Page X of Y"), as opposed to a raw
+   test-result scan that has none. Read with pdf.js; a page it cannot read, or
+   a scanned image with no text, counts as having none (the FCR gives it a
+   footer, as before). */
+async function fcrUploadOwnFooterPages(bytes){
+  const have=new Set()
+  let task=null
+  try{
+    const lib=await ensurePdfJs()
+    // A copy: pdf.js hands the buffer to its worker, which would empty this one.
+    task=lib.getDocument({data:new Uint8Array(bytes).slice(),isEvalSupported:false})
+    const pdf=await task.promise
+    for(let i=1;i<=pdf.numPages;i++){
+      try{
+        const page=await pdf.getPage(i)
+        const tc=await page.getTextContent()
+        // Items in the bottom ~64pt of the page (origin is bottom-left in PDF space).
+        const foot=tc.items.filter(it=>it&&it.str&&it.transform&&it.transform[5]<64).map(it=>it.str).join(' ')
+        page.cleanup()
+        if(/Concussion Therapy Group/i.test(foot)||/Page\s+\d+\s+of\s+\d+/i.test(foot))have.add(i-1)
+      }catch(e){/* a page pdf.js cannot read is treated as having no footer of its own */}
+    }
+  }catch(e){console.warn('FCR: could not check an uploaded file for its own footer',e)}
+  finally{if(task)try{task.destroy()}catch(e){}}
+  return have
+}
 /* Inside an FCR: notes where this report's page number goes and returns true.
    more.full: the page has no footer line of its own - the FCR writes the
    whole line, from more.left. */
@@ -10000,7 +10031,10 @@ function fcrPageNoAt(doc,right,y,more){
 // The footer line's left part, as the case discharge summary words it, for the pages without a line of their own.
 function fcrFooterLeft(p){
   const cd=getCaseDischargeData(p)
-  return 'Concussion Therapy Group / '+(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'Nicholas Grande, DC')+' / '+cd.name+' / '+(cd.dob||'—')
+  // An empty provider can come back as '—'; that is "none", so fall back to the clinician.
+  const prov=String(getDay2AceProviderValue(p)||getDay2ProviderValue(p)||'').trim()
+  const provOut=(prov&&prov!=='—')?prov:'Nicholas Grande, DC'
+  return 'Concussion Therapy Group / '+provOut+' / '+cd.name+' / '+(cd.dob||'—')
 }
 // (u, v) from the bottom left of a page as it is read -> the page's own coordinates (a scan may be stored sideways).
 function fcrPagePoint(box,rot,u,v){
@@ -10054,7 +10088,10 @@ async function stampFCRPageNumbers(merged,at,footLeft){
   const pages=merged.getPages(),total=pages.length
   for(let i=0;i<total;i++){
     try{
-      const pg=pages[i],spot=at[i],upload=!spot
+      const pg=pages[i],spot=at[i]
+      // An uploaded page that already has its own footer: add nothing, leave it as it is.
+      if(spot&&spot.keep)continue
+      const upload=!spot
       const box=pg.getCropBox()
       const rot=((pg.getRotation().angle%360)+360)%360
       if(upload)fcrShrinkUpload(merged,pg,box,rot)
@@ -10096,6 +10133,8 @@ async function compileFCR(p,opts){
     if(!opts.word)await stampFCRPageNumbers(merged,out.pageNoAt,footLeft)
     const bytes=await merged.save()
     bytes.ctgFooterLeft=footLeft   // the Word copy's footer line on pages without their own
+    // Uploaded pages that already print their own footer: the Word copy leaves them without one too.
+    bytes.ctgPageKeepAsIs=out.pageNoAt.map(x=>!!(x&&x.keep))
     bytes.ctgPageKinds=out.kinds
     bytes.ctgPageSources=out.sources
     bytes.ctgAceRecord=out.aceRecord
@@ -10117,7 +10156,15 @@ async function compileFCRPages(p,merged){
   const pageNoAt=[]
   let aceRecord=null
   async function addBytes(bytes,kind,numAt){
-    try{const src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true});const pages=await merged.copyPages(src,src.getPageIndices());pages.forEach(pg=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null);pageNoAt.push(numAt||null)})}
+    try{
+      const src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true})
+      const pages=await merged.copyPages(src,src.getPageIndices())
+      /* An uploaded file (no numAt): a page that already prints its own footer
+         is left exactly as it is (FCR_KEEP); one that does not gets the FCR's
+         footer as before (null). A report (numAt) keeps its given spot. */
+      const own=numAt?null:await fcrUploadOwnFooterPages(bytes)
+      pages.forEach((pg,i)=>{merged.addPage(pg);kinds.push(kind||'picture');sources.push(null);pageNoAt.push(numAt||(own&&own.has(i)?FCR_KEEP:null))})
+    }
     catch(e){console.error('FCR merge (pdf) failed',e)}
   }
   async function addJsPdf(doc,kind){
