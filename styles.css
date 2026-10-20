@@ -13387,3 +13387,14 @@ select,select:hover,select:active,select:focus{
    not fit; on a wide screen it is still one line. */
 #page-appointment .appt-toolbar{flex-wrap:wrap}
 #page-appointment .appt-toolbar-controls{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+
+/* ---- Snappier page open + navigation feel (requested 20 Oct 2026) ----
+   Opening a page used to run a 0.5s content rise over a 0.3s fade, which read
+   as slow. Shorter travel and duration make navigation feel immediate while
+   staying smooth: same ease-out, GPU-composited opacity + transform only, and
+   the reduce-motion block above still neutralises it for anyone who asks. */
+@media (prefers-reduced-motion:no-preference){
+  @keyframes ctgRiseFast{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .page.active .wrap{animation:ctgRiseFast .26s cubic-bezier(.22,1,.36,1) both}
+  .page.active{animation:ctgPageIn .16s ease both}
+}
