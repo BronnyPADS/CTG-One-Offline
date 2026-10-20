@@ -119,9 +119,13 @@
     var left = para(run('CONCUSSION THERAPY GROUP', { b: true, sz: 12 }))
     var o = { noBorders: true, noTrail: true, valign: ['bottom', 'top'] }
     if (geo) { o.width = geo.width; o.ind = geo.ind }
-    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '>' +
+    /* A 1pt line first: Google Docs cannot start a header with a table and
+       put a whole empty line above it, which set the letterhead and the page's
+       text 16pt lower than Word does (19 Oct 2026). */
+    var tiny = '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>'
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '>' + tiny +
       table([1, 1], [[left, right]], o) +
-      (geo ? '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr></w:p>' : para('', { after: 0 })) + '</w:hdr>'
+      (geo ? tiny : para('', { after: 0 })) + '</w:hdr>'
   }
   /* total: the field for "of Y" - NUMPAGES, the whole file's pages, for the
      Day 1 on its own and in the FCR as Word, which numbers its pages from

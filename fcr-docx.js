@@ -92,7 +92,7 @@
   // hf: header/footer references for this section ('' when the file has none).
   function sectPr(land, hf) {
     return '<w:sectPr>' + (hf || '') + '<w:pgSz w:w="' + (land ? PAGE_H : PAGE_W) + '" w:h="' + (land ? PAGE_W : PAGE_H) + '"' + (land ? ' w:orient="landscape"' : '') + '/>' +
-      '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + NUM_BOTTOM + '" w:left="' + MARGIN + '" w:header="0" w:footer="' + NUM_FOOTER + '" w:gutter="0"/></w:sectPr>'
+      '<w:pgMar w:top="' + MARGIN + '" w:right="' + MARGIN + '" w:bottom="' + NUM_BOTTOM + '" w:left="' + MARGIN + '" w:header="180" w:footer="' + NUM_FOOTER + '" w:gutter="0"/></w:sectPr>'
   }
   function fit(w, h) {
     var land = wide(w, h)
@@ -172,6 +172,7 @@
     var pt = function (x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] }
     var seg = function (p, q) { if (Math.abs(p[0] - q[0]) < 0.5 && Math.abs(p[1] - q[1]) > 2) path.push({ x: (p[0] + q[0]) / 2, y0: Math.min(p[1], q[1]), y1: Math.max(p[1], q[1]) }) }
     ;(gfx || []).forEach(function (g) {
+      if (g.skip) return   // a table's line: the table is a Word table now
       var a = g.a
       switch (g.op) {
         case 'q': stack.push(m.slice()); break
@@ -279,18 +280,252 @@
     return merged.map(function (pt) { return pt.tab ? '<w:r><w:tab/></w:r>' : pt.br ? '<w:r><w:br/></w:r>' : runXml(pt) }).join('')
   }
 
+  /* ------------------------------- tables ------------------------------- */
+  /* A report draws a table as boxes and lines with its words set inside them.
+     Word keeps the two together, but Google Docs spaces the words its own way
+     and they slid off the lines (19 Oct 2026). So a grid of lines on a report
+     page becomes a real Word table - its words in its cells, its lines the
+     cells' borders - and is left out of the picture behind the page. */
+  var TOL = 0.8   // points: lines this close are the same line
+  function clusterVals(vals) {
+    var sorted = vals.slice().sort(function (a, b) { return a - b }), out = []
+    sorted.forEach(function (v) {
+      var c = out[out.length - 1]
+      if (c && v - c.last <= TOL) { c.sum += v; c.n++; c.last = v } else out.push({ sum: v, n: 1, last: v })
+    })
+    return out.map(function (c) { return c.sum / c.n })
+  }
+  // The page's drawn paths: what each strokes (upright and level lines only) and fills, and its drawing ops.
+  function drawnPaths(gfx) {
+    var paths = [], m = [1, 0, 0, 1, 0, 0], stack = [], at = null, start = null
+    var lineW = 1, fill = '000000', stroke = '000000'
+    var fresh = function () { return { ops: [], segs: [], boxes: [], bad: false } }
+    var cur = fresh()
+    var pt = function (x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] }
+    var seg = function (p, q) {
+      if (Math.abs(p[0] - q[0]) < 0.3) { if (Math.abs(p[1] - q[1]) > 0.5) cur.segs.push({ v: true, x: (p[0] + q[0]) / 2, a: Math.min(p[1], q[1]), b: Math.max(p[1], q[1]) }) }
+      else if (Math.abs(p[1] - q[1]) < 0.3) cur.segs.push({ v: false, y: (p[1] + q[1]) / 2, a: Math.min(p[0], q[0]), b: Math.max(p[0], q[0]) })
+      else cur.bad = true
+    }
+    gfx.forEach(function (g, i) {
+      var a = g.a
+      switch (g.op) {
+        case 'q': stack.push({ m: m.slice(), lineW: lineW, fill: fill, stroke: stroke }); break
+        case 'Q': if (stack.length) { var s = stack.pop(); m = s.m; lineW = s.lineW; fill = s.fill; stroke = s.stroke } break
+        case 'cm': m = [a[0] * m[0] + a[1] * m[2], a[0] * m[1] + a[1] * m[3], a[2] * m[0] + a[3] * m[2], a[2] * m[1] + a[3] * m[3],
+          a[4] * m[0] + a[5] * m[2] + m[4], a[4] * m[1] + a[5] * m[3] + m[5]]; break
+        case 'w': lineW = a[0] * (Math.hypot(m[0], m[1]) || 1); break
+        case 'g': case 'rg': case 'k': fill = colorOf(g.op, a); break
+        case 'G': case 'RG': case 'K': stroke = colorOf(g.op, a); break
+        case 'm': cur.ops.push(i); at = start = pt(a[0], a[1]); break
+        case 'l': { cur.ops.push(i); var p = pt(a[0], a[1]); if (at) seg(at, p); at = p; break }
+        case 'c': case 'v': case 'y': cur.ops.push(i); cur.bad = true; at = pt(a[a.length - 2], a[a.length - 1]); break
+        case 'h': cur.ops.push(i); if (at && start) seg(at, start); at = start; break
+        case 're': {
+          cur.ops.push(i)
+          var c0 = pt(a[0], a[1]), c3 = pt(a[0] + a[2], a[1] + a[3])
+          var bx = { x0: Math.min(c0[0], c3[0]), x1: Math.max(c0[0], c3[0]), y0: Math.min(c0[1], c3[1]), y1: Math.max(c0[1], c3[1]) }
+          cur.boxes.push(bx)
+          seg([bx.x0, bx.y0], [bx.x1, bx.y0]); seg([bx.x0, bx.y1], [bx.x1, bx.y1]); seg([bx.x0, bx.y0], [bx.x0, bx.y1]); seg([bx.x1, bx.y0], [bx.x1, bx.y1])
+          break
+        }
+        case 'n': cur = fresh(); at = start = null; break
+        default:
+          if (PAINT.test(g.op)) {
+            cur.ops.push(i)
+            cur.stroked = /^(S|s|B|b)/.test(g.op); cur.filled = /^(f|F|B|b)/.test(g.op)
+            cur.lineW = lineW; cur.fill = fill; cur.stroke = stroke
+            paths.push(cur)
+            cur = fresh(); at = start = null
+          }
+      }
+    })
+    return paths
+  }
+  /* The tables on a jsPDF report page: their grid, cells (with spans, borders
+     and shading) and words. The words are taken out of jp.items and the lines
+     marked (g.skip) so the picture behind the page leaves them out. */
+  function findTables(jp) {
+    var gfx = jp.gfx || [], paths = drawnPaths(gfx), segs = []
+    paths.forEach(function (p, pi) { if (p.stroked && !p.bad) p.segs.forEach(function (s) { s.p = pi; segs.push(s) }) })
+    if (segs.length < 4) return []
+    var parent = segs.map(function (_, i) { return i })
+    var find = function (i) { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i] } return i }
+    var join = function (i, j) { i = find(i); j = find(j); if (i !== j) parent[i] = j }
+    var touch = function (s, t) {
+      if (s.v === t.v) return Math.abs((s.v ? s.x : s.y) - (t.v ? t.x : t.y)) <= TOL && s.a <= t.b + TOL && t.a <= s.b + TOL
+      var h = s.v ? t : s, v = s.v ? s : t
+      return v.x >= h.a - TOL && v.x <= h.b + TOL && h.y >= v.a - TOL && h.y <= v.b + TOL
+    }
+    var byPath = {}
+    segs.forEach(function (s, i) { if (byPath[s.p] !== undefined) join(i, byPath[s.p]); else byPath[s.p] = i })
+    for (var i = 0; i < segs.length; i++) for (var j = i + 1; j < segs.length; j++) if (touch(segs[i], segs[j])) join(i, j)
+    var comps = {}
+    segs.forEach(function (s, i) { var r = find(i); (comps[r] = comps[r] || []).push(s) })
+    var tables = []
+    Object.keys(comps).forEach(function (k) {
+      var comp = comps[k], hs = comp.filter(function (s) { return !s.v }), vs = comp.filter(function (s) { return s.v })
+      if (hs.length < 2 || vs.length < 2) return
+      var x0 = Math.min.apply(null, hs.map(function (s) { return s.a }).concat(vs.map(function (s) { return s.x })))
+      var x1 = Math.max.apply(null, hs.map(function (s) { return s.b }).concat(vs.map(function (s) { return s.x })))
+      var y0 = Math.min.apply(null, vs.map(function (s) { return s.a }).concat(hs.map(function (s) { return s.y })))
+      var y1 = Math.max.apply(null, vs.map(function (s) { return s.b }).concat(hs.map(function (s) { return s.y })))
+      if (x1 - x0 < 30 || y1 - y0 < 10) return       // a tick box, not a table
+      /* Words beside the table (the Medical Bill's address next to its
+         Statement Date box): a Word table stands on its own lines, so this one
+         stays drawn behind the page, its words placed as they are. */
+      var beside = jp.items.some(function (it) {
+        var py = it.y + it.size * 0.3
+        return py > y0 + TOL && py < y1 - TOL && (it.x + it.w < x0 - TOL || it.x > x1 + TOL)
+      })
+      if (beside) return
+      var xs = clusterVals(vs.map(function (s) { return s.x }).concat([x0, x1]))
+      var ys = clusterVals(hs.map(function (s) { return s.y }).concat([y0, y1])).reverse()   // top first
+      var hCov = function (y, xa, xb) { var mid = (xa + xb) / 2; return hs.some(function (s) { return Math.abs(s.y - y) <= TOL && s.a - TOL <= mid && mid <= s.b + TOL }) }
+      var vCov = function (x, ya, yb) { var mid = (ya + yb) / 2; return vs.some(function (s) { return Math.abs(s.x - x) <= TOL && s.a - TOL <= mid && mid <= s.b + TOL }) }
+      var pids = {}
+      comp.forEach(function (s) { pids[s.p] = true })
+      var lineW = 0, color = '000000'
+      Object.keys(pids).forEach(function (pi) { lineW = Math.max(lineW, paths[pi].lineW || 0); color = paths[pi].stroke || color })
+      // Filled boxes inside the table: its shading.
+      var fills = paths.filter(function (p) {
+        return p.filled && p.boxes.length && p.boxes.every(function (b) { return b.x0 >= x0 - TOL && b.x1 <= x1 + TOL && b.y0 >= y0 - TOL && b.y1 <= y1 + TOL })
+      })
+      var rows = []
+      for (var r = 0; r + 1 < ys.length; r++) {
+        var top = ys[r], bottom = ys[r + 1], cells = []
+        for (var c = 0; c + 1 < xs.length;) {
+          var c1 = c + 1
+          while (c1 + 1 < xs.length && !vCov(xs[c1], bottom, top)) c1++
+          var cell = { c0: c, c1: c1, x0: xs[c], x1: xs[c1], top: top, bottom: bottom, items: [],
+            bTop: hCov(top, xs[c], xs[c1]), bBottom: hCov(bottom, xs[c], xs[c1]), bLeft: vCov(xs[c], bottom, top), bRight: vCov(xs[c1], bottom, top) }
+          var area = (cell.x1 - cell.x0) * (top - bottom)
+          fills.forEach(function (p) {
+            p.boxes.forEach(function (b) {
+              var ov = Math.max(0, Math.min(b.x1, cell.x1) - Math.max(b.x0, cell.x0)) * Math.max(0, Math.min(b.y1, top) - Math.max(b.y0, bottom))
+              if (area > 0 && ov >= area * 0.8 && p.fill && p.fill.toLowerCase() !== 'ffffff') { cell.shade = p.fill; p.used = true }
+            })
+          })
+          // No line between this row and the one above, and the same columns: one cell down both rows.
+          var above = r ? rows[r - 1].cells.filter(function (a) { return a.c0 === c && a.c1 === c1 })[0] : null
+          if (above && !cell.bTop) { cell.master = above.master || above; cell.master.restart = true; cell.shade = cell.master.shade }
+          cells.push(cell)
+          c = c1
+        }
+        rows.push({ top: top, bottom: bottom, cells: cells })
+      }
+      // The words go to the cell they stand in.
+      jp.items = jp.items.filter(function (it) {
+        var px = it.x + 0.5, py = it.y + it.size * 0.3
+        if (px < x0 - TOL || px > x1 + TOL || py < y0 - TOL || py > y1 + TOL) return true
+        for (var ri = 0; ri < rows.length; ri++) {
+          var row = rows[ri]
+          if (py > row.top + TOL || py < row.bottom - TOL) continue
+          for (var ci = 0; ci < row.cells.length; ci++) {
+            var ce = row.cells[ci]
+            if (px >= ce.x0 - TOL && px < ce.x1 + TOL) { (ce.master || ce).items.push(it); return false }
+          }
+        }
+        return true
+      })
+      Object.keys(pids).forEach(function (pi) { paths[pi].ops.forEach(function (oi) { gfx[oi].skip = true }) })
+      fills.forEach(function (p) { if (p.used || pids[paths.indexOf(p)]) p.ops.forEach(function (oi) { gfx[oi].skip = true }) })
+      tables.push({ x0: xs[0], x1: xs[xs.length - 1], top: ys[0], bottom: ys[ys.length - 1], xs: xs, rows: rows, lineW: lineW || 0.5, color: color })
+    })
+    return tables.sort(function (a, b) { return b.top - a.top })
+  }
+  /* Line spacing that Word and Google Docs both keep: a multiple of the font's
+     own single line (1.15 of its size for these fonts). Google Docs has no
+     "exactly N pt": it read an exact 13pt as 13/12 of its single line, 14.95pt,
+     and report pages ran a few lines onto a page of their own (19 Oct 2026). */
+  function lineMult(h, size) { return Math.max(24, Math.round(240 * h / (1.15 * size))) }
+  /* A gap of h points: a 1pt line with the rest as the space after it. (Word
+     drops the space before the first paragraph of a page, and Google Docs
+     stretches a tall exact line, so neither of those holds a gap.) */
+  function gapPPr(h) {
+    return '<w:widowControl w:val="0"/><w:spacing w:before="0" w:after="' + tw(Math.max(0, h - 1.15)) + '" w:line="240" w:lineRule="auto"/>' +
+      '<w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr>'
+  }
+  // An empty paragraph that takes (almost) no room: an empty cell, or the line a table needs after it.
+  var TINY_P = gapPPr(0)
+  // A cell's words, line for line as the PDF set them, from where they stand in the cell.
+  function cellXml(cell) {
+    if (!cell.items.length) return '<w:p><w:pPr>' + TINY_P + '</w:pPr></w:p>'
+    var lines = toLines(cell.items.slice(), [])
+    var first = lines[0], size = first.size, parts = []
+    lines.forEach(function (ln, li) {
+      if (li) parts.push({ br: true })
+      ln.cols.forEach(function (col, ci) {
+        if (ci) parts.push({ s: ' ', f: col.parts[0].f, size: col.parts[0].size })
+        parts.push.apply(parts, col.parts)
+      })
+      // A wrapped line's leading space would indent it in the cell.
+      for (var k = parts.length - 1; k >= 0 && !parts[k].br; k--) {
+        if (k === 0 || parts[k - 1].br) { parts[k] = Object.assign({}, parts[k], { s: parts[k].s.replace(/^\s+/, '') }); break }
+      }
+    })
+    var pitch = lines.length > 1 ? (lines[0].y - lines[lines.length - 1].y) / (lines.length - 1) : size * 1.15
+    var line = Math.max(200, Math.min(480, Math.round(240 * pitch / (size * 1.15))))
+    var before = Math.max(0, (cell.top - first.y) - size * 0.9)
+    var lgap = first.left - cell.x0, rgap = cell.x1 - first.right
+    var jc = '', ind = ''
+    if (lgap > 4 && Math.abs(lgap - rgap) <= 3) jc = '<w:jc w:val="center"/>'
+    else if (rgap < 8 && lgap > rgap + 6) jc = '<w:jc w:val="right"/>', ind = '<w:ind w:right="' + tw(Math.max(0, rgap)) + '"/>'
+    else ind = '<w:ind w:left="' + tw(Math.max(0, lgap)) + '" w:right="' + tw(2) + '"/>'
+    return '<w:p><w:pPr><w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/><w:spacing w:before="' + tw(before) + '" w:after="0" w:line="' + line + '" w:lineRule="auto"/>' + ind + jc + '</w:pPr>' + runsXml(parts) + '</w:p>'
+  }
+  function tableXml(t) {
+    var gx = t.xs.map(function (x) { return tw(x - M_PT) })
+    var gw = []
+    for (var i = 0; i + 1 < gx.length; i++) gw.push(Math.max(1, gx[i + 1] - gx[i]))
+    var sz = Math.max(2, Math.min(12, Math.round(t.lineW * 8)))
+    var side = function (name, on) { return on ? '<w:' + name + ' w:val="single" w:sz="' + sz + '" w:space="0" w:color="' + String(t.color).toUpperCase() + '"/>' : '<w:' + name + ' w:val="nil"/>' }
+    var nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (s) { return '<w:' + s + ' w:val="nil"/>' }).join('')
+    var zero = ['top', 'left', 'bottom', 'right'].map(function (s) { return '<w:' + s + ' w:w="0" w:type="dxa"/>' }).join('')
+    var xml = '<w:tbl><w:tblPr><w:tblW w:w="' + (gx[gx.length - 1] - gx[0]) + '" w:type="dxa"/><w:tblInd w:w="' + gx[0] + '" w:type="dxa"/>' +
+      '<w:tblBorders>' + nil + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>' + zero + '</w:tblCellMar></w:tblPr>' +
+      '<w:tblGrid>' + gw.map(function (w) { return '<w:gridCol w:w="' + w + '"/>' }).join('') + '</w:tblGrid>'
+    t.rows.forEach(function (row) {
+      // Word and Google Docs add the border to a row's height: take it off, or each row came out 0.75pt taller than the PDF's.
+      xml += '<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="' + tw(Math.max(1, row.top - row.bottom - sz / 8)) + '" w:hRule="atLeast"/></w:trPr>'
+      row.cells.forEach(function (c) {
+        var w = 0
+        for (var k = c.c0; k < c.c1; k++) w += gw[k]
+        var m = c.master
+        xml += '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (c.c1 - c.c0 > 1 ? '<w:gridSpan w:val="' + (c.c1 - c.c0) + '"/>' : '') +
+          (m ? '<w:vMerge/>' : c.restart ? '<w:vMerge w:val="restart"/>' : '') +
+          '<w:tcBorders>' + side('top', c.bTop) + side('left', c.bLeft) + side('bottom', c.bBottom) + side('right', c.bRight) + '</w:tcBorders>' +
+          (c.shade ? '<w:shd w:val="clear" w:color="auto" w:fill="' + String(c.shade).toUpperCase() + '"/>' : '') +
+          '</w:tcPr>' + (m ? '<w:p><w:pPr>' + TINY_P + '</w:pPr></w:p>' : cellXml(c)) + '</w:tc>'
+      })
+      xml += '</w:tr>'
+    })
+    return xml + '</w:tbl>'
+  }
+
   /* One report page -> Word paragraphs, each placed where the PDF has it: the
      space above a paragraph and an exact line height put every baseline at the
      PDF's own height on the page. Returns [{pPr, runs}] for the caller to add
-     the page break and section end. box: {top, bottom} in points, where the
-     page's text area starts and ends (a report under a Word header and footer);
-     the 0.25in margin otherwise. */
-  function textPageParagraphs(tp, box) {
+     the page break and section end, and {raw} for a table (findTables), which
+     goes where its top is. box: {top, bottom} in points, where the page's text
+     area starts and ends (a report under a Word header and footer); the
+     0.25in margin otherwise. */
+  function textPageParagraphs(tp, box, tables) {
     var TOP = (box && box.top) || M_PT, BOTTOM = (box && box.bottom) || M_PT
     var paras = toParagraphs(toLines(tp.items, tp.gfx ? verticalRules(tp.gfx) : []))
+    var blocks = paras.map(function (p) { return { p: p, top: tp.h - p.lines[0].y - p.lines[0].size } })
+    ;(tables || []).forEach(function (t) { blocks.push({ t: t, top: tp.h - t.top }) })
+    blocks.sort(function (a, b) { return a.top - b.top })
     var avail = tp.h - TOP - BOTTOM - 1      // a point to spare against Word's rounding
     var out = [], T = 0
-    paras.forEach(function (p) {
+    blocks.forEach(function (bk) {
+      if (bk.t) {
+        var tBefore = Math.max(0, (tp.h - bk.t.top) - TOP - T)
+        T += tBefore + (bk.t.top - bk.t.bottom)
+        out.push({ before: tBefore, table: bk.t })
+        return
+      }
+      var p = bk.p
       var first = p.lines[0], size = first.size
       var desc = size * 0.22
       var baselineFromTop = (tp.h - first.y) - TOP
@@ -314,7 +549,7 @@
         ? '<w:tabs>' + first.cols.slice(1).map(function (c) { return '<w:tab w:val="left" w:pos="' + tw(c.x - M_PT) + '"/>' }).join('') + '</w:tabs>'
         : ''
       var rightInd = 0
-      out.push({ before: before, lineH: lineH, tabs: tabs, left: tw(first.left - M_PT), right: rightInd, runs: runsXml(parts) })
+      out.push({ before: before, lineH: lineH, size: size, tabs: tabs, left: tw(first.left - M_PT), right: rightInd, runs: runsXml(parts) })
     })
     /* Taller than the page: take it out of the gaps, never the text, starting
        from the bottom. What runs over is the page's last line - a report's
@@ -329,21 +564,30 @@
     }
     /* Word drops the space above the first paragraph of a page that starts on
        a page break, which lifted a whole page's text off its lines and boxes.
-       An empty first line of exactly that height holds the gap instead. */
+       An empty first line holds the gap instead (gapPPr). */
     var top = out.length ? out[0].before : 0
     if (out.length) out[0].before = 0
-    var spacer = {
-      pPr: '<w:widowControl w:val="0"/><w:spacing w:before="0" w:after="0" w:line="' + Math.max(20, tw(top)) + '" w:lineRule="exact"/>',
-      runs: ''
-    }
-    return [spacer].concat(out.map(function (p) {
-      return {
-        pPr: '<w:widowControl w:val="0"/>' + p.tabs +
-          '<w:spacing w:before="' + tw(p.before) + '" w:after="0" w:line="' + tw(p.lineH) + '" w:lineRule="exact"/>' +
-          '<w:ind w:left="' + p.left + '" w:right="' + p.right + '"/>',
-        runs: p.runs
+    var res = [{ pPr: gapPPr(top), runs: '' }]
+    out.forEach(function (p) {
+      if (p.table) {
+        /* A table has no room above it of its own: an empty line holds it,
+           and keeps two tables in a row apart (Word joins them). */
+        res.push({ pPr: gapPPr(p.before), runs: '' })
+        res.push({ raw: tableXml(p.table) })
+        return
       }
-    }))
+      res.push({
+        pPr: '<w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/>' + p.tabs +
+          '<w:spacing w:before="' + tw(p.before) + '" w:after="0" w:line="' + lineMult(p.lineH, p.size) + '" w:lineRule="auto"/>' +
+          '<w:ind w:left="' + p.left + '" w:right="' + p.right + '"/>' +
+          // The paragraph's own size is its text's: Google Docs measures the line from it (9pt lines came out 3.5pt taller).
+          '<w:rPr><w:sz w:val="' + Math.round(p.size * 2) + '"/><w:szCs w:val="' + Math.round(p.size * 2) + '"/></w:rPr>',
+        runs: p.runs
+      })
+    })
+    // A page cannot end on a table: its last paragraph carries the page break or section end.
+    if (res[res.length - 1].raw) res.push({ pPr: TINY_P, runs: '' })
+    return res
   }
 
 
@@ -439,6 +683,8 @@
 
   // The page's lines, boxes and shading, drawn as the PDF draws them; null when it has none.
   async function drawGraphics(gfx, W, H) {
+    // A table's lines and shading (g.skip) are the Word table's borders and shading instead.
+    gfx = gfx.filter(function (g) { return !g.skip })
     if (!gfx.some(function (g) { return PAINT.test(g.op) })) return null
     var sc = DPI / 72
     var c = document.createElement('canvas')
@@ -495,7 +741,8 @@
   // A picture filling the page behind its text: the report's lines and boxes.
   function backgroundXml(n, wPt, hPt) {
     var cxE = Math.round(wPt * 12700), cyE = Math.round(hPt * 12700), id = 100000 + n
-    return '<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1">' +
+    // 1pt, as the line it is anchored in: Google Docs gave that line a 12pt height and set the page's text 12.7pt lower.
+    return '<w:r><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="0" behindDoc="1" locked="1" layoutInCell="1" allowOverlap="1">' +
       '<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>' +
       '<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>' +
       '<wp:extent cx="' + cxE + '" cy="' + cyE + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/>' +
@@ -621,7 +868,8 @@
             // A report's letterhead and footer line go to its Word header and footer, not the page.
             if (rep) jp.items = splitReportPage(jp, src.doc.ctgPageNoAt).body
             if (jp.items.length || rep) {
-              var jparas = textPageParagraphs(jp, rep ? { top: REPORT_TOP, bottom: REPORT_BOTTOM } : NUM_BOX)
+              var tables = findTables(jp)   // takes the tables' words out of jp.items
+              var jparas = textPageParagraphs(jp, rep ? { top: REPORT_TOP, bottom: REPORT_BOTTOM } : NUM_BOX, tables)
               var bg = await drawGraphics(jp.gfx, jp.w, jp.h)
               if (bg) {
                 zip.file('word/media/lines-' + n + '.png', bg, { compression: 'STORE' })
@@ -679,7 +927,10 @@
       var breakBefore = i > 0 && key(pages[i - 1]) === key(pgi)
       var paras = pgi.paras || [{ pPr: '<w:spacing w:before="0" w:after="0"/><w:jc w:val="center"/>', runs: pgi.picture }]
       paras.forEach(function (p, pi) {
-        body += '<w:p><w:pPr>' + (pi === 0 && breakBefore ? '<w:pageBreakBefore/>' : '') + p.pPr +
+        if (p.raw) { body += p.raw; return }   // a table; a page's first and last entries are paragraphs
+        // The page break goes after the paragraph's style, which has to come first.
+        var ppr = pi === 0 && breakBefore ? (/^<w:pStyle [^>]*\/>/.test(p.pPr) ? p.pPr.replace(/^(<w:pStyle [^>]*\/>)/, '$1<w:pageBreakBefore/>') : '<w:pageBreakBefore/>' + p.pPr) : p.pPr
+        body += '<w:p><w:pPr>' + ppr +
           (pi === paras.length - 1 ? endSection : '') + '</w:pPr>' + p.runs + '</w:p>'
       })
     }
@@ -694,8 +945,15 @@
       overrides += '<Override PartName="/word/' + name + '.xml" ContentType="' + CT + kind + '+xml"/>'
       if (id) rels += '<Relationship Id="' + id + '" Type="' + R + kind + '" Target="' + name + '.xml"/>'
     }
-    if (ace || L) addPart('styles', ace ? ace.styles : L.styles(), 'styles', 'rIdS')
-    addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p/></w:hdr>', 'header', 'rIdHE')
+    /* CTGPage: the style of a report page's lines and cells. Its own size is
+       1pt: Google Docs measures a line from the larger of the style's size and
+       the text's, and 9pt lines under the 12pt Normal came out 3.5pt taller
+       each (19 Oct 2026). Every run carries its own size, so nothing changes. */
+    var pageStyle = '<w:style w:type="paragraph" w:customStyle="1" w:styleId="CTGPage"><w:name w:val="CTG Page"/><w:basedOn w:val="Normal"/>' +
+      '<w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:style>'
+    if (ace || L) addPart('styles', (ace ? ace.styles : L.styles()).replace('</w:styles>', pageStyle + '</w:styles>'), 'styles', 'rIdS')
+    // An empty header of a 1pt line: Google Docs made room for a whole empty line and set the page's text 28pt lower.
+    addPart('header2', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '><w:p><w:pPr>' + TINY_P + '</w:pPr></w:p></w:hdr>', 'header', 'rIdHE')
     var footLeft = (pdfBytes && pdfBytes.ctgFooterLeft) || ''
     addPart('footer2', numberFooterXml(footLeft, false), 'footer', 'rIdFN')
     addPart('footer3', numberFooterXml(footLeft, true), 'footer', 'rIdFNL')
