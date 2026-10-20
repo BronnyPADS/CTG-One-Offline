@@ -13398,3 +13398,15 @@ select,select:hover,select:active,select:focus{
   .page.active .wrap{animation:ctgRiseFast .26s cubic-bezier(.22,1,.36,1) both}
   .page.active{animation:ctgPageIn .16s ease both}
 }
+
+/* ---- Faster card/section reveal + smoother sidebar collapse (20 Oct 2026) ----
+   Cards used to fade and rise over 0.7s (22px) as a page filled in, which read
+   as slow; 0.35s over 10px keeps the same ease-out but settles quickly (the
+   small per-card stagger in revealInit still gives a soft cascade). And the
+   rail used to snap between widths while the page content slid over 0.25s - the
+   sidebar width now animates in step with it so opening/closing the rail is one
+   smooth motion. Reduce-motion still neutralises both (blocks above). */
+@media (prefers-reduced-motion:no-preference){
+  .reveal{transition:opacity .35s var(--ease-out),transform .35s var(--ease-out);transform:translateY(10px)}
+  body:not(.auth-active) .sidebar{transition:transform .25s,width .25s var(--ease-out)}
+}
