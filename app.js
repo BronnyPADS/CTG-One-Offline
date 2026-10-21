@@ -9994,11 +9994,14 @@ const FCR_FOOT_ROOM=36                  // points kept clear at the foot of an u
    continuous one in its place, so every page of the file reads "Page N of M"
    with no doubled or restarting page numbers (19 Oct 2026). */
 const FCR_COVER={cover:true}
-/* Which pages of an uploaded PDF already carry a CTG footer near the foot
-   ("Concussion Therapy Group ... Page X of Y"), as opposed to a raw
-   test-result scan that has none. Read with pdf.js; a page it cannot read, or
-   a scanned image with no text, counts as having none (the FCR gives it a
-   footer, as before). */
+/* Which pages of an uploaded PDF already carry the practice's OWN footer near
+   the foot ("Concussion Therapy Group ...") - an uploaded CTG report, whose
+   footer the FCR replaces with its own continuous one. A vendor test result
+   (Sway, Reflex, Shoe Box) is NOT one of these even though it has its own
+   "Page X of Y": matching that cut the vendor's footer in half, so only the
+   CTG name counts now (21 Oct 2026). Everything else is shrunk, not covered,
+   so none of its letters are lost. Read with pdf.js; a page it cannot read, or
+   a scanned image with no text, counts as having none. */
 async function fcrUploadOwnFooterPages(bytes){
   const have=new Set()
   let task=null
@@ -10014,7 +10017,7 @@ async function fcrUploadOwnFooterPages(bytes){
         // Items in the bottom ~64pt of the page (origin is bottom-left in PDF space).
         const foot=tc.items.filter(it=>it&&it.str&&it.transform&&it.transform[5]<64).map(it=>it.str).join(' ')
         page.cleanup()
-        if(/Concussion Therapy Group/i.test(foot)||/Page\s+\d+\s+of\s+\d+/i.test(foot))have.add(i-1)
+        if(/Concussion Therapy Group/i.test(foot))have.add(i-1)
       }catch(e){/* a page pdf.js cannot read is treated as having no footer of its own */}
     }
   }catch(e){console.warn('FCR: could not check an uploaded file for its own footer',e)}
