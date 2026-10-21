@@ -13410,3 +13410,19 @@ select,select:hover,select:active,select:focus{
   .reveal{transition:opacity .35s var(--ease-out),transform .35s var(--ease-out);transform:translateY(10px)}
   body:not(.auth-active) .sidebar{transition:transform .25s,width .25s var(--ease-out)}
 }
+
+/* ---- Unified click feedback on buttons & pills, UI only (21 Oct 2026) ----
+   A quick, smooth spring-press on every button, tab, pill and filter chip
+   across the portal, with consistent state transitions. Purely how a click
+   feels - no layout, colour, size, text or behaviour change. <select> is never
+   given a transform (it widens). Reduce-motion users get none of it. */
+@media (prefers-reduced-motion:no-preference){
+  button:not(.side-collapse):not(.menu-btn),
+  .pld-tab,.pld-seg-btn,.msg-tab,.appt-facility-tab,.tab,.tag,.msg-chan-pill,
+  .cc-filter-btn,.cc-filter-opt,.pm-dir-filter,.fts-item,.msg-form-item,.gc-badge{
+    transition:transform .15s var(--ease-out),background .18s var(--ease-out),color .18s var(--ease-out),box-shadow .18s var(--ease-out),border-color .18s var(--ease-out)
+  }
+  button:not(.side-collapse):not(.menu-btn):active,
+  .pld-tab:active,.pld-seg-btn:active,.msg-tab:active,.appt-facility-tab:active,.tab:active,.tag:active,.msg-chan-pill:active,
+  .cc-filter-btn:active,.cc-filter-opt:active,.pm-dir-filter:active,.fts-item:active,.msg-form-item:active{transform:scale(.97)}
+}
