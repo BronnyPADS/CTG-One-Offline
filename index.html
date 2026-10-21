@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261021b">
+<link rel="stylesheet" href="styles.css?v=20261021n">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20260929a"></script>
 <script src="ctg-actions.js?v=20261009a"></script>
@@ -31,6 +31,8 @@
 
 <!-- ───────── LOGIN OVERLAY ───────── -->
 <div class="auth-overlay" id="authOverlay">
+  <div class="auth-aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="auth-particles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="auth-card">
     <div class="auth-hero">
       <div class="auth-hero-top">
@@ -208,7 +210,7 @@
   </div>
   <a class="side-link" id="sidePendingAce" data-page="pendingAce" data-onclick="showPage('pendingAce')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-    Patients Pending for Day 1
+    Pending Day 1
   </a>
   <a class="side-sublink" id="sideIncompleteAce" data-page="incompleteAce" data-onclick="showPage('incompleteAce')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -220,7 +222,7 @@
   </a>
   <a class="side-link" id="sidePendingDay2" data-page="pendingDay2" data-onclick="showPage('pendingDay2')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-    Patients Pending for Day 2 <span id="pendingDay2Count" data-cs-boot="display:none;margin-left:auto;background:#062E52;color:#00B4D8;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
+    Pending Day 2 <span id="pendingDay2Count" data-cs-boot="display:none;margin-left:auto;background:#062E52;color:#00B4D8;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">0</span>
   </a>
   <div class="side-divider"></div>
   <div class="side-section-label">Current Forms</div>
@@ -1323,6 +1325,7 @@
           <button type="button" class="pld-seg-btn is-on" data-view="active" data-onclick="setPatientListView('active')">Active <span class="pld-seg-count">0</span></button>
           <button type="button" class="pld-seg-btn" data-view="inactive" data-onclick="setPatientListView('inactive')">Inactive <span class="pld-seg-count">0</span></button>
           <button type="button" class="pld-seg-btn" data-view="all" data-onclick="setPatientListView('all')">All <span class="pld-seg-count">0</span></button>
+          <span class="pld-seg-glider" aria-hidden="true"></span>
         </div>
         <button type="button" class="btn btn-primary pld-add-patient-btn" id="addPatientBtn" data-onclick="showPage('registration')">
           <span data-cs-boot="font-size:18px;line-height:1">＋</span> Add New Patient
@@ -2749,9 +2752,9 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261021a"></script>
+<script src="app.js?v=20261021d"></script>
 <!-- Appointment scheduling (week grid) -->
-<script src="appointments.js?v=20261005e"></script>
+<script src="appointments.js?v=20261021z"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
 <script src="apptconfig.js?v=20261005e"></script>
 <script src="apptrooms.js?v=20260929b"></script>

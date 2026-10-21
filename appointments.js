@@ -402,6 +402,31 @@ function apptNext() {
 }
 function apptToday() { apptCursorDate = apptMidnight(new Date()); renderAppointments() }
 function apptSetFacilityFilter(f) { apptFacilityFilter = f; renderAppointments() }
+// Sliding pill under Day/Week/Month/Agenda. The toolbar re-renders on switch, so we
+// remember the last glider position and animate the fresh glider from there.
+let apptViewGliderLast = null
+function ctgPlaceApptViewGlider(tabs) {
+  try {
+    if (!tabs) return
+    const g = tabs.querySelector('.appt-view-glider'), act = tabs.querySelector('.appt-facility-tab.active')
+    if (!g || !act) { if (g) g.style.opacity = '0'; return }
+    requestAnimationFrame(() => {
+      const x = act.offsetLeft, y = act.offsetTop, w = act.offsetWidth, h = act.offsetHeight
+      if (apptViewGliderLast) {
+        g.style.transition = 'none'
+        g.style.transform = 'translate(' + apptViewGliderLast.x + 'px,' + apptViewGliderLast.y + 'px)'
+        g.style.width = apptViewGliderLast.w + 'px'; g.style.height = apptViewGliderLast.h + 'px'; g.style.opacity = '1'
+        void g.offsetWidth; g.style.transition = ''
+        requestAnimationFrame(() => { g.style.transform = 'translate(' + x + 'px,' + y + 'px)'; g.style.width = w + 'px'; g.style.height = h + 'px' })
+      } else {
+        g.style.transition = 'none'; g.style.opacity = '1'
+        g.style.transform = 'translate(' + x + 'px,' + y + 'px)'; g.style.width = w + 'px'; g.style.height = h + 'px'
+        void g.offsetWidth; g.style.transition = ''
+      }
+      apptViewGliderLast = { x, y, w, h }
+    })
+  } catch (e) {}
+}
 function apptSetViewMode(mode) { apptViewMode = mode; renderAppointments() }
 function apptGoToDay(iso) { apptCursorDate = apptMidnight(new Date(iso + 'T00:00:00')); apptViewMode = 'day'; renderAppointments() }
 
@@ -445,7 +470,8 @@ function renderAppointments() {
   if (viewTabs) {
     viewTabs.innerHTML = APPT_VIEW_MODES.map(([key, lbl]) =>
       '<button type="button" class="appt-facility-tab' + (apptViewMode === key ? ' active' : '') + '" data-onclick="apptSetViewMode(\'' + key + '\')">' + lbl + '</button>'
-    ).join('')
+    ).join('') + '<span class="appt-view-glider" aria-hidden="true"></span>'
+    ctgPlaceApptViewGlider(viewTabs)
   }
 
   const facSelect = document.getElementById('apptFacilityFilterSelect')

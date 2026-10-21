@@ -6420,6 +6420,9 @@ let patientListSearchQuery=''
    the archive (inactive), or everything together. */
 let patientListView='active' // 'active' | 'inactive' | 'all'
 let patientDetailActiveTab='overview'
+// One-shot: true right after a patient is opened, so the detail header
+// "pops" on open but not on every tab switch (UI polish only).
+let patientJustOpened=false
 let patientReExamRecordsVisible={}
 let currentAcePatientId=null
 let modalContext={patientId:null,section:null}
@@ -7817,6 +7820,7 @@ function renderPatientWorkflow(){
       const c=b.querySelector('.pld-seg-count')
       if(c)c.textContent=String(counts[v]||0)
     })
+    requestAnimationFrame(()=>ctgPlaceSegGlider(seg))
   }
   const regPending=document.getElementById('regPendingTag'); if(regPending)regPending.textContent=pending+' Pending Day 1'
   const pendingTag=document.getElementById('pendingTotalTag'); if(pendingTag)pendingTag.textContent=pending+' Pending'
@@ -8161,7 +8165,7 @@ function renderPendingDay2Rows(){
       <button class="btn btn-primary btn-sm" data-onclick="event.stopPropagation();startDay2ForPatient('${p.id}')">Start Day 2</button>
     </div>`).join('')+'</div>'
 }
-function selectPatient(id){selectedPatientId=id;patientDetailActiveTab='overview';patientDocumentsSearchQuery='';renderPatientWorkflow();renderPatientDetails(id)
+function selectPatient(id){selectedPatientId=id;patientDetailActiveTab='overview';patientDocumentsSearchQuery='';patientJustOpened=true;renderPatientWorkflow();renderPatientDetails(id)
   // On a phone the details stack BELOW the list, off-screen - a tap looked like it did nothing.
   if(window.innerWidth<=860){const box=document.getElementById('patientDetail');if(box)requestAnimationFrame(()=>box.scrollIntoView({behavior:'smooth',block:'start'}))}
 }
@@ -8357,7 +8361,47 @@ function patientTabAllowed(tab){if(currentUserIsLawyer())return tab==='billing'|
    section (Diagnosis, Policy Limits). Defaults to visible when sections aren't
    configured, matching ctgCanSection's own legacy-full-access behaviour. */
 function patientOverviewSectionAllowed(sec){return typeof window.ctgCanSection!=='function'||window.ctgCanSection('patientLists',sec)}
-function setPatientDetailTab(tab){if(!patientTabAllowed(tab))return;if(tab!=='documents'){patientDocumentViewState=null;patientDocumentsSearchQuery=''}patientDetailActiveTab=tab;if(selectedPatientId)renderPatientDetails(selectedPatientId)}
+// Sliding underline ("glider") under the patient tabs. The tab bar re-renders on
+// every switch, so we remember the last glider position and animate the fresh
+// glider from there to the newly-active tab. Defensive: any failure = no slide.
+let ctgTabGliderLast=null, ctgTabSlideNext=false
+// Sliding white pill under the Active/Inactive/All segmented control. The buttons
+// persist, so one glider slides to the active one via a CSS transition.
+function ctgPlaceSegGlider(seg){
+  try{
+    if(!seg)return
+    const g=seg.querySelector('.pld-seg-glider'), act=seg.querySelector('.pld-seg-btn.is-on')
+    if(!g||!act)return
+    const first=g.style.opacity!=='1'
+    if(first)g.style.transition='none'
+    g.style.width=act.offsetWidth+'px'; g.style.height=act.offsetHeight+'px'
+    g.style.transform='translate('+act.offsetLeft+'px,'+act.offsetTop+'px)'; g.style.opacity='1'
+    if(first){ void g.offsetWidth; g.style.transition='' }
+  }catch(e){}
+}
+function ctgPlaceTabGlider(animate){
+  try{
+    const tabs=document.querySelector('.pld-tabs'); if(!tabs)return
+    const g=tabs.querySelector('.pld-tab-glider'), act=tabs.querySelector('.pld-tab.active')
+    if(!g||!act){ if(g)g.style.opacity='0'; return }
+    requestAnimationFrame(()=>{
+      const x=act.offsetLeft, w=act.offsetWidth
+      if(animate&&ctgTabGliderLast){
+        g.style.transition='none'
+        g.style.transform='translateX('+ctgTabGliderLast.x+'px)'; g.style.width=ctgTabGliderLast.w+'px'; g.style.opacity='1'
+        void g.offsetWidth
+        g.style.transition=''
+        requestAnimationFrame(()=>{ g.style.transform='translateX('+x+'px)'; g.style.width=w+'px' })
+      }else{
+        g.style.transition='none'; g.style.opacity='1'
+        g.style.transform='translateX('+x+'px)'; g.style.width=w+'px'
+        void g.offsetWidth; g.style.transition=''
+      }
+      ctgTabGliderLast={x,w}
+    })
+  }catch(e){}
+}
+function setPatientDetailTab(tab){if(!patientTabAllowed(tab))return;if(tab!=='documents'){patientDocumentViewState=null;patientDocumentsSearchQuery=''}ctgTabSlideNext=true;patientDetailActiveTab=tab;if(selectedPatientId)renderPatientDetails(selectedPatientId)}
 function togglePatientReExamRecords(id){
   const key=String(id||'')
   if(!key)return
@@ -10443,7 +10487,7 @@ function renderPatientDetails(id){
   if(!box)return
   if(!p){box.className='patient-detail-empty pld-detail-empty';box.innerHTML='Select a patient to view details.';return}
   if(box.closest('.page.active'))ctgAuditChartView(id,'chart')
-  box.className='pld-detail-shell'
+  box.className='pld-detail-shell'+(patientJustOpened?' pld-open-anim':'');patientJustOpened=false
   const d=p.demographics||{}
   const lawyer=currentUserIsLawyer()
   const provider=currentUserIsProvider()
@@ -10495,10 +10539,12 @@ function renderPatientDetails(id){
       <div class="pld-status-row">${patientPregnancyBadge(p)}${isPatientInactive(p)?patientDetailStatusPill('Inactive','gray'):''}${lawyer?patientCaseStatusPill(p):(patientDetailStatusBadges(p,false)||patientDetailStatusPill('No records saved','gray'))}</div>
       <div class="pld-tabs">
         ${allowedTabs.map(t=>patientDetailTab(t[0],t[1],t[0])).join('')}
+        <span class="pld-tab-glider" aria-hidden="true"></span>
       </div>
     </div>
     ${panel}
   `
+  ctgPlaceTabGlider(ctgTabSlideNext); ctgTabSlideNext=false
 }
 
 let notesFormState = { patientId: null, loading: false, error: '', code: '', notes: null }
