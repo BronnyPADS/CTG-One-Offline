@@ -14252,3 +14252,12 @@ html[data-theme="dark"] .ctg-sel-panel{ background:#0B1531; border-color:rgba(25
 html[data-theme="dark"] .ctg-sel-opt{ color:#EAF4FB; }
 html[data-theme="dark"] .ctg-sel-opt.hl, html[data-theme="dark"] .ctg-sel-opt:hover{ background:rgba(72,202,228,.14); color:#fff; box-shadow:0 5px 16px rgba(0,0,0,.4); }
 html[data-theme="dark"] .ctg-sel-opt.sel{ background:rgba(72,202,228,.2); color:#fff; }
+
+/* ===== Day 1: even spacing in the top stack (2026-10-23) ============
+   The gaps were uneven — ~37px tabs->progress-strip vs ~26px strip->hero. Pull
+   the strip up and normalise the margins so every gap is a consistent ~18px. */
+body.topbar-has-tabs:not(.auth-active) #aceProgressStrip{
+  margin-top:-13px!important;
+  margin-bottom:18px!important;
+}
+body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!important; }
