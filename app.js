@@ -479,8 +479,16 @@ function toggleSidebar(){
    Distinct from toggleSidebar above, which slides the whole rail off screen
    and is still what the phone layout and the overlay use. This one narrows it
    to icons instead, so the nav is never actually gone on a desktop. */
+let ctgSideAnimTimer=null
 function ctgSetSidebarRail(on){
   if(typeof ctgGlideStop==='function')ctgGlideStop()
+  // Flag the collapse/expand window so CSS can drop the most expensive per-frame
+  // paint (the rail's big blur shadow + content backdrop-blur) while it slides,
+  // then restore the glass once the layout animation has settled. --side-dur is
+  // 300ms; give it a small buffer.
+  document.body.classList.add('side-animating')
+  if(ctgSideAnimTimer)clearTimeout(ctgSideAnimTimer)
+  ctgSideAnimTimer=setTimeout(()=>{document.body.classList.remove('side-animating');ctgSideAnimTimer=null},360)
   document.body.classList.toggle('sidebar-rail', !!on)
   if(typeof ctgCloseFly==='function')ctgCloseFly()
   const b=document.getElementById('sideCollapseBtn')
@@ -6347,7 +6355,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
     return
     heading('INITIAL EXAMINATION RESULTS')
     metricGrid([
-      ['ID / Medical Record #',data.medicalRecordNo],['Gender',data.gender],['Day 1 Score',data.aceScore],['Report Sources',data.sources],['Saved Date',data.savedDisplay]
+      ['Account Number',data.medicalRecordNo],['Gender',data.gender],['Day 1 Score',data.aceScore],['Report Sources',data.sources],['Saved Date',data.savedDisplay]
     ])
 
     const sw=data.sway||SWAY_DATA
@@ -7117,7 +7125,7 @@ function pendingPatients(){return sortedPatients().filter(p=>p.pendingAce&&!p.ac
 function patientMetaParts(p){
   const d=p.demographics||{}
   const parts=[]
-  if(d.mrn)parts.push('ID: '+d.mrn)
+  if(d.mrn)parts.push('Account #: '+d.mrn)
   if(d.dob)parts.push('DOB: '+(day2FormatAnyDate(d.dob)||d.dob))
   if(d.doi)parts.push('DOI: '+(day2FormatAnyDate(d.doi)||d.doi))
   return parts
@@ -8877,7 +8885,7 @@ function roRenderSecHeader(fs){
     +roItem('Date of Service (DOS)',inp.dos)
     +roItem('Date of Injury (DOI)',inp.doi)
     +roItem('Patient Gender',sel.ptGender)
-    +roItem('ID / Medical Record #',inp.ptMRN)
+    +roItem('Account Number',inp.ptMRN)
     +roItem('Reporter (History Provided By)',sel.reporter)
     +roItem('Reporter Name',sel.reporter==='Patient'?inp.ptName:inp.reporterOther)
     +roItem('Translator',sel.translator)
@@ -9742,7 +9750,8 @@ function getFCRComponents(p){
     {label:'Day 2 Neurocognitive & Vestibular Exam Report',source:'Generated',available:!!(p.initialExam&&p.initialExam.savedAt),count:p.initialExam&&p.initialExam.savedAt?1:0},
     {label:'Re-Examination Reports',source:'Generated',available:reExams.length>0,count:reExams.length},
     {label:'Daily Treatment Notes',source:'Generated',available:dailyCount>0,count:dailyCount},
-    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0}
+    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0},
+    {label:'Case Discharge Summary (closing page)',source:'Generated',available:true,count:1}
   ]
 }
 function renderPatientFCRPanel(p){
@@ -9831,6 +9840,7 @@ function renderPatientFCRPanel(p){
       </div>
     </div>
     <div class="fcr-body">
+      <div class="pld-record-card" data-cs="${__cs}margin-bottom:14px"><div class="pld-record-head"><div class="pld-record-title"><span>Statement Date</span></div></div><div class="fg" data-cs="${__cs}max-width:300px;margin-top:4px"><div class="date-field"><input type="text" id="fcrStatementDate" value="${escHtml((p.billing||{}).statementDate||'')}" placeholder="MM/DD/YYYY" data-oninput="saveFcrStatementDate('${p.id}')"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('fcrStatementDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div><div class="small-muted">Used as the Statement Date on the billing statement in this FCR.</div></div></div>
       <div class="pld-detail-list">${head}${rows}</div>
     </div>
   </div></div>`
@@ -10370,8 +10380,12 @@ async function compileFCRPages(p,merged){
   }
   fcrSegments.sort((a,b)=>a.date-b.date)
   for(const seg of fcrSegments){if(seg.file){await addDataUrl(await resolveUploadDataUrl(p,seg.file));continue}await addJsPdf(await seg.build())}
-  // 9. Final Examination Report (always last)
+  // 9. Final Examination Report (last of the clinical exam sequence)
   if(p.finalExam&&p.finalExam.savedAt)await addJsPdf(buildInitialExamPDF(null,p.id,null,p.finalExam,{returnDoc:true}))
+  // 10. Case Discharge Summary again as the CLOSING page of the FCR. Same builder
+  //     and addJsPdf path as the opening one, so it is real text in the Word copy
+  //     too and gets continuous footer page numbers.
+  try{await addJsPdf(buildCaseDischargeDoc(p))}catch(e){console.error('FCR closing case discharge failed',e)}
   if(merged.getPageCount()===0)throw new Error('No reports or documents are available to compile yet.')
   return {kinds,sources,pageNoAt,aceRecord}
 }
@@ -10520,7 +10534,7 @@ function renderPatientDetails(id){
           <div data-cs="${__cs}min-width:0">
             <div class="pld-profile-name">${escHtml(naturalPatientName(p))}</div>
             <div class="pld-profile-meta">
-              ${patientDetailMetaItem('documents','ID',d.mrn)}
+              ${patientDetailMetaItem('documents','Account #',d.mrn)}
               ${patientDetailMetaItem('exams','Date of Birth',d.dob)}
               ${patientDetailMetaItem('exams','Date of Incident',d.doi)}
             </div>
@@ -10755,7 +10769,7 @@ function openSectionModal(id,section){
   const d=p.demographics||{}, a=p.ace||{}, b=p.billing||{}, n=p.notes||{}
   let body=''
   if(section==='demographics')body=`<div class="g2">
-    ${modalInput('Last Name','modalLastName',d.lastName)}${modalInput('First Name','modalFirstName',d.firstName)}${modalInput('ID / Medical Record #','modalMRN',d.mrn)}${modalInput('Date of Birth','modalDOB',d.dob)}${modalSelect('Gender','modalGender',d.gender,['','Male','Female','Non-binary','Prefer not to say'])}${modalSelect('Device','modalDevice',d.device,['','iPhone','Android'])}${modalInput('Address Line 1','modalAddressLine',d.addressLine,'full')}${modalInput('Address Line 2','modalAddressLine2',d.addressLine2,'full')}${modalInput('City','modalCity',patientCityStateZip(d).city)}${modalInput('State','modalState',patientCityStateZip(d).state)}${modalInput('ZIP Code','modalZip',patientCityStateZip(d).zip)}${modalInput('Email Address','modalEmail',d.email)}${modalInput('Mobile #','modalMobile',d.mobile)}${modalInput('Date of Incident','modalDOI',d.doi)}${modalRegisteredLawFirmSelect('modalLawFirm',d.lawFirm)}
+    ${modalInput('Last Name','modalLastName',d.lastName)}${modalInput('First Name','modalFirstName',d.firstName)}${modalInput('Account Number','modalMRN',d.mrn)}${modalInput('Date of Birth','modalDOB',d.dob)}${modalSelect('Gender','modalGender',d.gender,['','Male','Female','Non-binary','Prefer not to say'])}${modalSelect('Device','modalDevice',d.device,['','iPhone','Android'])}${modalInput('Address Line 1','modalAddressLine',d.addressLine,'full')}${modalInput('Address Line 2','modalAddressLine2',d.addressLine2,'full')}${modalInput('City','modalCity',patientCityStateZip(d).city)}${modalInput('State','modalState',patientCityStateZip(d).state)}${modalInput('ZIP Code','modalZip',patientCityStateZip(d).zip)}${modalInput('Email Address','modalEmail',d.email)}${modalInput('Mobile #','modalMobile',d.mobile)}${modalInput('Date of Incident','modalDOI',d.doi)}${modalRegisteredLawFirmSelect('modalLawFirm',d.lawFirm)}
     <div class="fg full"><label>RecoverArc ID</label><input type="text" id="modalRecoverArcId" value="${escHtml(p.notesPatientId||'')}" placeholder="e.g. patient_0f3c…" autocomplete="off" spellcheck="false"><div class="small-muted">The id RecoverArc uses for this patient. Their notes are matched to this chart by this id only, never by name or date of birth.</div></div>
     <div class="sdiv full" data-cs="${__cs}margin-top:2px"><span>Discharge Information</span></div>
     <div class="fg full"><label>Discharge Date</label><div data-cs="${__cs}display:flex;gap:8px;align-items:center"><div class="date-field" data-cs="${__cs}flex:1"><input type="text" id="modalDischargeDate" value="${escHtml(p.dischargeDate||'')}" placeholder="MM/DD/YYYY"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('modalDischargeDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div><button type="button" class="btn btn-ghost btn-sm" data-cs="${__cs}color:var(--red);border-color:rgba(3,4,94,.24)" data-onclick="clearDischargeDate()">Delete Date</button></div><div class="small-muted">Leave blank if the patient does not have a discharge date yet.</div></div>
@@ -14157,6 +14171,13 @@ function patientCityStateZip(d){
   return {city:String(d.cityStateZip||'').trim(),state:'',zip:''}
 }
 
+function saveFcrStatementDate(id){
+  const p=getPatient(id); if(!p)return
+  if(!p.billing)p.billing={}
+  p.billing.statementDate=rawVal('fcrStatementDate')
+  p.updatedAt=new Date().toISOString()
+  persistPatients()
+}
 function getBillingStatementData(p){
   const b=(p&&p.billing)||{}, d=(p&&p.demographics)||{}
   // Pull Patient Name / DOB / Date Of Accident + Provider from the SELECTED
@@ -14173,7 +14194,14 @@ function getBillingStatementData(p){
   const gt=groups.reduce((a,g)=>({charges:a.charges+(g.subtotal?.charges||0),payments:a.payments+(g.subtotal?.payments||0),adjustments:a.adjustments+(g.subtotal?.adjustments||0),balance:a.balance+(g.subtotal?.balance||0)}),{charges:0,payments:0,adjustments:0,balance:0})
   return {
     clinic:BILLING_CLINIC,
-    statement:{date:b.statementDate||'',accountNo:b.accountNo||''},
+    statement:{
+      date:(b.statementDate||''),
+      // Account No = the patient's ID / Medical Record # (d.mrn). The billing/AR
+      // views already use the MRN as the account number, so there is no separate
+      // Account No field; b.accountNo stays only as a manual override for the
+      // rare case where the MRN is blank.
+      accountNo:(d.mrn||b.accountNo||'')
+    },
     patient:{
       name: ai.ptName||ace.patientName||(p?naturalPatientName(p):'')||'',
       dob:  ai.ptDOB||d.dob||'',

@@ -533,7 +533,7 @@ html[data-theme="dark"] .ro-ace-tab:hover{background:rgba(0,119,182,.22)!importa
   --r: 14px;
   --rl2: 18px;
   --topbar-bg: linear-gradient(135deg,#03045E 0%,#023E8A 60%,#0077B6 100%);
-  --sidebar-grad: linear-gradient(165deg,#03045E 0%,#023E8A 35%,#012247 70%,#010225 100%);
+  --sidebar-grad: linear-gradient(180deg,#0A3A55 0%,#06283C 100%);
 }
 
 /* Gradient background */
@@ -1971,7 +1971,7 @@ html[data-theme="dark"] .doc-filter-input,html[data-theme="dark"] .doc-filter-cl
   background:
     radial-gradient(150% 46% at 50% 103%, rgba(0,180,216,.34) 0%, transparent 62%),
     radial-gradient(130% 55% at 0% 0%, rgba(0,119,182,.30) 0%, transparent 60%),
-    linear-gradient(180deg,#0F1A3D 0%,#023E8A 40%,#03045E 76%,#010225 100%)!important;
+    linear-gradient(180deg,#0A3A55 0%,#06283C 100%)!important;
   border-right:1px solid rgba(72,202,228,.26)!important;
   box-shadow:6px 0 46px rgba(30,27,75,.5)!important;
   padding:22px 0 16px!important
@@ -5534,7 +5534,7 @@ html[data-theme="dark"] #page-internalMessaging.active{
     radial-gradient(640px 560px at 68% 100%,rgba(0,180,216,.24),transparent 60%),
     #0A0F23;
 }
-.im-page-shell{height:100%;display:grid;grid-template-columns:310px minmax(0,1fr) 300px;background:transparent;border-top:1px solid rgba(255,255,255,.4);overflow:hidden;position:relative}
+.im-page-shell{height:100%;display:grid;grid-template-columns:310px minmax(0,1fr) 300px;background:transparent;border-top:1px solid rgba(255,255,255,.4);overflow:hidden;position:relative;border-radius:18px}
 .im-left-panel,.im-main-panel,.im-details-panel{min-width:0;min-height:0;background:rgba(255,255,255,.42);-webkit-backdrop-filter:blur(22px) saturate(165%);backdrop-filter:blur(22px) saturate(165%)}
 .im-left-panel{border-right:1px solid rgba(255,255,255,.5);display:flex;flex-direction:column;background:rgba(255,255,255,.34)}
 .im-left-head{height:72px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.28);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
@@ -10568,15 +10568,15 @@ body{overflow-wrap:break-word}
 
 
 :root{
-  --side-gap:14px;
+  --side-gap:0px;
   --side-w:252px;
   --rail-w:78px;
   /* Distance from the viewport edge to the content: gap + rail + gap. Flipped
      by .sidebar-rail below, which is what makes the content slide with the
      sidebar instead of having to be animated separately. */
   --side-x:280px;
-  --side-ease:cubic-bezier(.4,0,.2,1);
-  --side-dur:440ms;
+  --side-ease:cubic-bezier(.33,1,.68,1);
+  --side-dur:300ms;
 }
 body.sidebar-rail{--side-x:106px}
 
@@ -11609,15 +11609,15 @@ html:not([data-theme="dark"]) body:not(.auth-active) .sidebar:hover::-webkit-scr
 }
 
 
-:root{--frame:14px;--sheet:#EAF6FB;--ground:#03045E;--sheet-r:24px;--notch-r:16px}
+:root{--frame:0px;--sheet:#EAF6FB;--ground:#eaf3fb;--sheet-r:0px;--notch-r:16px}
 html[data-theme="dark"]{--sheet:#0B1531;--ground:#050B1D}
 
 /* ---------- 1. the ground the sheet is inset into ---------- */
 body:not(.auth-active){background:var(--ground)!important}
 /* Flat, so the frame reads as one colour with the rail. The near-flat gradient
    round 5 gave the rail would otherwise not match the frame beside it. */
-html:not([data-theme="dark"]) body:not(.auth-active) .sidebar{background:var(--ground)!important}
-html[data-theme="dark"] body:not(.auth-active) .sidebar{background:var(--ground)!important}
+html:not([data-theme="dark"]) body:not(.auth-active) .sidebar{background:linear-gradient(180deg,#0A3A55 0%,#06283C 100%)!important}
+html[data-theme="dark"] body:not(.auth-active) .sidebar{background:linear-gradient(180deg,#0A3A55 0%,#06283C 100%)!important}
 html:not([data-theme="dark"]) .side-brand{background:var(--ground)!important}
 html[data-theme="dark"] .side-brand{background:var(--ground)!important}
 /* The decorative arcs belong to the old floating rail; on a flat frame they
@@ -11854,7 +11854,7 @@ body.sidebar-rail:not(.auth-active) .sidebar .side-sublink.active::after{
    and footer insets, so this is the only value that has to change. */
 :root{--frame:10px}
 
-html[data-theme="dark"]{--ground:#03045E;--sheet:#070E24}
+html[data-theme="dark"]{--ground:#eaf3fb;--sheet:#070E24}
 /* On a saturated navy rail the idle nav needs a touch more light than it did
    against near-black, or the labels sink into the panel. */
 html[data-theme="dark"] body:not(.auth-active) .sidebar .side-link,
@@ -11953,6 +11953,13 @@ html[data-theme="dark"] body:not(.auth-active) .top-bar #day1Tabs{
   background:#0B1531!important;
   border:1px solid rgba(255,255,255,.12)!important;
   box-shadow:0 6px 18px rgba(0,0,0,.44)!important;
+}
+/* The step-tab strip does not need its own white card behind the pills — each
+   pill already reads as a pill. Drop the box (the right-side actions cluster,
+   which shares the rule above, keeps its card). */
+html:not([data-theme="dark"]) body:not(.auth-active) .top-bar #day1Tabs,
+html[data-theme="dark"] body:not(.auth-active) .top-bar #day1Tabs{
+  background:transparent!important; border:none!important; box-shadow:none!important;
 }
 /* The search field was white on white inside a white pill - three surfaces,
    no edges. Tint it so the input reads as an input. */
@@ -13564,3 +13571,560 @@ html[data-theme="dark"] #apptViewTabs .appt-view-glider{background:var(--s2)}
   .auth-particles i:nth-child(13){left:33%;width:8px;height:8px;animation-duration:11s;animation-delay:-6s;--dx:24px}
   .auth-particles i:nth-child(14){left:66%;width:9px;height:9px;animation-duration:12s;animation-delay:-9s;--dx:-26px}
 }
+
+/* ===================================================================
+   Login polish (2026-10-22) — richer layered background (less flat),
+   more present orbs, and a smoother, softer card entrance (scale +
+   blur-in). Calm cyan/teal, reduced-motion safe.
+   =================================================================== */
+.auth-overlay{
+  background:
+    radial-gradient(110% 80% at 12% 8%,  rgba(0,180,216,.42), transparent 52%),
+    radial-gradient(100% 80% at 88% 14%, rgba(144,224,239,.46), transparent 52%),
+    radial-gradient(120% 95% at 80% 92%, rgba(0,119,182,.34), transparent 58%),
+    radial-gradient(95% 90% at 20% 84%,  rgba(72,202,228,.36), transparent 55%),
+    radial-gradient(72% 64% at 50% 46%,  rgba(255,255,255,.42), transparent 62%),
+    linear-gradient(150deg,#e8f6fc 0%,#d2ecf9 48%,#e3f3fb 100%) !important;
+}
+
+/* Orbs: more present, with distinct cyan/teal/aqua hues for depth */
+.auth-aurora span:nth-child(1){ opacity:.64!important;
+  background:radial-gradient(circle at 35% 35%,#00B4D8,rgba(0,180,216,0) 66%)!important; }
+.auth-aurora span:nth-child(2){ opacity:.6!important;
+  background:radial-gradient(circle at 60% 60%,#48CAE4,rgba(72,202,228,0) 68%)!important; }
+.auth-aurora span:nth-child(3){ opacity:.56!important;
+  background:radial-gradient(circle at 50% 50%,#90E0EF,rgba(144,224,239,0) 70%)!important; }
+
+/* Card: a touch more depth + a faint lit top edge */
+.auth-card{
+  box-shadow:0 44px 100px rgba(1,2,40,.5),0 12px 34px rgba(0,119,182,.16),
+             inset 0 1px 0 rgba(255,255,255,.4)!important;
+}
+
+/* Smoother opening: gentle rise + scale-up + blur-in on a soft exponential ease */
+@media (prefers-reduced-motion:no-preference){
+  .auth-card{ animation:ctgAuthCardIn2 1.05s cubic-bezier(.16,1,.3,1) both!important; }
+  @keyframes ctgAuthCardIn2{
+    0%{  opacity:0; transform:translateY(26px) scale(.955); filter:blur(10px); }
+    55%{ filter:blur(0); }
+    100%{opacity:1; transform:none; filter:blur(0); }
+  }
+}
+
+/* ===================================================================
+   Login background depth (2026-10-22b) — a drifting dot-grid, a slow
+   diagonal light-sweep, and fine film grain over the mesh. Adds the
+   texture a flat gradient lacks; calm, reduced-motion safe.
+   =================================================================== */
+.auth-texture{ position:absolute; inset:0; z-index:0; pointer-events:none; overflow:hidden; }
+
+/* dot-grid, masked so it fades at the edges */
+.auth-texture::before{
+  content:''; position:absolute; inset:-25%;
+  background-image:radial-gradient(rgba(0,119,182,.17) 1px, transparent 1.6px);
+  background-size:28px 28px;
+  -webkit-mask-image:radial-gradient(118% 100% at 50% 42%,#000 28%,transparent 76%);
+  mask-image:radial-gradient(118% 100% at 50% 42%,#000 28%,transparent 76%);
+  opacity:.55;
+}
+/* fine grain, over the colour so the gradient reads as a surface, not a fill */
+.auth-texture::after{
+  content:''; position:absolute; inset:0; opacity:.055; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:150px 150px;
+}
+/* a wide, very soft diagonal beam of light */
+.auth-sweep{
+  position:absolute; top:-40%; left:-30%; width:70%; height:180%;
+  background:linear-gradient(105deg, transparent 38%, rgba(255,255,255,.28) 50%, transparent 62%);
+  transform:rotate(8deg); pointer-events:none;
+}
+
+@media (prefers-reduced-motion:no-preference){
+  .auth-texture::before{ animation:ctgDotDrift 28s linear infinite alternate; }
+  @keyframes ctgDotDrift{ from{transform:translate(0,0)} to{transform:translate(20px,-16px)} }
+  .auth-sweep{ animation:ctgSweep 14s ease-in-out infinite alternate; }
+  @keyframes ctgSweep{ from{transform:translateX(0) rotate(8deg)} to{transform:translateX(165%) rotate(8deg)} }
+}
+
+/* ===================================================================
+   SIDEBAR MAKEOVER (2026-10-22) — clean dark teal-blue rail, flush
+   content (no bezel), tree-style sub-nav with a connector line, filled
+   cyan active pill, cleaner type. On-brand with CTG's cyan header.
+   =================================================================== */
+:root{ --side-x:var(--side-w)!important; }
+
+/* Flush full-height rail; content fills the rest (bezel removed) */
+body:not(.auth-active) .sidebar{
+  top:0!important; left:0!important; bottom:0!important; height:100vh!important;
+  margin:0!important; border-radius:0!important; border:none!important;
+  border-right:1px solid rgba(72,202,228,.16)!important;
+  box-shadow:4px 0 34px rgba(3,20,40,.24)!important;
+  padding:16px 12px 14px!important;
+}
+body.sidebar-visible:not(.auth-active) .page,
+#page-dashboard.active{ margin:0!important; border-radius:0!important; min-height:100vh!important; }
+body:not(.auth-active) .top-bar{ top:0!important; right:0!important; border-radius:0!important; }
+body.sidebar-visible:not(.auth-active) .action-bar{ right:0!important; }
+body.sidebar-visible:not(.auth-active) .ctg-phi-footer{ margin:0!important; border-radius:0!important; }
+
+/* Cleaner type across the rail */
+body:not(.auth-active) .sidebar .side-link,
+body:not(.auth-active) .sidebar .side-sublink{
+  font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif!important;
+  font-weight:600!important; letter-spacing:-.006em!important; font-size:13.5px!important;
+  color:rgba(222,238,250,.76)!important; border-radius:11px!important;
+}
+body:not(.auth-active) .sidebar .side-link svg,
+body:not(.auth-active) .sidebar .side-sublink svg{ color:rgba(170,208,232,.7)!important; }
+body:not(.auth-active) .sidebar .side-link:hover,
+body:not(.auth-active) .sidebar .side-sublink:hover{ background:rgba(255,255,255,.06)!important; color:#fff!important; }
+body:not(.auth-active) .sidebar .side-link:hover svg,
+body:not(.auth-active) .sidebar .side-sublink:hover svg{ color:#90E0EF!important; }
+.side-section-label{ color:rgba(140,193,223,.58)!important; letter-spacing:.12em!important; }
+body:not(.auth-active) .sidebar .side-group-toggle{ color:#eaf4fb!important; font-weight:700!important; }
+
+/* Drop the inset-sheet notches; active = filled cyan pill */
+body:not(.auth-active) .sidebar .side-link.active::before,
+body:not(.auth-active) .sidebar .side-link.active::after,
+body:not(.auth-active) .sidebar .side-sublink.active::before,
+body:not(.auth-active) .sidebar .side-sublink.active::after{ display:none!important; content:none!important; }
+html:not([data-theme="dark"]) body:not(.auth-active) .sidebar .side-link.active,
+html:not([data-theme="dark"]) body:not(.auth-active) .sidebar .side-sublink.active,
+html[data-theme="dark"] body:not(.auth-active) .sidebar .side-link.active,
+html[data-theme="dark"] body:not(.auth-active) .sidebar .side-sublink.active,
+body:not(.auth-active) .sidebar .side-link.active,
+body:not(.auth-active) .sidebar .side-sublink.active{
+  background:linear-gradient(135deg,rgba(0,180,216,.34) 0%,rgba(0,150,199,.22) 100%)!important;
+  color:#ffffff!important; border-radius:11px!important; border-left-color:transparent!important;
+  box-shadow:inset 0 0 0 1px rgba(72,202,228,.34), 0 6px 16px rgba(0,180,216,.16)!important;
+}
+body:not(.auth-active) .sidebar .side-link.active svg,
+body:not(.auth-active) .sidebar .side-sublink.active svg{ color:#90E0EF!important; }
+
+/* Tree sub-nav: a connector line down the group + a tick to each item */
+.side-group-body-inner{ position:relative!important; margin-left:21px!important; }
+.side-group-body-inner::before{
+  content:''!important; position:absolute!important; left:1px!important; top:2px!important; bottom:14px!important;
+  width:1.5px!important; background:rgba(140,193,223,.3)!important; border-radius:2px!important;
+}
+.side-group-body-inner .side-sublink{ position:relative!important; padding-left:20px!important; }
+.side-group-body-inner .side-sublink svg{ display:none!important; }
+.side-group-body-inner .side-sublink::before{
+  content:''!important; position:absolute!important; left:1px!important; top:50%!important;
+  width:13px!important; height:1.5px!important; background:rgba(140,193,223,.3)!important; transform:translateY(-50%)!important;
+}
+.side-group-body-inner .side-sublink.active::before{ background:rgba(144,224,239,.7)!important; }
+
+/* --- sidebar makeover corrections --- */
+/* contained pills (no edge bleed) */
+body:not(.auth-active) .sidebar .side-link,
+body:not(.auth-active) .sidebar .side-sublink{ margin-right:12px!important; }
+/* kill the inset-sheet notch at the frame system's own specificity */
+body:not(.auth-active):not(.sidebar-rail) .sidebar .side-link.active::before,
+body:not(.auth-active):not(.sidebar-rail) .sidebar .side-link.active::after,
+body:not(.auth-active):not(.sidebar-rail) .sidebar .side-sublink.active::before,
+body:not(.auth-active):not(.sidebar-rail) .sidebar .side-sublink.active::after{ display:none!important; content:none!important; }
+/* brand area sits on the rail, not a darker block */
+html:not([data-theme="dark"]) .side-brand, html[data-theme="dark"] .side-brand, .side-brand{ background:transparent!important; }
+/* top-bar: clean light glass instead of the navy strip */
+.top-bar{ background:rgba(255,255,255,.72)!important; -webkit-backdrop-filter:blur(14px)!important; backdrop-filter:blur(14px)!important;
+  border-bottom:1px solid rgba(0,119,182,.1)!important; box-shadow:0 4px 18px rgba(2,62,138,.06)!important; }
+
+/* --- sidebar makeover corrections 2 --- */
+/* active: contained pill, no right-bleed */
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-link.active,
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-sublink.active,
+body:not(.auth-active) .sidebar .side-link.active,
+body:not(.auth-active) .sidebar .side-sublink.active{ margin-right:12px!important; width:auto!important; overflow:visible!important; }
+/* notch removed at every specificity the frame system uses */
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-link.active::before,
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-link.active::after,
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-sublink.active::before,
+html:not([data-theme="dark"]) body:not(.auth-active):not(.sidebar-rail) .sidebar .side-sublink.active::after{ display:none!important; content:none!important; }
+/* top-bar clean (kill the navy strip) */
+body:not(.auth-active) .top-bar{ background:rgba(255,255,255,.72)!important; -webkit-backdrop-filter:blur(14px)!important; backdrop-filter:blur(14px)!important; border-bottom:1px solid rgba(0,119,182,.1)!important; box-shadow:0 4px 18px rgba(2,62,138,.06)!important; }
+/* Day 1 page: the top bar is tall here (it carries the 1-7 step pills). The
+   frosted-white version read as a stray white rectangle behind the pills. Match
+   it to the canvas so the pills float on the frame, not on a white block. Still
+   opaque, so form content scrolling under the fixed bar stays masked. */
+body.topbar-has-tabs:not(.auth-active) .top-bar{
+  background:var(--ground)!important;
+  -webkit-backdrop-filter:none!important; backdrop-filter:none!important;
+  border-bottom:none!important; box-shadow:none!important;
+}
+/* sub-items on one line */
+body:not(.auth-active) .sidebar .side-sublink{ white-space:nowrap!important; }
+
+/* --- sidebar brand area: blend into the rail (was navy) --- */
+html:not([data-theme="dark"]) .side-brand,
+html[data-theme="dark"] .side-brand,
+body:not(.auth-active) .side-brand{ background:transparent!important; }
+.sidebar::before{ display:none!important; }
+
+/* ===== FLOATING sidebar on light ground; content adjusts to its width ===== */
+:root{ --side-gap:14px!important; --frame:14px!important; --sheet-r:20px!important; }
+/* float the rail with a gap on every edge */
+body:not(.auth-active) .sidebar{
+  top:14px!important; left:14px!important; bottom:14px!important; height:auto!important;
+  border-radius:20px!important; border:none!important;
+  box-shadow:0 20px 48px rgba(3,30,55,.22), 0 3px 10px rgba(3,30,55,.1)!important;
+}
+/* content sits to the RIGHT of the floating rail and fills the rest, with its own gap.
+   margin-left tracks the rail width so expand/collapse never covers content. */
+body.sidebar-visible:not(.auth-active) .page,
+body.sidebar-visible:not(.auth-active) #page-dashboard.active{
+  margin:14px 14px 14px calc(var(--side-w) + 28px)!important;
+  border-radius:20px!important; min-height:calc(100vh - 28px)!important;
+}
+body.sidebar-rail:not(.auth-active) .page,
+body.sidebar-rail:not(.auth-active) #page-dashboard.active{
+  margin-left:calc(var(--rail-w, 76px) + 28px)!important;
+}
+body:not(.auth-active) .top-bar{
+  top:14px!important; right:14px!important; left:calc(var(--side-w) + 28px)!important; border-radius:16px!important;
+}
+body.sidebar-rail:not(.auth-active) .top-bar{ left:calc(var(--rail-w, 76px) + 28px)!important; }
+body.sidebar-visible:not(.auth-active) .ctg-phi-footer{ margin:0 14px 14px calc(var(--side-w) + 28px)!important; border-radius:16px!important; }
+
+/* ===== FLOATING rail + clean active, via #sidebar id (beats all class !important) ===== */
+body:not(.auth-active) #sidebar{
+  top:14px!important; left:14px!important; bottom:14px!important; height:auto!important;
+  border-radius:20px!important; border:none!important;
+  box-shadow:0 20px 48px rgba(3,30,55,.22), 0 3px 10px rgba(3,30,55,.1)!important;
+}
+#sidebar::before{ display:none!important; content:none!important; }
+/* active = contained blue pill; remove the white sheet bg + notch + ripple that flashed on click */
+#sidebar .side-link.active, #sidebar .side-sublink.active{
+  background:linear-gradient(135deg,rgba(0,180,216,.34) 0%,rgba(0,150,199,.22) 100%)!important;
+  color:#fff!important; border-radius:11px!important; margin-right:12px!important; width:auto!important;
+  box-shadow:inset 0 0 0 1px rgba(72,202,228,.34), 0 6px 16px rgba(0,180,216,.14)!important;
+}
+#sidebar .side-link.active svg, #sidebar .side-sublink.active svg{ color:#90E0EF!important; }
+#sidebar .side-link.active::before, #sidebar .side-link.active::after,
+#sidebar .side-sublink.active::before, #sidebar .side-sublink.active::after{ display:none!important; content:none!important; }
+#sidebar .ctg-ripple{ display:none!important; }
+
+/* ===== Rail colour = CTG cyan (matches the app header) + kill the white
+   notch flash on click, all via #sidebar id so it beats every class rule
+   (2026-10-22i) ===== */
+body:not(.auth-active) #sidebar{
+  background:linear-gradient(180deg,#03045E 0%,#0077B6 50%,#00B4D8 100%)!important;
+}
+#sidebar .side-brand{ background:#03045E!important; }
+/* No inset-sheet white notch on any nav row, any state (the white pill flash) */
+#sidebar .side-link::before, #sidebar .side-link::after,
+#sidebar .side-link.active::before, #sidebar .side-link.active::after,
+#sidebar .side-group-toggle::before, #sidebar .side-group-toggle::after{
+  background:none!important; content:none!important; display:none!important;
+}
+#sidebar .side-sublink.active::before, #sidebar .side-sublink.active::after{
+  background:none!important;
+}
+
+/* ===== Neutral canvas + SOLID WHITE floating header (2026-10-22j)
+   Removes the blue "wrapping": the frame/ground becomes a soft neutral so the
+   content + header read as clean white cards floating on it. The top bar stops
+   being translucent glass (which tinted blue over the ground) and becomes a
+   solid white card with a real elevation shadow. ===== */
+html:not([data-theme="dark"]){ --ground:#EDF1F6!important; --bg:#EDF1F6!important; --sheet:#FFFFFF!important; }
+html:not([data-theme="dark"]) body:not(.auth-active){ background:#EDF1F6!important; background-image:none!important; }
+
+/* Header = solid white floating card (not translucent glass) */
+body:not(.auth-active) .top-bar{
+  background:#FFFFFF!important;
+  -webkit-backdrop-filter:none!important; backdrop-filter:none!important;
+  border:1px solid rgba(3,30,55,.05)!important;
+  border-bottom:1px solid rgba(3,30,55,.05)!important;
+  box-shadow:0 10px 30px rgba(3,30,55,.09), 0 2px 6px rgba(3,30,55,.05)!important;
+}
+
+/* ===== FLOATING CARDS (offline, 2026-10-22) — sidebar + content float as
+   separate rounded cards on ONE light canvas, like the reference dashboard.
+   The canvas is light (#EDF1F6), so the gap around each card is light, never
+   navy. Rail stays cyan. ===== */
+html:not([data-theme="dark"]){ --frame:0px!important; --side-gap:0px!important; --sheet-r:0px!important; --ground:#EDF1F6!important; --bg:#EDF1F6!important; --flt:16px; }
+html:not([data-theme="dark"]) body:not(.auth-active){ background:#EDF1F6!important; background-image:none!important; }
+
+/* Sidebar: a floating rounded card, inset on every edge */
+body:not(.auth-active) #sidebar,
+body:not(.auth-active) .sidebar{
+  top:var(--flt)!important; left:var(--flt)!important; bottom:var(--flt)!important; height:auto!important;
+  margin:0!important; border:none!important; border-radius:22px!important;
+  overflow-y:auto!important; overflow-x:hidden!important;
+  box-shadow:0 18px 44px rgba(3,30,55,.20), 0 4px 12px rgba(3,30,55,.10)!important;
+}
+/* Content: a floating rounded card, with a gap from the rail and the edges */
+body.sidebar-visible:not(.auth-active) .page,
+body.sidebar-visible:not(.auth-active) #page-dashboard.active{
+  margin:var(--flt) var(--flt) var(--flt) calc(var(--side-w) + var(--flt) * 2)!important;
+  border-radius:22px!important; min-height:calc(100vh - var(--flt) * 2)!important;
+}
+body.sidebar-rail:not(.auth-active) .page,
+body.sidebar-rail:not(.auth-active) #page-dashboard.active{
+  margin-left:calc(var(--rail-w, 76px) + var(--flt) * 2)!important;
+}
+body:not(.auth-active) .top-bar{
+  top:var(--flt)!important; right:var(--flt)!important; left:calc(var(--side-w) + var(--flt) * 2)!important;
+  border-radius:16px!important;
+}
+body.sidebar-rail:not(.auth-active) .top-bar{ left:calc(var(--rail-w, 76px) + var(--flt) * 2)!important; }
+body.sidebar-visible:not(.auth-active) .ctg-phi-footer{
+  margin:0 var(--flt) var(--flt) calc(var(--side-w) + var(--flt) * 2)!important; border-radius:16px!important;
+}
+body.sidebar-visible:not(.auth-active) .action-bar{ left:calc(var(--side-w) + var(--flt) * 2)!important; right:var(--flt)!important; }
+
+/* THE blue wrapping: #ctgFrame is a fixed, full-screen NAVY-gradient element
+   sitting behind the floating cards (z:100) — it showed through every gap.
+   Make it the light canvas so the gaps read light, not navy. */
+#ctgFrame{ background:#EDF1F6!important; background-image:none!important; }
+
+/* Remove the navy "rectangle" at the top of the rail: the logo header
+   (.side-brand) was painted with the OLD navy rail gradient while the rail is
+   now cyan. Repaint it with the SAME cyan gradient (aligned full-height) so it
+   blends into the rail seamlessly, and drop its border/shadow/rounding. */
+@media(min-width:861px){
+  html:not([data-theme="dark"]) body:not(.auth-active) #sidebar .side-brand,
+  html[data-theme="dark"] body:not(.auth-active) #sidebar .side-brand{
+    background:linear-gradient(180deg,#03045E 0%,#0077B6 50%,#00B4D8 100%) 0 0/100% 100vh no-repeat!important;
+    box-shadow:none!important; border:none!important; border-radius:0!important;
+  }
+}
+#sidebar .side-brand{ box-shadow:none!important; border:none!important; border-radius:0!important; }
+
+/* Align the dashboard hero's top edge with the sidebar box top: drop the
+   dashboard page + its .wrap top padding so the "Good afternoon" card starts
+   at the same 16px line as the "CTG One" rail. */
+body:not(.auth-active) #page-dashboard{ padding-top:0!important; }
+body:not(.auth-active) #page-dashboard .wrap{ padding-top:0!important; }
+
+/* The white box on a clicked nav item: .side-glide is a highlight that slides
+   to the active row, and app.js colors it with --sheet (now #FFFFFF = white).
+   Repaint the glider as the cyan active pill and drop its white notch corners,
+   so clicking a nav item shows a clean cyan highlight, never white. */
+#sidebar .side-glide{
+  background:linear-gradient(135deg,rgba(0,180,216,.34) 0%,rgba(0,150,199,.20) 100%)!important;
+  border-radius:12px!important;
+  box-shadow:inset 0 0 0 1px rgba(72,202,228,.30)!important;
+}
+#sidebar .side-glide::before,
+#sidebar .side-glide::after{ display:none!important; content:none!important; background:none!important; }
+
+/* ---- Dashboard polish (offline, CSS only — colors & behavior unchanged) ----
+   Extend the dashboard cards out to the content-area edge so they are wider and
+   line up with the footer card (which already sits at that edge), plus a subtle
+   hover depth. */
+body:not(.auth-active) #page-dashboard .wrap{ padding-left:0!important; padding-right:0!important; }
+body:not(.auth-active) #page-dashboard .pld-card{ transition:transform .18s ease, box-shadow .2s ease!important; }
+body:not(.auth-active) #page-dashboard .pld-card:hover{
+  transform:translateY(-2px)!important;
+  box-shadow:0 16px 36px rgba(3,30,55,.10), 0 3px 9px rgba(3,30,55,.06)!important;
+}
+body:not(.auth-active) #page-dashboard .pld-empty-state{ padding:46px 24px!important; text-align:center!important; }
+
+/* Collapsed rail: the sliding glider mis-positions here (built for the wide rail)
+   and flashed white/off-centre. Hide it in the rail and give the active icon a
+   static, CENTERED cyan rounded-square highlight instead. */
+body.sidebar-rail:not(.auth-active) #sidebar .side-glide{ display:none!important; }
+body.sidebar-rail:not(.auth-active) #sidebar a.side-link.active,
+body.sidebar-rail:not(.auth-active) #sidebar a.side-sublink.active,
+body.sidebar-rail:not(.auth-active) #sidebar a.side-glide-target.active{
+  display:flex!important; align-items:center!important; justify-content:center!important;
+  width:44px!important; min-width:44px!important; max-width:44px!important; height:40px!important;
+  padding:0!important; box-sizing:border-box!important;
+  margin:3px auto!important; align-self:center!important;
+  background:linear-gradient(135deg,rgba(0,180,216,.32) 0%,rgba(0,150,199,.18) 100%)!important;
+  background-image:linear-gradient(135deg,rgba(0,180,216,.32) 0%,rgba(0,150,199,.18) 100%)!important;
+  border-radius:13px!important;
+  box-shadow:inset 0 0 0 1px rgba(72,202,228,.28)!important;
+}
+body.sidebar-rail:not(.auth-active) #sidebar a.side-link.active::before,
+body.sidebar-rail:not(.auth-active) #sidebar a.side-link.active::after{ display:none!important; content:none!important; }
+
+/* ============================================================
+   DARK-MODE FIXES (offline, 2026-10-22) — undo the makeover's light surfaces
+   leaking into dark, and catch inputs the base dark rules missed.
+   ============================================================ */
+/* Header: the makeover forced it solid white, so in dark it was white-on-white.
+   Give dark mode a proper dark glass header. */
+html[data-theme="dark"] body:not(.auth-active) .top-bar{
+  background:linear-gradient(180deg,rgba(11,20,48,.94) 0%,rgba(3,4,94,.72) 100%)!important;
+  color:#E4F7FC!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-bottom:1px solid rgba(255,255,255,.08)!important;
+  box-shadow:0 10px 30px rgba(0,0,0,.34)!important;
+}
+/* Text fields were white in dark because a local --surface (glass cards) leaks
+   the light value into inputs. Force a literal dark fill, matching the .fg input
+   selector so it beats the base rule. */
+html[data-theme="dark"] body:not(.auth-active) .fg input,
+html[data-theme="dark"] body:not(.auth-active) .fg select,
+html[data-theme="dark"] body:not(.auth-active) .fg textarea,
+html[data-theme="dark"] body:not(.auth-active) input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
+html[data-theme="dark"] body:not(.auth-active) select,
+html[data-theme="dark"] body:not(.auth-active) textarea{
+  background:#0A2448!important; color:#E4F7FC!important;
+  border-color:rgba(199,210,254,.20)!important;
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{ color:rgba(199,210,254,.45)!important; }
+
+/* ============================================================
+   SMOOTHER MOTION (offline, 2026-10-23) — the sidebar open/close animates
+   layout (width + content margin), so a LONG duration just stretches the
+   reflow window and reads as lag. A shorter, decelerating ease-out glides to
+   rest and feels far smoother. Content + header glide at the same pace. CSS only.
+   ============================================================ */
+:root{ --side-dur:300ms!important; --side-ease:cubic-bezier(.33,1,.68,1)!important; }
+
+body:not(.auth-active) #sidebar,
+body:not(.auth-active) .sidebar{
+  transition:width var(--side-dur) var(--side-ease), left var(--side-dur) var(--side-ease),
+             top var(--side-dur) var(--side-ease), box-shadow .3s ease!important;
+}
+body.sidebar-visible:not(.auth-active) .page,
+body.sidebar-visible:not(.auth-active) #page-dashboard.active,
+body.sidebar-rail:not(.auth-active) .page,
+body.sidebar-rail:not(.auth-active) #page-dashboard.active{
+  transition:margin var(--side-dur) var(--side-ease), border-radius var(--side-dur) var(--side-ease)!important;
+}
+body:not(.auth-active) .top-bar{
+  transition:left var(--side-dur) var(--side-ease), right var(--side-dur) var(--side-ease),
+             background .22s ease, color .22s ease!important;
+}
+body.sidebar-visible:not(.auth-active) .ctg-phi-footer,
+body.sidebar-rail:not(.auth-active) .ctg-phi-footer{
+  transition:margin var(--side-dur) var(--side-ease)!important;
+}
+/* Nav labels ease out as the rail collapses (less abrupt than a hard cut) */
+body:not(.auth-active) #sidebar .side-link > span,
+body:not(.auth-active) #sidebar .side-sublink > span,
+body:not(.auth-active) #sidebar .side-section-label{
+  transition:opacity .26s var(--side-ease), transform .3s var(--side-ease)!important;
+}
+
+/* ===== Collapse smoothness: cut the heaviest per-frame paint ONLY while the
+   rail is sliding (body.side-animating, added by ctgSetSidebarRail for ~360ms).
+   The rail's 48px blur shadow and the content's backdrop-blur are the two things
+   that repaint every frame as the layout animates; dropping them for the gesture
+   keeps it at 60fps, and the glass returns the moment the class clears. ===== */
+body.side-animating:not(.auth-active) #sidebar{
+  box-shadow:0 10px 26px rgba(3,4,94,.12)!important;
+}
+body.side-animating:not(.auth-active) .im-left-panel,
+body.side-animating:not(.auth-active) .im-main-panel,
+body.side-animating:not(.auth-active) .im-details-panel,
+body.side-animating:not(.auth-active) .im-left-head,
+body.side-animating:not(.auth-active) .pld-profile-card{
+  -webkit-backdrop-filter:none!important; backdrop-filter:none!important;
+}
+body.side-animating:not(.auth-active) .page.active>.wrap,
+body.side-animating:not(.auth-active) .top-bar{ will-change:margin-left,left,width!important; }
+
+/* Dark mode removed — hide the theme toggle button anywhere it might mount. */
+.ctg-theme-btn, #ctgThemeBtn{ display:none!important; }
+
+/* (Glassmorphism undone — solid rail restored.) Kept only the scroll-gap fix so
+   the sticky logo sits flush at the top and nav text no longer peeks above it. */
+body:not(.auth-active) #sidebar{ padding-top:0!important; }
+
+/* ===== Click micro-interactions (offline, 2026-10-22) — a little springy press
+   on clickable things so the portal feels responsive. CSS only, no behaviour. ===== */
+@media (prefers-reduced-motion:no-preference){
+  body:not(.auth-active) .btn,
+  body:not(.auth-active) .btn-primary,
+  body:not(.auth-active) .btn-ghost,
+  body:not(.auth-active) .btn-green,
+  body:not(.auth-active) .btn-sm,
+  body:not(.auth-active) .fcr-btn,
+  body:not(.auth-active) .fcr-btn-primary,
+  body:not(.auth-active) .fcr-btn-ghost,
+  body:not(.auth-active) .tab,
+  body:not(.auth-active) .pld-seg-btn,
+  body:not(.auth-active) .auth-role-hint{
+    transition:transform .14s cubic-bezier(.34,1.56,.64,1), box-shadow .18s ease, background .2s ease, color .15s ease, border-color .15s ease!important;
+  }
+  body:not(.auth-active) .btn:active,
+  body:not(.auth-active) .btn-primary:active,
+  body:not(.auth-active) .btn-ghost:active,
+  body:not(.auth-active) .btn-green:active,
+  body:not(.auth-active) .btn-sm:active,
+  body:not(.auth-active) .fcr-btn:active,
+  body:not(.auth-active) .fcr-btn-primary:active,
+  body:not(.auth-active) .fcr-btn-ghost:active,
+  body:not(.auth-active) .tab:active,
+  body:not(.auth-active) .pld-seg-btn:active{
+    transform:scale(.955)!important;
+  }
+  /* Content/stat cards give a soft press when clicked */
+  body:not(.auth-active) .pld-mini-card:active,
+  body:not(.auth-active) .pld-doc-row:active{ transform:scale(.99)!important; }
+}
+
+/* ===== (A) Patient detail: gentle entrance ONLY when a patient is OPENED =====
+   selectPatient() adds .pld-open-anim to the shell; a sub-tab switch
+   (setPatientDetailTab) re-renders WITHOUT it. So the hero header + panels
+   fade-rise in when you click a patient in the list, and stay perfectly still
+   when you move between Overview / Day 1 / Exams / etc. */
+@keyframes ctgPatientZoom{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+@media (prefers-reduced-motion:no-preference){
+  .pld-detail-shell.pld-open-anim > .pld-profile-card,
+  .pld-detail-shell.pld-open-anim .pld-panel > *,
+  .pld-detail-shell.pld-open-anim .pld-mini-grid .pld-mini-card{
+    animation:ctgPatientZoom .58s cubic-bezier(.33,1,.68,1) both!important; animation-delay:0s!important;
+  }
+}
+
+/* ===== (B) Sidebar: remove the slide-in highlight — active item pops in place ===== */
+#sidebar .side-glide{ display:none!important; }
+html body #sidebar a.side-link.active,
+html body #sidebar a.side-sublink.active,
+html body #sidebar a.side-glide-target.active{
+  background-image:linear-gradient(135deg,rgba(0,180,216,.34) 0%,rgba(0,150,199,.22) 100%)!important;
+  box-shadow:inset 0 0 0 1px rgba(72,202,228,.30), 0 6px 16px rgba(0,180,216,.14)!important;
+}
+@media (prefers-reduced-motion:no-preference){
+  body:not(.auth-active) #sidebar .side-link.active,
+  body:not(.auth-active) #sidebar .side-sublink.active{
+    animation:ctgNavPop .26s cubic-bezier(.34,1.56,.64,1) both!important;
+  }
+}
+@keyframes ctgNavPop{ 0%{transform:scale(.88)} 55%{transform:scale(1.04)} 100%{transform:scale(1)} }
+
+/* (C) Day 1 sub-items (Incomplete / Completed): tree line REMOVED per user —
+   keep their own icons, no connector line, no ticks. */
+
+/* ===== (D) Align the content top with the sidebar top on ALL pages (not just the
+   dashboard). Pages whose top-bar carries tabs keep their padding. ===== */
+body.sidebar-visible:not(.auth-active):not(.topbar-has-tabs) .page{ padding-top:0!important; }
+body.sidebar-visible:not(.auth-active):not(.topbar-has-tabs) .page .wrap{ padding-top:0!important; }
+
+/* Same gentle zoom entrance on EVERY page's content on navigation. Must match
+   the ctgSheetLTR rule's specificity (body.sidebar-visible ... .page.active>.wrap)
+   and come later in source to win. */
+@media (prefers-reduced-motion:no-preference){
+  body.sidebar-visible:not(.auth-active) .page.active>.wrap{
+    animation:ctgPatientZoom .58s cubic-bezier(.33,1,.68,1) both!important;
+    transform-origin:50% 0!important;
+  }
+}
+
+/* ===== Sliding active pill — Registration (#intakeTabs) + Access Control
+   (#acPageTabs) tab bars (driven by tab-slider.js). A single .ctg-tab-slider
+   element sits behind the tab labels and slides to the active tab, instead of
+   the pill snapping. Only these two bars are affected; every other .msg-tabs
+   keeps its own snap pill. ===== */
+#intakeTabs, #acPageTabs{ position:relative; }
+#intakeTabs .ctg-tab-slider, #acPageTabs .ctg-tab-slider{
+  position:absolute; left:0; top:0; z-index:0; opacity:0;
+  background:linear-gradient(135deg,#0096C7,#0077B6);
+  box-shadow:0 2px 10px rgba(0,119,182,.32);
+  pointer-events:none;
+  transition:transform .34s cubic-bezier(.33,1,.68,1),
+             width .34s cubic-bezier(.33,1,.68,1),
+             height .34s cubic-bezier(.33,1,.68,1);
+}
+#intakeTabs .msg-tab, #acPageTabs .ac-page-tab{ position:relative; z-index:1; }
+/* the sliding pill replaces each tab's own active fill (text stays white) */
+#intakeTabs .msg-tab.active{ background:transparent!important; box-shadow:none!important; }
+#acPageTabs .ac-page-tab.active{ background:transparent!important; border-color:transparent!important; box-shadow:none!important; }

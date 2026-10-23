@@ -89,6 +89,7 @@
     if(b){ b.setAttribute('aria-label','Switch to ' + next.toLowerCase()); b.title = 'Switch to ' + next.toLowerCase(); }
   }
   function mountThemeToggle(){
+    return; /* dark mode removed - no theme toggle */
     if(document.getElementById('ctgThemeBtn')) return;
     /* Lives in the sidebar now. The old top-bar host is kept as a fallback so
        this still mounts somewhere if the sidebar slot is ever missing. */

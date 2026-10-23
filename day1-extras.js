@@ -21,7 +21,7 @@
     xq_residualConc: ['No', 'Yes', 'NA'],
     xq_prevConcResult: [],
     xq_priorLoc: ['0', '1', '2', '3', '4'],
-    xq_otherMedHx: ['No significant past medical issues', 'abdominal pain (chronic)', 'allergies', 'anemia', 'Arthritis / Rheumatism',
+    xq_otherMedHx: ['No significant past medical history', 'abdominal pain (chronic)', 'allergies', 'anemia', 'Arthritis / Rheumatism',
       'asthma / wheezing', 'back pain (chronic)', 'blood in stools', 'Blood in Urine', 'bone fracture / joint repair',
       'Bronchitis (chronic)', 'chronic fatigue', 'cold numb feet', 'can\'t control urination', 'convulsions / seizures',
       'decreased force in urination', 'decreased hearing', 'depression', 'Diabetes', 'diarrhea / constipation',

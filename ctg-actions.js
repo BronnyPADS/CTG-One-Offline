@@ -156,7 +156,7 @@
     'rlClearFilters', 'rlEditPatient', 'rlExport', 'rlGoPage', 'rlSetColFilter', 'rlSetPageSize',
     'rlSetPaymentCase', 'rlSetShowWith', 'rlSetSort', 'rlSetTag', 'rlToast', 'rlToggleLock', 'roGoTo', 'rsCopy',
     'saveAndDownloadAce', 'saveAppointment', 'saveArCharge', 'saveArPayment', 'saveBreakBlock', 'saveDailyNote',
-    'saveDay1Ace', 'saveInitialExamForCurrentPatient', 'savePatientBillingStatementInfo',
+    'saveDay1Ace', 'saveFcrStatementDate', 'saveInitialExamForCurrentPatient', 'savePatientBillingStatementInfo',
     'savePatientDailyNoteDedicated', 'saveRegistration', 'searchPatientList', 'selectPatient', 'setAceScore',
     'setPatientDetailTab', 'setPatientListView', 'setReExamAsFinal', 'setYN', 'showPage',
     'stSaveGrammarDeepCheckRoles', 'stToggleGrammarDeepCheck', 'startAceForPatient', 'startDay2ForPatient',
