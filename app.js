@@ -58,6 +58,9 @@ function showPage(name){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
   const page=document.getElementById('page-'+name)
   if(page)page.classList.add('active')
+  // Presentational only: flag when the shown page has a bottom action bar so the
+  // PHI footer can clear it in CSS (stable across re-renders). No behaviour change.
+  document.body.classList.toggle('has-page-actionbar', !!(page&&page.querySelector('.action-bar')))
   document.body.classList.toggle('appointments-active',name==='appointment')
   document.body.classList.toggle('patient-messaging-active',name==='patientMessaging')
   document.body.classList.toggle('internal-messaging-active',name==='internalMessaging')
