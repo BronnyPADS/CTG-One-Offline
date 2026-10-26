@@ -9753,8 +9753,7 @@ function getFCRComponents(p){
     {label:'Day 2 Neurocognitive & Vestibular Exam Report',source:'Generated',available:!!(p.initialExam&&p.initialExam.savedAt),count:p.initialExam&&p.initialExam.savedAt?1:0},
     {label:'Re-Examination Reports',source:'Generated',available:reExams.length>0,count:reExams.length},
     {label:'Daily Treatment Notes',source:'Generated',available:dailyCount>0,count:dailyCount},
-    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0},
-    {label:'Case Discharge Summary (closing page)',source:'Generated',available:true,count:1}
+    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0}
   ]
 }
 function renderPatientFCRPanel(p){
@@ -10383,12 +10382,11 @@ async function compileFCRPages(p,merged){
   }
   fcrSegments.sort((a,b)=>a.date-b.date)
   for(const seg of fcrSegments){if(seg.file){await addDataUrl(await resolveUploadDataUrl(p,seg.file));continue}await addJsPdf(await seg.build())}
-  // 9. Final Examination Report (last of the clinical exam sequence)
+  // 9. Final Examination Report (last of the clinical exam sequence). It already
+  //    ends with the PLAN + Case Discharge Summary, and the FCR opens with one
+  //    (step 1), so NO extra closing copy is added here - that produced a doubled
+  //    Case Discharge Summary in the Word copy (removed 26 Oct 2026).
   if(p.finalExam&&p.finalExam.savedAt)await addJsPdf(buildInitialExamPDF(null,p.id,null,p.finalExam,{returnDoc:true}))
-  // 10. Case Discharge Summary again as the CLOSING page of the FCR. Same builder
-  //     and addJsPdf path as the opening one, so it is real text in the Word copy
-  //     too and gets continuous footer page numbers.
-  try{await addJsPdf(buildCaseDischargeDoc(p))}catch(e){console.error('FCR closing case discharge failed',e)}
   if(merged.getPageCount()===0)throw new Error('No reports or documents are available to compile yet.')
   return {kinds,sources,pageNoAt,aceRecord}
 }
