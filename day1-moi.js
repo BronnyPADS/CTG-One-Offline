@@ -72,12 +72,12 @@
       'In the aftermath of the collision, {name} experienced [[symptoms]].\n\n' +
       '[[police]]. Unit 1 was [[u1status]], {name} [[transport]]. At home, {name} tried to rest. On {blank}, {name} went to ' +
       'the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
-      'Since the date of injury {doi} incident the patient\'s symptoms [[trend]].',
+      'Since the DOI the patient\'s symptoms [[trend]].',
     nonvehicle:
       'On {doi}, {name} [[how]] and [[head]]. The patient [[loc]].\n\n' +
       'In the aftermath of the incident, {name} experienced [[symptoms]].\n\n' +
       'On {blank}, {name} went to the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
-      'Since the date of injury {doi} incident the patient\'s symptoms [[trend]].'
+      'Since the DOI the patient\'s symptoms [[trend]].'
   }
 
   function currentKind() {
