@@ -827,7 +827,7 @@
        header and footer parts (written once each: reports with the same
        margins and footer line share them). */
     var L = window.ctgDay1Docx && window.ctgDay1Docx.letterhead
-    var reportSecs = [], hdrParts = [], ftrParts = []
+    var reportSecs = [], hdrParts = [], ftrParts = [], uploadDocs = {}
     var partFor = function (list, prefix, xml) {
       var i = list.indexOf(xml)
       if (i < 0) { list.push(xml); i = list.length - 1 }
@@ -885,17 +885,55 @@
             }
           } catch (e) { console.error('FCR Word: page ' + n + ' could not be read from its report, trying the PDF', e) }
         }
-        /* TRIAL 2026-10-26 (GitHub/offline only): also try text extraction on
-           UPLOADED pages, not just portal reports. An uploaded PDF (or an
-           auto-converted Word file) that carries a real text layer now comes out
-           as editable Word text; a scan/rasterised page with no text still falls
-           through to its picture below. NOTE: a page's drawn signature is NOT
-           text, so a signed form routed here loses its signature — evaluate
-           before keeping this. Revert = restore the "text"/"ace" condition. */
+        /* An UPLOADED page that carries the CTG letterhead (an ACE or a case
+           discharge summary saved to PDF, or a Word file the portal
+           auto-converted) is turned into editable Word text, the SAME way as
+           the portal's own reports: the letterhead goes to a real Word header
+           and the "Concussion Therapy Group / provider / patient / DOB" line to
+           a real Word footer, with ONE page number from Word's field - so no
+           page shows the letterhead twice or two page numbers. Any OTHER upload
+           (SWAY, reflex, ShoeBox, a scan, a signed form) is deliberately left as
+           a faithful picture below: those don't need to be editable and keeping
+           them as images protects signatures, charts and layout (26 Oct 2026). */
         if (!done) {
           try {
             var tp = await readTextPage(pdf, n)
-            if (tp.items.length) { pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, NUM_BOX) }); done = true }
+            if (tp.items.length) {
+              var usp = null, uname = null
+              if (L) {
+                /* Find the footer by its position - the bottom-most baseline -
+                   not by matching "Page X of Y": pdf.js often splits that into
+                   pieces ("Page", "1", "of", "8"), and splitReportPage's exact
+                   match would then miss it and leave the whole footer in the
+                   body. Handing it that baseline lifts the line out whole. */
+                var fb = null
+                tp.items.forEach(function (it) { if ((tp.h - it.y) > tp.h - 34 && (fb === null || it.y < fb)) fb = it.y })
+                usp = splitReportPage(tp, fb !== null ? { y: fb } : null)
+                uname = usp.head.filter(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' })[0]
+              }
+              if (uname) {
+                var uright = usp.head.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, uname.x + uname.w)
+                var urep = {
+                  left: uname.x, right: uright,
+                  footLeft: usp.foot.length ? usp.foot[0].x : uname.x,
+                  footRight: usp.foot.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, uname.x),
+                  // Collapse the double spaces and drop any "Page X of Y": Word's field is the only page number.
+                  footText: usp.foot.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim().replace(/\s*Page\s+\d+\s+of\s+\d+\s*$/i, '').trim()
+                }
+                var ukey = urep.footText || 'U'
+                if (!uploadDocs[ukey]) uploadDocs[ukey] = {}
+                tp.items = usp.body
+                pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }), sec: reportSection(uploadDocs[ukey], urep) })
+                done = true
+              } else if (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace') {
+                // A portal-written text page (not an upload) stays editable as before.
+                pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, NUM_BOX) })
+                done = true
+              }
+              // An uploaded file that is NOT a CTG report (SWAY, reflex, ShoeBox,
+              // a scan, a signed form, ...) is left for the picture block below,
+              // kept exactly as it looks - we don't try to make those editable.
+            }
           } catch (e) { console.error('FCR Word: page ' + n + ' text could not be read, using its picture', e) }
         }
         if (!done) {
