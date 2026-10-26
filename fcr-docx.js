@@ -536,7 +536,13 @@
     var pitch = lines.length > 1 ? (lines[0].y - lines[lines.length - 1].y) / (lines.length - 1) : size * 1.15
     var line = Math.max(200, Math.min(480, Math.round(240 * pitch / (size * 1.15))))
     var before = Math.max(0, (cell.top - first.y) - size * 0.9)
-    var lgap = first.left - cell.x0, rgap = cell.x1 - first.right
+    /* The right edge for alignment ignores a trailing padding space: some PDFs
+       fill a cell by giving its last space glyph a very wide advance, which
+       would push first.right into the next column and wrongly right-align the
+       cell. Measure to the last inked (non-space) glyph instead. */
+    var inkRight = first.left
+    first.items.forEach(function (it) { if (/\S/.test(it.s)) inkRight = Math.max(inkRight, it.x + it.w) })
+    var lgap = first.left - cell.x0, rgap = cell.x1 - inkRight
     var jc = '', ind = ''
     if (lgap > 4 && Math.abs(lgap - rgap) <= 3) jc = '<w:jc w:val="center"/>'
     else if (rgap < 8 && lgap > rgap + 6) jc = '<w:jc w:val="right"/>', ind = '<w:ind w:right="' + tw(Math.max(0, rgap)) + '"/>'
@@ -993,12 +999,11 @@
                 tp.items = usp.body
                 var utables = findTables(tp)   // a ruled grid becomes a real Word table; its words leave tp.items
                 var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables)
-                var ubg = await drawGraphics(tp.gfx, tp.w, tp.h)   // any other lines, drawn behind the text
-                if (ubg && uparas.length && uparas[0].runs !== undefined) {
-                  zip.file('word/media/lines-' + n + '.png', ubg, { compression: 'STORE' })
-                  rels += '<Relationship Id="rIdB' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/lines-' + n + '.png"/>'
-                  uparas[0].runs = backgroundXml(n, tp.w, tp.h) + uparas[0].runs
-                }
+                /* No background raster for an uploaded report: findTables already
+                   turns its grids into real Word tables, and the only other lines
+                   are hyperlink underlines. A raster of those can't follow where
+                   Word re-flows the editable text, so it would sit across the
+                   text and read as a strike-through (26 Oct 2026). */
                 pages.push({ w: tp.w, h: tp.h, paras: uparas, sec: reportSection(uploadDocs[ukey], urep) })
                 done = true
               } else if (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace') {
