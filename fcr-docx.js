@@ -332,9 +332,16 @@
   }
 
   function runXml(part) {
+    /* A URL is shown the way the reports show it - hyperlink blue, italic and
+       underlined - so an uploaded report whose links were drawn (not real Word
+       links) still looks the same. It's styling only, not a clickable link. */
+    var url = /^\s*https?:\/\/\S/.test(part.s)
+    var color = url ? '0563C1' : part.color
+    var ital = part.f.i || url
     var pr = '<w:rFonts w:ascii="' + part.f.fam + '" w:hAnsi="' + part.f.fam + '" w:cs="' + part.f.fam + '"/>' +
-      (part.f.b ? '<w:b/>' : '') + (part.f.i ? '<w:i/>' : '') +
-      (part.color && part.color !== '000000' ? '<w:color w:val="' + part.color.toUpperCase() + '"/>' : '') +
+      (part.f.b ? '<w:b/>' : '') + (ital ? '<w:i/>' : '') +
+      (url ? '<w:u w:val="single"/>' : '') +
+      (color && color !== '000000' ? '<w:color w:val="' + color.toUpperCase() + '"/>' : '') +
       '<w:sz w:val="' + Math.round(part.size * 2) + '"/><w:szCs w:val="' + Math.round(part.size * 2) + '"/>'
     return '<w:r><w:rPr>' + pr + '</w:rPr><w:t xml:space="preserve">' + esc(part.s) + '</w:t></w:r>'
   }
