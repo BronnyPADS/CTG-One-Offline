@@ -863,7 +863,9 @@
      the Day 1's - one section per report, so editing a page cannot carry them
      along (16 Oct 2026). The Medical Bill has no such letterhead and stays as
      it is. */
-  var LETTERHEAD = /^(CONCUSSION THERAPY GROUP|2411 Crofton Lane, Suite \w+|Crofton, MD, 21114-1336|Phone: 410-451-9870|Fax: 410-451-9872)$/
+  // Tolerant of small letterhead variants between ACE templates: "Crofton MD"
+  // vs "Crofton, MD", "Suite 13A" vs other suites, optional spaces.
+  var LETTERHEAD = /^(CONCUSSION THERAPY GROUP|2411 Crofton Lane,? Suite \w+|Crofton,? MD,? \d{5}(-\d{4})?|Phone: ?[\d-]+|Fax: ?[\d-]+)$/
   var REPORT_TOP = 84, REPORT_BOTTOM = 36   // points: the text area under the header, above the footer
   /* at: where the report would print its page number (doc.ctgPageNoAt) - a
      report inside the FCR leaves the number out (buildFCRDoc in app.js). */
