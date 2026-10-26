@@ -16,7 +16,10 @@
   'use strict'
 
   var TA_ID = 'moiStoryData'
-  var AUTO = { name: 1, doi: 1, he: 1, his: 1, him: 1 }
+  var AUTO = { name: 1, fname: 1, doi: 1, he: 1, his: 1, him: 1 }
+  // The patient's first name (first word of the full name) - "the patient" on
+  // repeat mentions, per the practice (26 Oct 2026).
+  function firstName(n) { n = String(n || '').trim(); return n ? n.split(/\s+/)[0] : '' }
 
   /* ------------------------------ templates ------------------------------ */
   function optionsOf(selectId, extra, transform) {
@@ -68,16 +71,16 @@
   var TEMPLATES = {
     vehicle:
       'On {doi}, {name} was the [[role]] of a [[dir]] [[u1]] (Unit 1) that was struck on the [[side]] (MVC 1) by a [[u2]] (Unit 2).\n\n' +
-      'Following impact {his} [[impact]]. The patient [[loc]].\n\n' +
-      'In the aftermath of the collision, {name} experienced [[symptoms]].\n\n' +
-      '[[police]]. Unit 1 was [[u1status]], {name} [[transport]]. At home, {name} tried to rest. On {blank}, {name} went to ' +
+      'Following impact {fname}\'s [[impact]]. {fname} [[loc]].\n\n' +
+      'In the aftermath of the collision, {fname} experienced [[symptoms]].\n\n' +
+      '[[police]]. Unit 1 was [[u1status]], {fname} [[transport]]. At home, {fname} tried to rest. On {blank}, {fname} went to ' +
       'the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
-      'Since the DOI the patient\'s symptoms [[trend]].',
+      'Since the DOI {fname}\'s symptoms [[trend]].',
     nonvehicle:
-      'On {doi}, {name} [[how]] and [[head]]. The patient [[loc]].\n\n' +
-      'In the aftermath of the incident, {name} experienced [[symptoms]].\n\n' +
-      'On {blank}, {name} went to the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
-      'Since the DOI the patient\'s symptoms [[trend]].'
+      'On {doi}, {name} [[how]] and [[head]]. {fname} [[loc]].\n\n' +
+      'In the aftermath of the incident, {fname} experienced [[symptoms]].\n\n' +
+      'On {blank}, {fname} went to the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
+      'Since the DOI {fname}\'s symptoms [[trend]].'
   }
 
   function currentKind() {
@@ -87,7 +90,7 @@
   function fromTemplate(kind) {
     var specs = chipSpecs()
     var tokens = []
-    String(TEMPLATES[kind] || TEMPLATES.vehicle).split(/(\{(?:doi|name|he|his|him|blank)\}|\[\[\w+\]\]|\n)/).forEach(function (part) {
+    String(TEMPLATES[kind] || TEMPLATES.vehicle).split(/(\{(?:doi|name|fname|he|his|him|blank)\}|\[\[\w+\]\]|\n)/).forEach(function (part) {
       if (!part) return
       if (part === '\n') return tokens.push({ k: 'br' })
       var a = /^\{(\w+)\}$/.exec(part)
@@ -111,6 +114,7 @@
   }
   function autoText(f, ctx) {
     if (f === 'name') return ctx.name || 'the patient'
+    if (f === 'fname') return firstName(ctx.name) || 'the patient'
     if (f === 'doi') return ctx.doi || '[date of injury]'
     return pronouns(ctx.gender)[f] || f
   }
@@ -566,10 +570,11 @@
     var p = ctx.pn || {}
     var auto = function (f) {
       if (f === 'name') return ctx.name || 'the patient'
+      if (f === 'fname') return firstName(ctx.name) || 'the patient'
       if (f === 'doi') return ctx.doi || ''
       return ({ he: p.subj, his: p.poss, him: p.obj })[f] || f
     }
-    var subst = function (s) { return String(s).replace(/\{(name|doi|he|his|him)\}/g, function (_, f) { return auto(f) }) }
+    var subst = function (s) { return String(s).replace(/\{(name|fname|doi|he|his|him)\}/g, function (_, f) { return auto(f) }) }
     var paras = [[]]
     data.tokens.forEach(function (t) {
       var cur = paras[paras.length - 1]
