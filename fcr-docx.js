@@ -136,7 +136,12 @@
 
   /* ------------------------------ text pages ------------------------------ */
 
-  var FONTS = [[/courier/i, 'Courier New'], [/helvetica|arial/i, 'Arial'], [/times/i, 'Times New Roman']]
+  /* Map an embedded font's name to a real Word font. The uploaded ACE/discharge
+     reports are set in Georgia; the others cover the usual Office faces so an
+     uploaded report keeps its own typeface instead of defaulting to Times. */
+  var FONTS = [[/courier/i, 'Courier New'], [/helvetica|arial/i, 'Arial'], [/times/i, 'Times New Roman'],
+    [/georgia/i, 'Georgia'], [/calibri/i, 'Calibri'], [/cambria/i, 'Cambria'], [/verdana/i, 'Verdana'],
+    [/tahoma/i, 'Tahoma'], [/trebuchet/i, 'Trebuchet MS'], [/garamond/i, 'Garamond']]
   function fontOf(page, styles, id) {
     var f = null
     try { if (page.commonObjs.has(id)) f = page.commonObjs.get(id) } catch (e) { f = null }
@@ -152,11 +157,71 @@
   }
 
   // The words on a report page, each with its place, size and font.
+  /* Turn a pdf.js operator list into the same {op, a} graphics stream that
+     readJsPdfPage produces for the portal's own reports, so an uploaded page's
+     ruled tables and lines can be found and drawn the same way. pdf.js bundles
+     a path into one constructPath([paintOp, subpaths, bbox]); each subpath is a
+     flat [code, ...coords] list where 0=moveTo(2) 1=lineTo(2) 2=curveTo(6)
+     4=closePath(0). Coordinates are in PDF user space - the same space as the
+     text transforms readTextPage reads - so the two line up. */
+  function opsToGfx(ol, OPS) {
+    if (!ol || !OPS) return []
+    var PAINT = {}
+    PAINT[OPS.stroke] = 'S'; PAINT[OPS.closeStroke] = 's'
+    PAINT[OPS.fill] = 'f'; PAINT[OPS.eoFill] = 'f'
+    PAINT[OPS.fillStroke] = 'B'; PAINT[OPS.eoFillStroke] = 'B'
+    PAINT[OPS.closeFillStroke] = 'b'; PAINT[OPS.closeEOFillStroke] = 'b'
+    var arr = function (v) { if (v == null) return []; if (v.length !== undefined && typeof v !== 'string') return Array.prototype.slice.call(v); var o = [], k = 0; while (v[k] !== undefined) { o.push(v[k]); k++ } return o }
+    var gfx = [], fn = ol.fnArray, ar = ol.argsArray
+    for (var i = 0; i < fn.length; i++) {
+      var op = fn[i], a = ar[i]
+      if (op === OPS.save) gfx.push({ op: 'q', a: [] })
+      else if (op === OPS.restore) gfx.push({ op: 'Q', a: [] })
+      else if (op === OPS.transform) gfx.push({ op: 'cm', a: arr(a) })
+      else if (op === OPS.setLineWidth) gfx.push({ op: 'w', a: arr(a) })
+      else if (op === OPS.setStrokeRGBColor) gfx.push({ op: 'RG', a: arr(a) })
+      else if (op === OPS.setFillRGBColor) gfx.push({ op: 'rg', a: arr(a) })
+      else if (op === OPS.setStrokeGray) gfx.push({ op: 'G', a: arr(a) })
+      else if (op === OPS.setFillGray) gfx.push({ op: 'g', a: arr(a) })
+      else if (op === OPS.setStrokeCMYKColor) gfx.push({ op: 'K', a: arr(a) })
+      else if (op === OPS.setFillCMYKColor) gfx.push({ op: 'k', a: arr(a) })
+      else if (op === OPS.paintFormXObjectBegin) { gfx.push({ op: 'q', a: [] }); gfx.push({ op: 'cm', a: arr(a && a[0]) }) }
+      else if (op === OPS.paintFormXObjectEnd) gfx.push({ op: 'Q', a: [] })
+      else if (op === OPS.constructPath) {
+        var subs = a[1] || []
+        for (var s = 0; s < subs.length; s++) {
+          var sp = arr(subs[s]), j = 0, broke = false
+          while (j < sp.length && !broke) {
+            var code = sp[j++]
+            if (code === 0) gfx.push({ op: 'm', a: [sp[j++], sp[j++]] })
+            else if (code === 1) gfx.push({ op: 'l', a: [sp[j++], sp[j++]] })
+            else if (code === 2) { gfx.push({ op: 'c', a: [sp[j], sp[j + 1], sp[j + 2], sp[j + 3], sp[j + 4], sp[j + 5]] }); j += 6 }
+            else if (code === 4) gfx.push({ op: 'h', a: [] })
+            else broke = true   // an unknown code: stop this subpath rather than desync
+          }
+        }
+        gfx.push({ op: PAINT[a[0]] || 'n', a: [] })
+      }
+    }
+    return gfx
+  }
+
   async function readTextPage(pdf, n) {
     var page = await pdf.getPage(n)
     var vp = page.getViewport({ scale: 1 })
-    await page.getOperatorList()          // loads the page's fonts, so bold and italic can be read
+    var ol = await page.getOperatorList()   // loads the page's fonts (bold/italic) and its drawn lines
     var tc = await page.getTextContent()
+    // Make sure every font object has reached the main thread before fontOf reads
+    // it: the sync commonObjs.get can otherwise miss one that is still resolving,
+    // and that page's bold/italic would be lost.
+    var fontIds = {}
+    tc.items.forEach(function (it) { if (it.fontName) fontIds[it.fontName] = 1 })
+    await Promise.all(Object.keys(fontIds).map(function (id) {
+      return new Promise(function (res) {
+        try { if (page.commonObjs.has(id)) return res(); page.commonObjs.get(id, function () { res() }) }
+        catch (e) { res() }
+      })
+    }))
     var items = []
     tc.items.forEach(function (it) {
       if (it.str === undefined || !it.str.length) return
@@ -164,8 +229,9 @@
       var size = Math.hypot(t[2], t[3]) || it.height || 10
       items.push({ s: it.str, x: t[4], y: t[5], w: it.width, size: size, f: fontOf(page, tc.styles, it.fontName) })
     })
+    var gfx = opsToGfx(ol, window.pdfjsLib && window.pdfjsLib.OPS)
     page.cleanup()
-    return { items: items, w: vp.width, h: vp.height }
+    return { items: items, w: vp.width, h: vp.height, gfx: gfx }
   }
 
   /* The upright lines the page draws (table cell edges): [{x, y0, y1}] in PDF
@@ -851,7 +917,9 @@
     }
     var lib = await ensurePdfJs()
     // A copy: pdf.js hands the buffer to its worker, which would empty the caller's.
-    var task = lib.getDocument({ data: new Uint8Array(pdfBytes), isEvalSupported: false })
+    // fontExtraProperties keeps each font's real name (e.g. "Georgia-Bold") on the
+    // main thread, which is how an uploaded page's bold text is detected (fontOf).
+    var task = lib.getDocument({ data: new Uint8Array(pdfBytes), isEvalSupported: false, fontExtraProperties: true })
     var pdf = await task.promise
     var JSZip = await ensureJSZip()
     var zip = new JSZip()
@@ -923,7 +991,15 @@
                 var ukey = urep.footText || 'U'
                 if (!uploadDocs[ukey]) uploadDocs[ukey] = {}
                 tp.items = usp.body
-                pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }), sec: reportSection(uploadDocs[ukey], urep) })
+                var utables = findTables(tp)   // a ruled grid becomes a real Word table; its words leave tp.items
+                var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables)
+                var ubg = await drawGraphics(tp.gfx, tp.w, tp.h)   // any other lines, drawn behind the text
+                if (ubg && uparas.length && uparas[0].runs !== undefined) {
+                  zip.file('word/media/lines-' + n + '.png', ubg, { compression: 'STORE' })
+                  rels += '<Relationship Id="rIdB' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/lines-' + n + '.png"/>'
+                  uparas[0].runs = backgroundXml(n, tp.w, tp.h) + uparas[0].runs
+                }
+                pages.push({ w: tp.w, h: tp.h, paras: uparas, sec: reportSection(uploadDocs[ukey], urep) })
                 done = true
               } else if (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace') {
                 // A portal-written text page (not an upload) stays editable as before.
