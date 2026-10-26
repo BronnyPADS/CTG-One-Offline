@@ -70,6 +70,9 @@ html.ctg-moi-story #sec-moi:not(.moi-legacy) #moiPostImpactSection { display: no
   font-weight: 600;
   user-select: none;
 }
+/* A grey auto-word directly before a possessive "'s": drop the right padding so
+   it reads "Jordan's", not "Jordan 's". */
+.moi-auto.moi-auto-tight { padding-right: 0; }
 
 .moi-blank-wrap { display: inline-block; }
 .moi-blank {

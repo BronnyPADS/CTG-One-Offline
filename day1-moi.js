@@ -181,7 +181,15 @@
     chips = {}
     editor.replaceChildren()
     data.tokens.forEach(function (t) {
-      if (t.k === 't') editor.appendChild(document.createTextNode(t.s))
+      if (t.k === 't') {
+        // A possessive/contraction ('s) right after a grey auto-word should hug
+        // it, not sit a chip-padding away: "Jordan 's" -> "Jordan's".
+        if (/^['’]/.test(t.s)) {
+          var prev = editor.lastChild
+          if (prev && prev.nodeType === 1 && prev.classList && prev.classList.contains('moi-auto')) prev.classList.add('moi-auto-tight')
+        }
+        editor.appendChild(document.createTextNode(t.s))
+      }
       else if (t.k === 'br') editor.appendChild(document.createElement('br'))
       else if (t.k === 'a' && AUTO[t.f]) editor.appendChild(makeAuto(t.f))
       else if (t.k === 'c') editor.appendChild(makeChip({ o: t.o || [], s: t.s || [] }))
