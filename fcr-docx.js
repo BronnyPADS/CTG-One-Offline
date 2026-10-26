@@ -1002,13 +1002,18 @@
             if (tp.items.length) {
               var usp = null, uname = null
               if (L) {
-                /* Find the footer by its position - the bottom-most baseline -
-                   not by matching "Page X of Y": pdf.js often splits that into
-                   pieces ("Page", "1", "of", "8"), and splitReportPage's exact
-                   match would then miss it and leave the whole footer in the
-                   body. Handing it that baseline lifts the line out whole. */
+                /* Find the footer baseline, then hand it to splitReportPage so
+                   the whole footer line lifts out (pdf.js often splits a page
+                   number into pieces, so an exact text match misses it). Anchor
+                   on a page-number token - "Page X of Y", "N of M" or "N | M" -
+                   anywhere in the bottom ~90pt, since different ACE templates
+                   put it at different heights (Anuoluwa's sits at the very
+                   bottom, Shmuel's ~60pt up). Fall back to the bottom-most
+                   baseline only in the last 34pt if there is no page number. */
+                var PAGENO = /^(page\s+)?\d+\s*(\||of)\s*\d+$/i
                 var fb = null
-                tp.items.forEach(function (it) { if ((tp.h - it.y) > tp.h - 34 && (fb === null || it.y < fb)) fb = it.y })
+                tp.items.forEach(function (it) { if ((tp.h - it.y) > tp.h - 90 && PAGENO.test(it.s.trim()) && (fb === null || it.y < fb)) fb = it.y })
+                if (fb === null) tp.items.forEach(function (it) { if ((tp.h - it.y) > tp.h - 34 && (fb === null || it.y < fb)) fb = it.y })
                 usp = splitReportPage(tp, fb !== null ? { y: fb } : null)
                 uname = usp.head.filter(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' })[0]
               }
@@ -1018,8 +1023,10 @@
                   left: uname.x, right: uright,
                   footLeft: usp.foot.length ? usp.foot[0].x : uname.x,
                   footRight: usp.foot.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, uname.x),
-                  // Collapse the double spaces and drop any "Page X of Y": Word's field is the only page number.
-                  footText: usp.foot.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim().replace(/\s*Page\s+\d+\s+of\s+\d+\s*$/i, '').trim()
+                  // Collapse the double spaces and drop any trailing page number
+                  // ("Page X of Y", "N of M" or "N | M"): Word's field is the
+                  // only page number. (The "|"/"of" forms avoid eating a date.)
+                  footText: usp.foot.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim().replace(/\s*(page\s+\d+\s+of\s+\d+|\d+\s*\|\s*\d+|\d+\s+of\s+\d+)\s*$/i, '').trim()
                 }
                 var ukey = urep.footText || 'U'
                 if (!uploadDocs[ukey]) uploadDocs[ukey] = {}
