@@ -506,7 +506,22 @@
       })
       Object.keys(pids).forEach(function (pi) { paths[pi].ops.forEach(function (oi) { gfx[oi].skip = true }) })
       fills.forEach(function (p) { if (p.used || pids[paths.indexOf(p)]) p.ops.forEach(function (oi) { gfx[oi].skip = true }) })
-      tables.push({ x0: xs[0], x1: xs[xs.length - 1], top: ys[0], bottom: ys[ys.length - 1], xs: xs, rows: rows, lineW: lineW || 0.5, color: color })
+      /* A spurious near-zero-width column (two grid lines a few points apart)
+         forces a word to wrap character by character and blows the row up to a
+         whole page. If any cell is narrower than the word it must hold, the
+         grid did not come apart cleanly - the caller keeps the page as a
+         picture instead of this table (26 Oct 2026). */
+      var badFit = rows.some(function (row) {
+        return row.cells.some(function (ce) {
+          if (ce.master) return false
+          var cw = ce.x1 - ce.x0
+          // Only an extreme mismatch (a word several times wider than its
+          // column) stacks character by character and explodes a row; a word
+          // that merely wraps once is normal and stays editable.
+          return cw < 40 && ce.items.some(function (it) { return it.w > cw * 3 && it.w > cw + 12 })
+        })
+      })
+      tables.push({ x0: xs[0], x1: xs[xs.length - 1], top: ys[0], bottom: ys[ys.length - 1], xs: xs, rows: rows, lineW: lineW || 0.5, color: color, badFit: badFit })
     })
     return tables.sort(function (a, b) { return b.top - a.top })
   }
@@ -694,11 +709,14 @@
     }
     return out.replace(/[\u0080-\u009F]/g, function (c) { var u = WIN[c.charCodeAt(0)]; return u ? String.fromCharCode(u) : '' })
   }
-  function hex2(v) { var h = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16); return h.length < 2 ? '0' + h : h }
+  function hex2(v) { if (!isFinite(v)) v = 0; var h = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16); return h.length < 2 ? '0' + h : h }
   function colorOf(op, a) {
-    if (op === 'g' || op === 'G') return hex2(a[0]) + hex2(a[0]) + hex2(a[0])
-    if (op === 'rg' || op === 'RG') return hex2(a[0]) + hex2(a[1]) + hex2(a[2])
-    if (op === 'k' || op === 'K') return hex2((1 - a[0]) * (1 - a[3])) + hex2((1 - a[1]) * (1 - a[3])) + hex2((1 - a[2]) * (1 - a[3]))
+    // jsPDF gives 0-1 floats; pdf.js gives 0-255 (sometimes wrapped in one arg).
+    if (a && a.length === 1 && a[0] != null && typeof a[0] !== 'string' && a[0].length >= 1) a = a[0]
+    var n = function (i) { var x = +(a && a[i]); if (!isFinite(x)) return 0; return x > 1 ? x / 255 : x }
+    if (op === 'g' || op === 'G') return hex2(n(0)) + hex2(n(0)) + hex2(n(0))
+    if (op === 'rg' || op === 'RG') return hex2(n(0)) + hex2(n(1)) + hex2(n(2))
+    if (op === 'k' || op === 'K') return hex2((1 - n(0)) * (1 - n(3))) + hex2((1 - n(1)) * (1 - n(3))) + hex2((1 - n(2)) * (1 - n(3)))
     return null
   }
   function jsPdfFonts(doc) {
@@ -1005,14 +1023,23 @@
                 if (!uploadDocs[ukey]) uploadDocs[ukey] = {}
                 tp.items = usp.body
                 var utables = findTables(tp)   // a ruled grid becomes a real Word table; its words leave tp.items
-                var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables)
-                /* No background raster for an uploaded report: findTables already
-                   turns its grids into real Word tables, and the only other lines
-                   are hyperlink underlines. A raster of those can't follow where
-                   Word re-flows the editable text, so it would sit across the
-                   text and read as a strike-through (26 Oct 2026). */
-                pages.push({ w: tp.w, h: tp.h, paras: uparas, sec: reportSection(uploadDocs[ukey], urep) })
-                done = true
+                if (utables.some(function (t) { return t.badFit })) {
+                  /* A grid did not come apart cleanly (a word is wider than its
+                     column - the symptom table beside its "Exertion/Overall
+                     Rating" text, a page-split grid, ...). Reconstructing it
+                     would blow a row up to a whole page, so keep this page as a
+                     faithful picture instead (done stays false -> picture
+                     block). The plain-text report pages stay editable. */
+                } else {
+                  var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables)
+                  /* No background raster for an uploaded report: findTables
+                     already turns its grids into real Word tables, and the only
+                     other lines are hyperlink underlines. A raster of those
+                     can't follow where Word re-flows the editable text, so it
+                     would sit across the text as a strike-through (26 Oct 2026). */
+                  pages.push({ w: tp.w, h: tp.h, paras: uparas, sec: reportSection(uploadDocs[ukey], urep) })
+                  done = true
+                }
               } else if (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace') {
                 // A portal-written text page (not an upload) stays editable as before.
                 pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, NUM_BOX) })
