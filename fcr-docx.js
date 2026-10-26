@@ -885,7 +885,14 @@
             }
           } catch (e) { console.error('FCR Word: page ' + n + ' could not be read from its report, trying the PDF', e) }
         }
-        if (!done && (kinds[n - 1] === 'text' || kinds[n - 1] === 'ace')) {
+        /* TRIAL 2026-10-26 (GitHub/offline only): also try text extraction on
+           UPLOADED pages, not just portal reports. An uploaded PDF (or an
+           auto-converted Word file) that carries a real text layer now comes out
+           as editable Word text; a scan/rasterised page with no text still falls
+           through to its picture below. NOTE: a page's drawn signature is NOT
+           text, so a signed form routed here loses its signature — evaluate
+           before keeping this. Revert = restore the "text"/"ace" condition. */
+        if (!done) {
           try {
             var tp = await readTextPage(pdf, n)
             if (tp.items.length) { pages.push({ w: tp.w, h: tp.h, paras: textPageParagraphs(tp, NUM_BOX) }); done = true }
