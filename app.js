@@ -12985,6 +12985,26 @@ function itBuild() {
   clear.textContent = '— Select Injury Type —'
   clear.onclick = () => { itSelected = ''; itSync(); document.getElementById('itPanel').style.display = 'none' }
   list.appendChild(clear)
+  // "Type Here / Add" row, like the Native Country/Region picker: lets staff add
+  // an injury type that is not in the list and select it in one step.
+  const addRow = document.createElement('div')
+  addRow.style.cssText = 'display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border)'
+  const addInp = document.createElement('input')
+  addInp.type = 'text'; addInp.placeholder = 'Type Here'
+  addInp.style.cssText = 'flex:1;min-width:0;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:13px;box-sizing:border-box'
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'; addBtn.textContent = 'Add'
+  addBtn.style.cssText = 'border:0;background:var(--accent,#0077B6);color:#fff;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap'
+  const itDoAdd = () => {
+    const v = addInp.value.trim(); if (!v) return
+    if (itOptions.indexOf(v) === -1) itOptions.push(v)
+    itSelected = v; itSync()
+    const panel = document.getElementById('itPanel'); if (panel) panel.style.display = 'none'
+  }
+  addBtn.onclick = itDoAdd
+  addInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); itDoAdd() } })
+  addRow.appendChild(addInp); addRow.appendChild(addBtn)
+  list.appendChild(addRow)
   IT_GROUPS.forEach(g => {
     const hdr = document.createElement('div')
     hdr.className = 'it-group-hdr'
