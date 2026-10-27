@@ -13769,7 +13769,9 @@ function buildPDF(name,opts){
   // Answers that read as a sentence end with a full stop (19 Oct 2026).
   const SENTENCE={sentence:true}
   kvLine('Chief Complaint',gv('immediateSyms'),SENTENCE)
-  collectAll('hpiList',HPI_ITEMS).filter(([,ans])=>ans!=='N/A').forEach(([item,ans])=>kvLine(item,ans))
+  // Every HPI question is retained, even when N/A / unanswered - a skipped
+  // question still appears in the FCR as N/A (Dr's request, 27 Oct 2026).
+  collectAll('hpiList',HPI_ITEMS).forEach(([item,ans])=>kvLine(item,ans))
   kvLine('Activity of Daily Living (ADL) Limitations',go('adlLimit'),SENTENCE)
   kvLine('Vision Problems',(window.ctgXq?ctgXq('xq_visionProblems'):''),SENTENCE)
   kvLine('Employment Status',go('employStatus'),SENTENCE)
@@ -13780,7 +13782,8 @@ function buildPDF(name,opts){
   const pmhItems=collectAll('pmhList',PMH_ITEMS)
     .map(([item,ans])=>PMH_YES_ONLY.has(item)?[item,pregnancyReportAnswer(ans)]:[item,ans])
     .filter(([item,ans])=>{
-      if(ans==='N/A')return false
+      // Retain every question even when N/A / unanswered (Dr's request, 27 Oct
+      // 2026). Pregnancy stays Yes-only - "Not pregnant" says nothing about care.
       if(PMH_YES_ONLY.has(item))return !!ans
       return true
     })
