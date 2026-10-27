@@ -13995,7 +13995,7 @@ html[data-theme="dark"] textarea::placeholder{ color:rgba(199,210,254,.45)!impor
    reflow window and reads as lag. A shorter, decelerating ease-out glides to
    rest and feels far smoother. Content + header glide at the same pace. CSS only.
    ============================================================ */
-:root{ --side-dur:250ms!important; --side-ease:cubic-bezier(.33,1,.68,1)!important; }
+:root{ --side-dur:210ms!important; --side-ease:cubic-bezier(.33,1,.68,1)!important; }
 
 body:not(.auth-active) #sidebar,
 body:not(.auth-active) .sidebar{
@@ -14040,6 +14040,27 @@ body.side-animating:not(.auth-active) .pld-profile-card{
 }
 body.side-animating:not(.auth-active) .page.active>.wrap,
 body.side-animating:not(.auth-active) .top-bar{ will-change:margin-left,left,width!important; }
+
+/* ---- Collapse/expand smoothness pass (27 Oct 2026) ----
+   1) While the rail slides, give #sidebar its OWN compositor layer (translateZ)
+      so its per-frame repaint stops invalidating the page painted behind it.
+   2) Honour the OS "reduce motion" setting - instant, zero jank for those users.
+   The width/margin reflow is inherent to a push-content icon rail (a 44px rail
+   must actually be 44px wide), so this cuts per-frame cost rather than changing
+   the architecture. ---- */
+body.side-animating:not(.auth-active) #sidebar{ transform:translateZ(0)!important; }
+@media (prefers-reduced-motion: reduce){
+  :root{ --side-dur:0.01ms!important; }
+  body:not(.auth-active) #sidebar,
+  body:not(.auth-active) .sidebar,
+  body.sidebar-visible:not(.auth-active) .page,
+  body.sidebar-rail:not(.auth-active) .page,
+  body.sidebar-visible:not(.auth-active) #page-dashboard.active,
+  body.sidebar-rail:not(.auth-active) #page-dashboard.active,
+  body:not(.auth-active) .top-bar,
+  body.sidebar-visible:not(.auth-active) .ctg-phi-footer,
+  body.sidebar-rail:not(.auth-active) .ctg-phi-footer{ transition-duration:0.01ms!important; }
+}
 
 /* Dark mode removed — hide the theme toggle button anywhere it might mount. */
 .ctg-theme-btn, #ctgThemeBtn{ display:none!important; }
