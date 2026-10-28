@@ -14258,9 +14258,8 @@ function buildBillingStatementDoc(data){
   const colX=k=>X[COLS.findIndex(c=>c.k===k)]
   const colW=k=>COLS.find(c=>c.k===k).w
   let y=0, page=0
-  /* Inside an FCR the Page box counts from the FCR page the statement starts
-     on, the same number the FCR prints at the foot of the page. */
-  const firstPageNo=window.ctgFcrPaging?window.ctgFcrPaging.next():1
+  /* The Page box is the statement's own page (1, 2, ...), inside an FCR too;
+     the FCR's running page number is printed in the footer line. */
   fcrPageNoAt(doc,PW-MR,20,{full:true,left:ML})   // the FCR writes the whole footer line under the statement
   function f(style,size){doc.setFont('helvetica',style||'normal');doc.setFontSize(size||9)}
   function drawHeader(pageNum){
@@ -14277,7 +14276,7 @@ function buildBillingStatementDoc(data){
     doc.text('Date Of Accident: '+(data.patient.doa||''),ML,ly); ly+=12
     const w3=[110,80,62], RX=PW-MR-(w3[0]+w3[1]+w3[2])
     let by=48, rh=20
-    const cells=[['Statement Date',data.statement.date||''],['Account No',data.statement.accountNo||''],['Page',String(firstPageNo+pageNum-1)]]
+    const cells=[['Statement Date',data.statement.date||''],['Account No',data.statement.accountNo||''],['Page',String(pageNum)]]
     let bx=RX
     cells.forEach((c,i)=>{
       doc.setFillColor(241,241,241); doc.rect(bx,by,w3[i],rh,'FD')
