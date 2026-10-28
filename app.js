@@ -9753,9 +9753,14 @@ function getFCRComponents(p){
     {label:'Day 2 Neurocognitive & Vestibular Exam Report',source:'Generated',available:!!(p.initialExam&&p.initialExam.savedAt),count:p.initialExam&&p.initialExam.savedAt?1:0},
     {label:'Re-Examination Reports',source:'Generated',available:reExams.length>0,count:reExams.length},
     {label:'Daily Treatment Notes',source:'Generated',available:dailyCount>0,count:dailyCount},
-    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0}
+    {label:'Final Examination Report',source:'Generated',available:!!(p.finalExam&&p.finalExam.savedAt),count:p.finalExam&&p.finalExam.savedAt?1:0},
+    // Only listed when buildFCRDoc adds it (no Final Exam to carry the summary).
+    ...(fcrFinalExamClosesWithDischarge(p)?[]:[{label:'Case Discharge Summary (closing page)',source:'Generated',available:true,count:1}])
   ]
 }
+/* The Final Exam prints PLAN + Case Discharge Summary at its end (buildInitialExamPDF,
+   examCategory 'Final Examination'), so the FCR already closes on one. */
+function fcrFinalExamClosesWithDischarge(p){return !!(p&&p.finalExam&&p.finalExam.savedAt&&p.finalExam.examCategory==='Final Examination')}
 function renderPatientFCRPanel(p){
   // Lawyers get a read-only FCR: only when discharged, and only the View/Download
   // actions - no compiled-sections breakdown (mirrors the firm Billing Summary).
@@ -10382,11 +10387,12 @@ async function compileFCRPages(p,merged){
   }
   fcrSegments.sort((a,b)=>a.date-b.date)
   for(const seg of fcrSegments){if(seg.file){await addDataUrl(await resolveUploadDataUrl(p,seg.file));continue}await addJsPdf(await seg.build())}
-  // 9. Final Examination Report (last of the clinical exam sequence). It already
-  //    ends with the PLAN + Case Discharge Summary, and the FCR opens with one
-  //    (step 1), so NO extra closing copy is added here - that produced a doubled
-  //    Case Discharge Summary in the Word copy (removed 26 Oct 2026).
+  // 9. Final Examination Report (last of the clinical exam sequence)
   if(p.finalExam&&p.finalExam.savedAt)await addJsPdf(buildInitialExamPDF(null,p.id,null,p.finalExam,{returnDoc:true}))
+  // 10. Closing Case Discharge Summary. A Final Exam already ends with PLAN +
+  //     Case Discharge Summary; without one (an admin discharge, say) the report
+  //     closed on the last daily note, so it gets a standalone copy here instead.
+  if(!fcrFinalExamClosesWithDischarge(p))try{await addJsPdf(buildCaseDischargeDoc(p))}catch(e){console.error('FCR closing case discharge failed',e)}
   if(merged.getPageCount()===0)throw new Error('No reports or documents are available to compile yet.')
   return {kinds,sources,pageNoAt,aceRecord}
 }
