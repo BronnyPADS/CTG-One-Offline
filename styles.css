@@ -14511,21 +14511,20 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nb-item-when{font-size:11.5px;font-weight:700;color:var(--st);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-neuroBilling .card:hover,#page-neuroPayments .card:hover{transform:none!important}
 #page-neuroBilling .nr-split .card{margin:0}
-/* The bill needs the full width for box 24's ten columns, as on the claim, so
+/* The bill needs the full width for the ten service columns, as on the claim, so
    here the patients sit in a compact grid above it rather than beside it. */
 .nb-split{grid-template-columns:minmax(0,1fr)}
-.nb-split .nr-list{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px;max-height:236px}
+.nb-split .nr-list{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:6px;max-height:236px}
 .nb-split .nr-list-empty{grid-column:1/-1}
 .rf-f label.nb-radio{display:inline-flex;margin:0;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:#0f2f66}
 .nb-sub{margin:-6px 0 12px;font-size:12.5px;color:var(--muted)}
 
-/* Box 24: one row per service, columns titled with their box number as on the claim. */
+/* Services: one row per service, in the claim's column order. */
 .nb-svc{border:1px solid #e2e9f5;border-radius:14px;overflow-x:auto;background:#fff}
 .nb-svc-row{display:grid;grid-template-columns:28px minmax(128px,1.3fr) minmax(128px,1.3fr) minmax(64px,.6fr) minmax(64px,.6fr) minmax(80px,.8fr) minmax(76px,.7fr) minmax(76px,.7fr) minmax(88px,.8fr) minmax(64px,.55fr) minmax(108px,1fr) 30px;
   gap:8px;align-items:center;padding:8px 12px;min-width:1040px;border-top:1px solid #eef2f8}
 .nb-svc-head{border-top:0;align-items:end;padding:12px 12px 10px;background:#fafcff}
 .nb-svc-head span{font-size:11.5px;font-weight:700;color:#274b86;line-height:1.25}
-.nb-svc-head i{display:block;font-style:normal;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#1f6fd0}
 .nb-svc-n{font-size:12px;font-weight:700;color:#7b8db0;text-align:center}
 .nb-svc input{width:100%;min-width:0;height:38px;padding:0 10px;border:1px solid #e2e9f5;border-radius:9px;background:#f7f9fd;font:inherit;font-size:13px;color:#0f2f66;outline:none}
 .nb-svc input:focus{border-color:#1f6fd0;background:#fff;box-shadow:0 0 0 3px rgba(31,111,208,.13)}
@@ -14540,7 +14539,7 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nb-total{font-size:12.5px;color:var(--muted)}
 .nb-total b{margin-left:8px;font-size:17px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
 
-/* Boxes 25-33. */
+/* Billing details. */
 .nb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px;align-items:start}
 .nb-lbl{display:block;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#274b86;margin-bottom:6px}
 .nb-radios{display:flex;align-items:center;gap:16px;min-height:44px}
@@ -14585,3 +14584,37 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 @media(max-width:1180px){.nb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.nb-grid{grid-template-columns:minmax(0,1fr)}.nb-pay{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){.nb-chev{transition:none}}
+
+/* ===== Motion on the Neurologist pages (neuro-referrals.js nrPaint) =====
+   The same motion as the rest of the portal: the content rises in as the page
+   opens (as .page.active .wrap - these pages have no .wrap, whose padding would
+   break the Referral Log's full-height layout), the stat tiles cascade in, a
+   pane eases in when what it shows changes (as the patient tabs' .pld-panel),
+   the active tab pill slides to the new tab (as the gliders elsewhere), and
+   rows press like the patient list's. Opacity and transform only, and none of
+   it for anyone who has asked for reduced motion. */
+#neuroReferralsMount .rf-tabs,#neuroBillingMount .rf-tabs,#neuroPaymentsMount .rf-tabs,#neuroReferralLogMount .nrs-tabs{position:relative}
+.nr-tl{display:inline-flex;align-items:center;gap:inherit}
+.nr-glide{position:absolute;left:0;top:0;z-index:0;pointer-events:none;border-radius:999px;background:var(--accent);box-shadow:0 6px 16px rgba(0,119,182,.25)}
+.nr-glide.is-line{border-radius:0;background:#fff;box-shadow:inset 0 -3px 0 #0077B6}
+.nr-glide.go{transition:transform .34s cubic-bezier(.22,1,.36,1),width .34s cubic-bezier(.22,1,.36,1),height .34s cubic-bezier(.22,1,.36,1)}
+/* While the pill travels, every label rides above it and the new tab waits for it to arrive. */
+.nr-gliding .nr-tl{position:relative;z-index:1}
+.nr-gliding .rf-tab.active{background:var(--surface);border-color:var(--border);color:var(--muted)}
+.nr-gliding .rf-tab.active .rf-badge{background:var(--s2);color:var(--text)}
+.nr-gliding .nrs-tab.active{background:transparent;box-shadow:none;color:#3c4043}
+@media (prefers-reduced-motion:no-preference){
+  .page.active #neuroReferralsMount,.page.active #neuroReferralLogMount,
+  .page.active #neuroBillingMount,.page.active #neuroPaymentsMount{animation:ctgRiseFast .26s cubic-bezier(.22,1,.36,1) both}
+  @keyframes nrTileIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .nr-enter .nr-kpi{animation:nrTileIn .42s cubic-bezier(.22,1,.36,1) both}
+  .nr-enter .nr-kpi:nth-child(2){animation-delay:.05s}
+  .nr-enter .nr-kpi:nth-child(3){animation-delay:.1s}
+  .nr-enter .nr-kpi:nth-child(4){animation-delay:.15s}
+  @keyframes nrPaneIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .nr-pane-in{animation:nrPaneIn .34s cubic-bezier(.22,1,.36,1) both}
+  .nb-sub-row.nr-pane-in{animation-duration:.26s}
+  .nr-item{transition:background .15s ease,border-color .15s ease,transform .18s var(--ease-out)}
+  .nr-item:active{transform:scale(.985)}
+}
+@media (prefers-reduced-motion:reduce){.nr-glide{display:none}}

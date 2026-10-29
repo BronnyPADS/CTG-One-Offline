@@ -6,8 +6,9 @@
    Summary / Collection Management, which follow money owed TO the practice.
 
    Neurologist Billing (page neuroBilling): per referred patient, the
-   neurologist's bill laid out as on their claim - box 24 service lines and
-   boxes 25-33 - with what is billed, paid and still owed.
+   neurologist's bill laid out as on their claim - the service lines and the
+   billing details (without the claim's box numbers) - with what is billed,
+   paid and still owed.
    Neurologist Payments (page neuroPayments): payments recorded against those
    bills, the balance still owed per patient, and the payment history.
 
@@ -133,6 +134,7 @@
   var nbQuery = '';
   var nbSelectedId = null;
   var nbDrafts = {};            // patient id -> the bill being edited, until saved
+  var nbLastSel = null, nbLastFilter = null;   // what was last painted (a change eases in)
 
   function nbDraftFor(p) {
     if (!nbDrafts[p.id]) nbDrafts[p.id] = JSON.parse(JSON.stringify(nbBill(p) || nbBlank(p)));
@@ -168,7 +170,8 @@
     } else {
       h += '<div class="nr-split nb-split">' + nbListHTML(rows) + nbFormHTML(nbSelectedId ? getPatient(nbSelectedId) : null) + '</div>';
     }
-    mount.innerHTML = h;
+    N().paint(mount, 'page-neuroBilling', h, [nbFilter !== nbLastFilter && '.nr-list', nbSelectedId !== nbLastSel && '.nr-form']);
+    nbLastSel = nbSelectedId; nbLastFilter = nbFilter;
   }
 
   function nbRows(all) {
@@ -203,7 +206,7 @@
     all.forEach(function (p) { n[nbStage(nbBill(p))]++; });
     var tab = function (key, label, count) {
       return '<button type="button" class="rf-tab' + (nbFilter === key ? ' active' : '') + '" data-onclick="nbSetFilter(\'' + key + '\')">'
-        + label + ' <span class="rf-badge">' + count + '</span></button>';
+        + '<span class="nr-tl">' + label + ' <span class="rf-badge">' + count + '</span></span></button>';
     };
     return '<div class="rf-toolbar"><div class="rf-tabs">'
       + tab('none', 'Not Entered', n.none) + tab('unpaid', 'Unpaid', n.unpaid) + tab('partial', 'Partially Paid', n.partial)
@@ -232,23 +235,24 @@
     }).join('') + '</div>';
   }
 
-  /* The claim's service lines (box 24), as on the CMS-1500: each column
-     titled with its box number. Charges are the line's total (24F). */
+  /* The service lines, in the order of the claim's service section (the box
+     numbers themselves are not shown - the user asked for them off). Charges
+     are each line's total. */
   var NB_COLS = [
-    ['from', '24A', 'Date from', 'date'], ['to', '24A', 'Date to', 'date'], ['pos', '24B', 'Place of service', 'text'],
-    ['emg', '24C', 'Emergency', 'text'], ['cpt', '24D', 'Procedure code', 'text'], ['mod', '24D', 'Modifiers', 'text'],
-    ['dxPtr', '24E', 'Diagnosis pointer', 'text'], ['charge', '24F', 'Charges', 'money'], ['units', '24G', 'Days or units', 'text'],
-    ['npi', '24J', 'Rendering provider NPI', 'text']
+    ['from', 'Date from', 'date'], ['to', 'Date to', 'date'], ['pos', 'Place of service', 'text'],
+    ['emg', 'Emergency', 'text'], ['cpt', 'Procedure code', 'text'], ['mod', 'Modifiers', 'text'],
+    ['dxPtr', 'Diagnosis pointer', 'text'], ['charge', 'Charges', 'money'], ['units', 'Days or units', 'text'],
+    ['npi', 'Rendering provider NPI', 'text']
   ];
   function nbLinesHTML(b) {
     var head = '<div class="nb-svc-row nb-svc-head"><span></span>' + NB_COLS.map(function (c) {
-      return '<span><i>' + c[1] + '</i>' + c[2] + '</span>';
+      return '<span>' + c[1] + '</span>';
     }).join('') + '<span></span></div>';
     var lines = b.lines.length ? b.lines.map(function (l, i) {
       return '<div class="nb-svc-row"><span class="nb-svc-n">' + (i + 1) + '</span>' + NB_COLS.map(function (c) {
         var ph = { pos: '11', emg: 'Y', cpt: '99203', mod: '59 GP', dxPtr: 'A', charge: '0.00', units: '1', npi: 'NPI' }[c[0]] || '';
-        return '<input type="' + (c[3] === 'date' ? 'date' : 'text') + '" aria-label="Line ' + (i + 1) + ' ' + c[2] + '"'
-          + (c[3] === 'money' ? ' inputmode="decimal" class="nb-money"' : '') + ' value="' + esc(l[c[0]] || '') + '"'
+        return '<input type="' + (c[2] === 'date' ? 'date' : 'text') + '" aria-label="Line ' + (i + 1) + ' ' + c[1] + '"'
+          + (c[2] === 'money' ? ' inputmode="decimal" class="nb-money"' : '') + ' value="' + esc(l[c[0]] || '') + '"'
           + (ph ? ' placeholder="' + esc(ph) + '"' : '')
           + ' data-oninput="nbLine(' + i + ',\'' + c[0] + '\',this.value)">';
       }).join('')
@@ -272,25 +276,25 @@
       + '<button type="button" class="nr-link" data-onclick="nbOpenReferral(\'' + id + '\')">' + nbIcon('file') + 'Open Referral</button></div></div>';
 
     var body = '<div class="nr-form-body">'
-      + '<h3 class="nr-sec nr-sec-first"><span>24 · Services</span></h3>'
+      + '<h3 class="nr-sec nr-sec-first"><span>Services</span></h3>'
       + '<p class="nb-sub">From the neurologist’s bill: one line for each service. Charges are each line’s total.</p>'
       + nbLinesHTML(b)
       + '<div class="nb-svc-foot"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddLine()">' + nbIcon('plus') + 'Add service line</button>'
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
-      + '<h3 class="nr-sec"><span>25–33 · Billing</span></h3>'
+      + '<h3 class="nr-sec"><span>Billing</span></h3>'
       + '<div class="nb-grid">'
-        + '<div class="rf-f"><label for="nbf_accountNo">26 · Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
-        + '<div class="rf-f"><span class="nb-lbl" id="nbAssignLbl">27 · Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
+        + '<div class="rf-f"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
+        + '<div class="rf-f"><span class="nb-lbl" id="nbAssignLbl">Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
           + ['yes', 'no'].map(function (v) {
               return '<label class="nb-radio"><input type="radio" name="nbAssign" value="' + v + '"' + (b.acceptAssignment === v ? ' checked' : '')
                 + ' data-onchange="nbField(\'acceptAssignment\',this.value)">' + (v === 'yes' ? 'Yes' : 'No') + '</label>';
             }).join('')
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
-        + '<div class="rf-f"><label for="nbf_paid">29 · Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
+        + '<div class="rf-f"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
           + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
-        + '<div class="rf-f"><label for="nbf_signature">31 · Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)"></div>'
-        + '<div class="rf-f"><label for="nbf_signDate">31 · Date</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
-        + '<div class="nb-sum"><span>28 · Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
+        + '<div class="rf-f"><label for="nbf_signature">Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)"></div>'
+        + '<div class="rf-f"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
+        + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
       + '</div></div>';
 
@@ -393,6 +397,8 @@
   var npQuery = '';
   var npOpen = {};              // patient id -> payment history shown
   var npModal = null;           // { id } while the Record Payment window is open
+  var npLastTab = null;         // the tab last painted (its table eases in when it changes)
+  var npJustOpened = null;      // a payment history just opened (it eases in once)
 
   function npBilled() {
     return nbPatients().filter(function (p) { return nbStage(nbBill(p)) !== 'none'; });
@@ -421,7 +427,9 @@
     } else {
       h += npBalancesHTML(billed);
     }
-    mount.innerHTML = h;
+    N().paint(mount, 'page-neuroPayments', h, [npTab !== npLastTab && '.rf-toolbar + .card',
+      npJustOpened && '.nb-sub-row[data-id="' + N().idArg(npJustOpened) + '"]']);
+    npLastTab = npTab; npJustOpened = null;
   }
 
   function npKpis(billed) {
@@ -449,7 +457,7 @@
     var pays = billed.reduce(function (n, p) { return n + (nbBill(p).payments || []).length; }, 0);
     var tab = function (key, label, count) {
       return '<button type="button" class="rf-tab' + (npTab === key ? ' active' : '') + '" data-onclick="npSetTab(\'' + key + '\')">'
-        + label + ' <span class="rf-badge">' + count + '</span></button>';
+        + '<span class="nr-tl">' + label + ' <span class="rf-badge">' + count + '</span></span></button>';
     };
     return '<div class="rf-toolbar"><div class="rf-tabs">'
       + tab('owed', 'Balance Owed', owed) + tab('paid', 'Paid in Full', billed.length - owed) + tab('history', 'Payment History', pays)
@@ -489,7 +497,7 @@
         + '<td class="nb-act">' + (t.balance > 0 ? '<button type="button" class="rf-btn rf-btn-go nb-btn-sm" data-onclick="npOpenPay(\'' + id + '\')">' + nbIcon('plus') + 'Record Payment</button>' : '') + '</td>'
         + '</tr>';
       if (open) {
-        h += '<tr class="nb-sub-row"><td colspan="8">' + (pays.length
+        h += '<tr class="nb-sub-row" data-id="' + id + '"><td colspan="8">' + (pays.length
           ? '<div class="nb-pays">' + pays.map(function (x) { return npPayRow(p, x); }).join('') + '</div>'
           : '<div class="nb-muted nb-pays-empty">No payments recorded for this bill yet.</div>') + '</td></tr>';
       }
@@ -600,7 +608,12 @@
       renderNeuroPayments();
     });
   }
-  function npToggle(id) { var p = nbFind(id); if (!p) return; npOpen[p.id] = !npOpen[p.id]; renderNeuroPayments(); }
+  function npToggle(id) {
+    var p = nbFind(id); if (!p) return;
+    npOpen[p.id] = !npOpen[p.id];
+    if (npOpen[p.id]) npJustOpened = p.id;
+    renderNeuroPayments();
+  }
   function npSetTab(t) { npTab = t; renderNeuroPayments(); }
   function npSearch(v) {
     npQuery = String(v || '');

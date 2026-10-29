@@ -194,17 +194,79 @@
     return !!d && (Object.keys(d).some(function (k) { return k !== '__track'; }) || !!(d.__track && Object.keys(d.__track).length));
   }
 
+  /* -------------------------------- motion -------------------------------- */
+  /* The portal's motion on these pages (styles.css, "Motion on the Neurologist
+     pages"): content rises in as a page opens, the tiles cascade, the active
+     tab pill slides to the new tab, and a pane eases in when what it shows
+     changes. Opacity and transform only; none of it for reduced motion. */
+  function nrCalm() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  var NR_GLIDE_BARS = [['.rf-tabs', '.rf-tab'], ['.nrs-tabs', '.nrs-tab']];
+  // Where each tab bar's active tab is, taken just before a repaint.
+  function nrGlideFrom(mount) {
+    return NR_GLIDE_BARS.map(function (b) {
+      var bar = mount && mount.querySelector(b[0]), act = bar && bar.querySelector(b[1] + '.active');
+      return act && act.offsetWidth ? { x: act.offsetLeft, y: act.offsetTop, w: act.offsetWidth, h: act.offsetHeight } : null;
+    });
+  }
+  /* These bars are redrawn on every click, so a pill cannot simply move: one
+     is put where the old active tab was and slides to the new one, which
+     takes its own look back as the pill arrives. Sizes are set through the
+     CSSOM, which the security policy allows (unlike a style attribute). */
+  function nrGlideTo(mount, from) {
+    if (!mount || !from || nrCalm()) return;
+    NR_GLIDE_BARS.forEach(function (b, i) {
+      var f = from[i], bar = mount.querySelector(b[0]), act = bar && bar.querySelector(b[1] + '.active');
+      if (!f || !act || !act.offsetWidth || (f.x === act.offsetLeft && f.y === act.offsetTop)) return;
+      var g = document.createElement('span');
+      g.className = 'nr-glide' + (b[0] === '.nrs-tabs' ? ' is-line' : '');
+      g.setAttribute('aria-hidden', 'true');
+      var at = function (x, y, w, h) { g.style.transform = 'translate(' + x + 'px,' + y + 'px)'; g.style.width = w + 'px'; g.style.height = h + 'px'; };
+      at(f.x, f.y, f.w, f.h);
+      bar.classList.add('nr-gliding');
+      bar.insertBefore(g, bar.firstChild);
+      void g.offsetWidth;                    // the start takes effect before the move
+      g.classList.add('go');
+      at(act.offsetLeft, act.offsetTop, act.offsetWidth, act.offsetHeight);
+      var done = function () { bar.classList.remove('nr-gliding'); if (g.parentNode) g.parentNode.removeChild(g); };
+      g.addEventListener('transitionend', function (e) { if (e.propertyName === 'transform') done(); });
+      setTimeout(done, 700);                 // in case transitionend never comes
+    });
+  }
+  // A pane whose content changed eases in (one shot: it is a new element each repaint).
+  function nrEase(el) { if (el && !nrCalm()) el.classList.add('nr-pane-in'); }
+  // The paint as a page opens: the stat tiles cascade in.
+  function nrEnter(mount) {
+    if (!mount || nrCalm()) return;
+    mount.classList.add('nr-enter');
+    setTimeout(function () { mount.classList.remove('nr-enter'); }, 900);
+  }
+  /* Repaints a page with its motion: opening (the page is not shown yet), the
+     tiles cascade; afterwards the tab pill slides, and each pane named in
+     `changed` eases in. */
+  function nrPaint(mount, pageId, html, changed) {
+    var page = document.getElementById(pageId);
+    var opening = !(page && page.classList.contains('active'));
+    var from = nrGlideFrom(mount);
+    mount.innerHTML = html;
+    nrGlideTo(mount, from);
+    if (opening) { nrEnter(mount); return; }
+    (changed || []).forEach(function (sel) { nrEase(sel && mount.querySelector(sel)); });
+  }
+
   /* -------------------------------- render -------------------------------- */
+  var nrLastSel = null, nrLastFilter = null;
   function renderNeuroReferrals() {
     var mount = document.getElementById('neuroReferralsMount');
     if (!mount) return;
     var all = nrPatients();
     var rows = nrRows(all);
     if (!rows.some(function (p) { return p.id === nrSelectedId; })) nrSelectedId = rows.length ? rows[0].id : null;
-    mount.innerHTML = nrHeaderHTML() + nrKpisHTML(all) + nrToolbarHTML(all)
+    nrPaint(mount, 'page-neuroReferrals', nrHeaderHTML() + nrKpisHTML(all) + nrToolbarHTML(all)
       + (all.length ? '<div class="nr-split">' + nrListHTML(rows) + nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null) + '</div>'
         : nrEmptyHTML('No Virginia patients yet',
-          'Patients appear here once their Day 1 is saved with Location / Jurisdiction set to Virginia.'));
+          'Patients appear here once their Day 1 is saved with Location / Jurisdiction set to Virginia.')),
+      [nrFilter !== nrLastFilter && '.nr-list', nrSelectedId !== nrLastSel && '.nr-form']);
+    nrLastSel = nrSelectedId; nrLastFilter = nrFilter;
   }
 
   function nrRows(all) {
@@ -264,7 +326,7 @@
     var n = nrCounts(all);
     function tab(key, label, count) {
       return '<button type="button" class="rf-tab' + (nrFilter === key ? ' active' : '') + '" data-onclick="nrSetFilter(\'' + key + '\')">'
-        + label + ' <span class="rf-badge">' + count + '</span></button>';
+        + '<span class="nr-tl">' + label + ' <span class="rf-badge">' + count + '</span></span></button>';
     }
     return '<div class="rf-toolbar"><div class="rf-tabs">'
       + NR_STEPS.map(function (s) { return tab(s.key, s.tab, n[s.key]); }).join('')
@@ -579,6 +641,7 @@
      chart (as on the referral form) and are changed there. */
   var NRL_EDIT = { status: 'select', referredOn: 'date', apptDate: 'date', partner: 'select', conditionFocus: 'select', notes: 'text' };
   var nrlSel = null;            // { id, k } of the selected cell, kept across repaints
+  var nrlLastTab = null;        // the sheet tab last painted (its rows ease in when it changes)
   var nrlEditing = null;        // { id, k, td, before } while a cell's editor is open
   // date: the value is yyyy-mm-dd (sorted as such, shown and exported as MM/DD/YYYY).
   // link: an action in the sheet only, left out of the downloads.
@@ -742,10 +805,11 @@
     h += '<div class="nrs-tabs" role="tablist" aria-label="Referral stage">'
       + NRL_TABS.map(function (t) {
           return '<button type="button" role="tab" aria-selected="' + (nrlTab === t[0]) + '" class="nrs-tab' + (nrlTab === t[0] ? ' active' : '') + '" data-onclick="nrlSetTab(\'' + t[0] + '\')">'
-            + nrEsc(t[1]) + '<span class="nrs-tab-n">' + n[t[0]] + '</span></button>';
+            + '<span class="nr-tl">' + nrEsc(t[1]) + '<span class="nrs-tab-n">' + n[t[0]] + '</span></span></button>';
         }).join('')
       + '</div></div>';
-    mount.innerHTML = h;
+    nrPaint(mount, 'page-neuroReferralLog', h, [nrlTab !== nrlLastTab && '.nrs-scroll']);
+    nrlLastTab = nrlTab;
     nrlEditing = null;
     // Keyboard and double-click for the grid, bound here because they need the event itself.
     var sc = mount.querySelector('.nrs-scroll');
@@ -1184,6 +1248,6 @@
   window.ctgNeuro = {
     patients: nrPatients, status: nrStatus, saved: nrSaved, step: nrStep, chart: nrChartValues,
     doi: nrDoi, us: nrUs, today: nrToday, daysSince: nrDaysSince, esc: nrEsc, icon: nrIcon, idArg: nrIdArg,
-    openReferral: nrlOpenReferral
+    openReferral: nrlOpenReferral, paint: nrPaint
   };
 })();
