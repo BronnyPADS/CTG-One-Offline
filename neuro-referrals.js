@@ -75,6 +75,7 @@
     sync: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     sheet: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>',
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     sortBoth: '<polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>',
     sortUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/>',
@@ -573,6 +574,12 @@
   var nrlQuery = '';
   var nrlSort = { key: 'patient', dir: 1 };
   var NRL_TABS = [['all', 'All Referrals'], ['submitted', 'Referral Submitted'], ['scheduled', 'Appointment Scheduled']];
+  /* The referral's own fields can be edited in the sheet, with the editor
+     each needs. The patient's details stay read-only: they come from the
+     chart (as on the referral form) and are changed there. */
+  var NRL_EDIT = { status: 'select', referredOn: 'date', apptDate: 'date', partner: 'select', conditionFocus: 'select', notes: 'text' };
+  var nrlSel = null;            // { id, k } of the selected cell, kept across repaints
+  var nrlEditing = null;        // { id, k, td, before } while a cell's editor is open
   // date: the value is yyyy-mm-dd (sorted as such, shown and exported as MM/DD/YYYY).
   // link: an action in the sheet only, left out of the downloads.
   // w: on-screen width; each is wide enough for its header label plus the sort arrow.
@@ -582,9 +589,9 @@
     { key: 'chart', label: 'Chart', w: 110, link: true, text: 'Open Chart' },
     { key: 'status', label: 'Status', w: 210 },
     { key: 'referredOn', label: 'Date Submitted', w: 170, date: true },
-    { key: 'apptDate', label: 'Appointment Date', w: 170, date: true },
+    { key: 'apptDate', label: 'Appointment Date', w: 190, date: true },
     { key: 'partner', label: 'Partner', w: 210 },
-    { key: 'conditionFocus', label: 'Condition Focus', w: 170 },
+    { key: 'conditionFocus', label: 'Condition Focus', w: 190 },
     { key: 'dob', label: 'Date of Birth', w: 150, date: true },
     { key: 'phone', label: 'Phone Number', w: 160 },
     { key: 'email', label: 'Email', w: 210 },
@@ -666,12 +673,14 @@
         + (nrlQuery ? '<button type="button" class="rf-search-x" data-onclick="nrlSearch(\'\')" aria-label="Clear search">&times;</button>' : '')
         + '</div>'
         + '<div class="nrs-meta">'
+          + '<span class="nrs-key">' + nrIcon('pencil', 'nrs-key-i') + 'Editable columns: double-click a cell</span>'
           + '<span class="nrs-key"><i class="nrs-key-sw" aria-hidden="true"></i>Yellow rows: awaiting an appointment</span>'
           + '<span class="nrs-count">' + rows.length + (rows.length === 1 ? ' row' : ' rows') + ' · sorted by ' + nrEsc(nrlSortLabel()) + '</span>'
         + '</div>'
       + '</div>'
       // The cell bar: the selected cell's reference and its full text, as in a spreadsheet.
-      + '<div class="nrs-fx"><span class="nrs-fx-ref" id="nrlFxRef">A1</span><span class="nrs-fx-ico">fx</span><span class="nrs-fx-val" id="nrlFxVal">Patient</span></div>';
+      + '<div class="nrs-fx"><span class="nrs-fx-ref" id="nrlFxRef">A1</span><span class="nrs-fx-ico">fx</span><span class="nrs-fx-val" id="nrlFxVal">Patient</span>'
+      + '<span class="nrs-fx-hint" id="nrlFxHint"></span></div>';
 
     h += '<div class="nrs-scroll" role="region" aria-label="Neurologist referral log" tabindex="0">'
       + '<table class="nrs-grid" data-onclick="nrlCellClick(event)"><thead>'
@@ -684,7 +693,8 @@
           return '<th class="nrs-w' + c.w + (i === 0 ? ' nrs-fix' : '') + '" data-ref="' + nrlColLetter(i) + '1"'
             + (sortable ? ' aria-sort="' + (on ? (nrlSort.dir > 0 ? 'ascending' : 'descending') : 'none') + '"' : '') + '>'
             + (sortable
-              ? '<button type="button" class="nrs-sort' + (on ? ' on' : '') + '" data-onclick="nrlSortBy(\'' + c.key + '\')"><span class="nrs-hl">' + nrEsc(c.label) + '</span>'
+              ? '<button type="button" class="nrs-sort' + (on ? ' on' : '') + '" data-onclick="nrlSortBy(\'' + c.key + '\')"><span class="nrs-hl">'
+                + (NRL_EDIT[c.key] ? nrIcon('pencil', 'nrs-ed-i') : '') + nrEsc(c.label) + '</span>'
                 + nrIcon(on ? (nrlSort.dir > 0 ? 'sortUp' : 'sortDown') : 'sortBoth', 'nrs-sort-i') + '</button>'
               : '<span class="nrs-hlabel">' + nrEsc(c.label) + '</span>')
             + '</th>';
@@ -706,12 +716,15 @@
               return '<td class="' + cls + '" data-ref="' + ref + '"><button type="button" class="nrs-link" ' + act + '>'
                 + nrEsc(c.text) + '</button></td>';
             }
+            // nrs-ed: a referral field, edited in the cell; nrs-ro: a chart detail, changed in the chart.
+            var cell = ' data-ref="' + ref + '" data-id="' + id + '" data-k="' + c.key + '"';
+            cls += NRL_EDIT[c.key] ? ' nrs-ed' : ' nrs-ro';
             if (c.key === 'status') {
-              return '<td class="' + cls + '" data-ref="' + ref + '" data-val="' + nrEsc(r.status) + '"><span class="nrs-chip nr-st-' + r.st + '">'
+              return '<td class="' + cls + '"' + cell + ' data-val="' + nrEsc(r.status) + '"><span class="nrs-chip nr-st-' + r.st + '">'
                 + nrIcon(nrStep(r.st).icon) + nrEsc(r.status) + '</span></td>';
             }
             var t = nrlCellText(r, c);
-            return '<td class="' + cls + '" data-ref="' + ref + '" title="' + nrEsc(t) + '">' + nrEsc(t) + '</td>';
+            return '<td class="' + cls + '"' + cell + ' title="' + nrEsc(t) + '">' + nrEsc(t) + '</td>';
           }).join('')
         + '</tr>';
     });
@@ -733,6 +746,13 @@
         }).join('')
       + '</div></div>';
     mount.innerHTML = h;
+    nrlEditing = null;
+    // Keyboard and double-click for the grid, bound here because they need the event itself.
+    var sc = mount.querySelector('.nrs-scroll');
+    if (sc) { sc.addEventListener('keydown', nrlGridKey); sc.addEventListener('dblclick', nrlGridDbl); }
+    // The selected cell survives a repaint (an edit, a sort), found by patient and column.
+    var keep = nrlSel && mount.querySelector('td[data-id="' + nrlSel.id + '"][data-k="' + nrlSel.k + '"]');
+    if (keep) nrlSelectCell(keep);
   }
 
   // "Patient (A→Z)", or for a date column "Appointment Date (oldest first)".
@@ -765,15 +785,159 @@
   }
 
   function nrlCellClick(ev) {
+    if (nrlEditing) return;
     var cell = ev && ev.target && ev.target.closest ? ev.target.closest('td[data-ref],th[data-ref]') : null;
-    if (!cell) return;
+    if (cell) nrlSelectCell(cell);
+  }
+  // Highlight a cell and show its reference, full text and what can be done with it in the cell bar.
+  function nrlSelectCell(cell) {
     var grid = cell.closest('.nrs-grid');
     var prev = grid && grid.querySelector('.is-sel');
     if (prev) prev.classList.remove('is-sel');
     cell.classList.add('is-sel');
-    var ref = document.getElementById('nrlFxRef'), val = document.getElementById('nrlFxVal');
+    nrlSel = cell.getAttribute('data-id') ? { id: cell.getAttribute('data-id'), k: cell.getAttribute('data-k') } : null;
+    var ref = document.getElementById('nrlFxRef'), val = document.getElementById('nrlFxVal'), hint = document.getElementById('nrlFxHint');
     if (ref) ref.textContent = cell.getAttribute('data-ref');
     if (val) val.textContent = cell.getAttribute('data-val') || cell.textContent;
+    if (hint) {
+      hint.textContent = cell.classList.contains('nrs-ed') ? 'Double-click or press Enter to edit'
+        : cell.classList.contains('nrs-ro') ? 'From the patient’s chart: change it with Open Chart' : '';
+    }
+  }
+
+  /* ------------------------------ editing cells ----------------------------- */
+  function nrlGridDbl(ev) {
+    var td = ev.target.closest && ev.target.closest('td[data-id]');
+    if (!td) return;
+    if (td.classList.contains('nrs-ed')) nrlBeginEdit(td);
+    else showToast('Patient details come from the chart. Use Open Chart to change them.');
+  }
+  // Arrow keys move the selection, Enter or F2 edits it, as in a spreadsheet.
+  function nrlGridKey(ev) {
+    if (nrlEditing || ev.target !== ev.currentTarget) return;
+    var cur = ev.currentTarget.querySelector('td.is-sel');
+    if (!cur) return;
+    if (ev.key === 'Enter' || ev.key === 'F2') {
+      if (cur.classList.contains('nrs-ed')) { ev.preventDefault(); nrlBeginEdit(cur); }
+      return;
+    }
+    var tr = cur.parentElement, i = Array.prototype.indexOf.call(tr.children, cur), next = null;
+    if (ev.key === 'ArrowRight') next = tr.children[i + 1];
+    else if (ev.key === 'ArrowLeft') next = i > 1 ? tr.children[i - 1] : null;
+    else if (ev.key === 'ArrowDown') next = tr.nextElementSibling && tr.nextElementSibling.classList.contains('nrs-row') ? tr.nextElementSibling.children[i] : null;
+    else if (ev.key === 'ArrowUp') next = tr.previousElementSibling && tr.previousElementSibling.classList.contains('nrs-row') ? tr.previousElementSibling.children[i] : null;
+    else return;
+    ev.preventDefault();
+    if (next && next.getAttribute('data-ref')) { nrlSelectCell(next); next.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+  }
+  /* Opens the cell's editor in place: a dropdown for Status, Partner and
+     Condition Focus (the browser's own, no-ctg-select, so it keeps focus), a
+     date box for the dates, a text box for Notes. Enter or leaving the cell
+     saves, Esc cancels. Its listeners are attached here: the editor exists
+     only while it is open. */
+  function nrlBeginEdit(td) {
+    if (nrlEditing) return;
+    var k = td.getAttribute('data-k'), p = nrFind(td.getAttribute('data-id'));
+    if (!p || !NRL_EDIT[k]) return;
+    var r = nrSaved(p), f = r.form || {};
+    var cur = k === 'status' ? nrStatus(p) : NR_CHOSEN[k] !== undefined ? (f[k] || NR_CHOSEN[k]) : (r[k] || '');
+    var col = NRL_COLS.filter(function (c) { return c.key === k; })[0];
+    var el;
+    if (NRL_EDIT[k] === 'select') {
+      el = document.createElement('select');
+      var opts = k === 'status' ? NR_STEPS.map(function (s) { return [s.key, s.label]; })
+        : (k === 'partner' ? NR_PARTNERS : NR_CONDITIONS).map(function (o) { return [o, o]; });
+      if (k !== 'status' && cur && !opts.some(function (o) { return o[0] === cur; })) opts.push([cur, cur]);
+      opts.forEach(function (o) { var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
+      el.value = cur;
+      el.addEventListener('change', function () { nrlFinishEdit(true); });
+    } else {
+      el = document.createElement('input');
+      el.type = NRL_EDIT[k] === 'date' ? 'date' : 'text';
+      if (k === 'notes') el.maxLength = 500;
+      el.value = cur;
+    }
+    el.className = 'nrs-editor no-ctg-select';
+    el.setAttribute('aria-label', 'Edit ' + col.label);
+    el.addEventListener('keydown', function (ev) {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); nrlFinishEdit(true); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); nrlFinishEdit(false); }
+    });
+    el.addEventListener('blur', function () { nrlFinishEdit(true); });
+    nrlEditing = { id: p.id, k: k, td: td, before: cur };
+    nrlSelectCell(td);
+    td.classList.add('is-editing');
+    td.textContent = '';
+    td.appendChild(el);
+    el.focus();
+    if (el.type === 'text') el.select();
+  }
+  function nrlFocusGrid() {
+    var sc = document.querySelector('#neuroReferralLogMount .nrs-scroll');
+    if (sc) sc.focus({ preventScroll: true });
+  }
+  function nrlFinishEdit(save) {
+    var e = nrlEditing;
+    if (!e) return;
+    nrlEditing = null;     // first, so the blur that follows a repaint does nothing
+    var el = e.td.querySelector('.nrs-editor');
+    var v = el ? String(el.value) : e.before;
+    if (save && v !== e.before) { nrlCommit(e.id, e.k, v); return; }
+    renderNeuroReferralLog();
+    nrlFocusGrid();
+  }
+  /* Saves one edited field on the referral, keeping the stages consistent the
+     way the referral form does: an appointment date on a submitted referral
+     schedules it, clearing it sends it back; Appointment Scheduled needs a
+     date; a move back a stage clears the later dates, after a confirmation. */
+  function nrlCommit(id, k, v) {
+    var p = getPatient(id);
+    if (!p) { renderNeuroReferralLog(); return; }
+    var r = Object.assign({}, nrSaved(p));
+    r.form = Object.assign({}, r.form || {});
+    r.status = nrStatus(p);
+    var msg = 'Saved.', confirmText = '';
+    if (NR_CHOSEN[k] !== undefined) r.form[k] = v;
+    else if (k === 'notes') r.notes = v.trim();
+    else if (k === 'referredOn') r.referredOn = v;
+    else if (k === 'apptDate') {
+      r.apptDate = v;
+      if (v && r.status === 'submitted') { r.status = 'scheduled'; msg = 'Appointment date saved. Moved to Appointment Scheduled.'; }
+      else if (!v && r.status === 'scheduled') { r.status = 'submitted'; msg = 'Appointment date cleared. Moved back to Referral Submitted.'; }
+    } else if (k === 'status') {
+      if (v === 'scheduled' && !r.apptDate) {
+        showToast('Enter the Appointment Date first. Adding it marks the referral scheduled.', 'err');
+        nrlSel = { id: nrIdArg(id), k: 'apptDate' };
+        renderNeuroReferralLog(); nrlFocusGrid();
+        return;
+      }
+      if (v === 'submitted') {
+        if (r.apptDate) confirmText = 'Move back to Referral Submitted? The appointment date (' + nrUs(r.apptDate) + ') will be cleared.';
+        r.apptDate = '';
+        if (!r.referredOn) r.referredOn = nrToday();
+      }
+      if (v === 'pending') {
+        confirmText = 'Move back to Pending Referral? Its referral dates will be cleared and it will leave this log. It stays on Neurologist Referrals.';
+        r.referredOn = ''; r.apptDate = '';
+      }
+      r.status = v;
+      msg = 'Status changed to ' + nrStep(v).label + '.';
+    }
+    var apply = function () {
+      var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
+      r.updatedAt = new Date().toISOString();
+      r.updatedBy = me ? (me.displayName || me.username || '') : '';
+      p.neuroReferral = r;
+      persistPatients();
+      showToast(msg, 'ok');
+      renderNeuroReferralLog();
+      nrlFocusGrid();
+    };
+    if (!confirmText) { apply(); return; }
+    ctgConfirm(confirmText, { title: 'Change referral status', okLabel: 'Move back' }).then(function (ok) {
+      if (ok) apply(); else { renderNeuroReferralLog(); nrlFocusGrid(); }
+    });
   }
   function nrlSortBy(key) {
     nrlSort = nrlSort.key === key ? { key: key, dir: -nrlSort.dir } : { key: key, dir: 1 };
@@ -866,8 +1030,11 @@
      importer), laid out as a report: a heading block saying what the sheet
      is (title, scope, the view's counts, search and sort, a colour key, who
      made it and when, a PHI notice), then the table - navy header, frozen
-     header and first column, filters, banded rows, awaiting-appointment rows
-     tinted as on screen, status cells coloured by stage, real Excel dates.
+     header row, filters, banded rows, awaiting-appointment rows tinted as on
+     screen, status cells coloured by stage, real Excel dates.
+     Gridlines stay on (a sheet without them read as empty); the heading block
+     is filled white, which is what hides them there. Only rows are frozen: a
+     frozen column drew its divider straight through the title.
      Prints landscape, one page wide, header row repeated, numbered pages.
      Text cells are inline strings, so nothing in them is read as a formula. */
   var NRL_HEAD_ROW = 7;          // rows 1-5 heading block, 6 a spacer, 7 the table header
@@ -880,19 +1047,20 @@
     var n = { submitted: 0, scheduled: 0 };
     rows.forEach(function (r) { n[r.st]++; });
 
+    var W = 'FFFFFF';   // the heading block's white fill
     var out = [
-      row(1, 30, text('A1', 'Neurologist Referral Log', S.get({ size: 18, bold: true, color: '03045E' }))),
+      row(1, 30, text('A1', 'Neurologist Referral Log', S.get({ size: 18, bold: true, color: '03045E', fill: W }))),
       row(2, 18, text('A2', 'Concussion Therapy Group · Patients whose incident occurred in Virginia (Day 1 Location / Jurisdiction) '
-        + 'and whose neurologist referral has been submitted or scheduled.', S.get({ color: '475569' }))),
+        + 'and whose neurologist referral has been submitted or scheduled.', S.get({ color: '475569', fill: W }))),
       row(3, 20, text('A3', 'View: ' + meta.view + '   ·   ' + rows.length + (rows.length === 1 ? ' referral' : ' referrals')
         + ' (' + n.submitted + ' Referral Submitted, ' + n.scheduled + ' Appointment Scheduled)'
         + (meta.search ? '   ·   Search: "' + meta.search + '"' : '') + '   ·   Sorted by ' + meta.sort,
-        S.get({ bold: true, color: '0F172A' }))),
+        S.get({ bold: true, color: '0F172A', fill: W }))),
       row(4, 18, text('A4', 'Yellow rows: referral submitted, still awaiting an appointment. Use the filter arrows on the header row to sort or filter.'
-        + '   Generated ' + meta.when + (meta.by ? ' by ' + meta.by : '') + ' from CTG One.', S.get({ size: 10, color: '475569' }))),
+        + '   Generated ' + meta.when + (meta.by ? ' by ' + meta.by : '') + ' from CTG One.', S.get({ size: 10, color: '475569', fill: W }))),
       row(5, 18, text('A5', 'CONFIDENTIAL: contains protected health information (PHI). Store and share it only as the practice’s HIPAA policy allows.',
-        S.get({ size: 10, bold: true, color: 'B42318' }))),
-      row(6, 8, ''),
+        S.get({ size: 10, bold: true, color: 'B42318', fill: W }))),
+      row(6, 8, cols.map(function (c, i) { return '<c r="' + nrlColLetter(i) + '6" s="' + S.get({ fill: W }) + '"/>'; }).join('')),
       row(H, 30, cols.map(function (c, i) {
         return text(nrlColLetter(i) + H, c.label, S.get({ bold: true, color: 'FFFFFF', fill: '0F172A', border: true, wrap: true }));
       }).join(''))
@@ -916,9 +1084,9 @@
     var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
       + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
-      + '<sheetViews><sheetView workbookViewId="0" showGridLines="0">'
-      + '<pane xSplit="1" ySplit="' + H + '" topLeftCell="B' + (H + 1) + '" activePane="bottomRight" state="frozen"/>'
-      + '<selection pane="bottomRight" activeCell="B' + (H + 1) + '" sqref="B' + (H + 1) + '"/></sheetView></sheetViews>'
+      + '<sheetViews><sheetView workbookViewId="0">'
+      + '<pane ySplit="' + H + '" topLeftCell="A' + (H + 1) + '" activePane="bottomLeft" state="frozen"/>'
+      + '<selection pane="bottomLeft" activeCell="A' + (H + 1) + '" sqref="A' + (H + 1) + '"/></sheetView></sheetViews>'
       + '<sheetFormatPr defaultRowHeight="15"/>'
       + '<cols>' + cols.map(function (c, i) {
           /* Wide enough for the header on one line, and dates get room to
@@ -934,6 +1102,8 @@
       + '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
       + '<headerFooter><oddHeader>&amp;L&amp;"Calibri,Bold"Neurologist Referral Log&amp;R&amp;"Calibri,Bold"CONFIDENTIAL - PHI</oddHeader>'
       + '<oddFooter>&amp;LConcussion Therapy Group&amp;CGenerated ' + nrlXml(meta.when) + '&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter>'
+      // ZIP codes, account numbers and the like are text on purpose (a leading 0 stays): no "number stored as text" flags.
+      + '<ignoredErrors><ignoredError sqref="A' + H + ':' + lastCol + Math.max(lastRow, H) + '" numberStoredAsText="1"/></ignoredErrors>'
       + '</worksheet>';
     var workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'

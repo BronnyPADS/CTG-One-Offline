@@ -14423,6 +14423,8 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nrs-meta{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
 .nrs-key{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted)}
 .nrs-key-sw{width:14px;height:14px;border-radius:4px;background:#FFF8E1;border:1px solid #EBCB7A}
+.nrs-key-i{width:13px;height:13px;flex:none;color:#0077B6}
+.nrs-fx-hint{flex:none;padding:0 12px;font-size:11.5px;color:#5f6368;white-space:nowrap}
 .nrs-fx{display:flex;align-items:center;min-height:32px;border-bottom:1px solid #E1E3E6;background:#fff;font-size:12.5px}
 .nrs-fx-ref{flex:none;width:76px;padding:0 10px;line-height:32px;text-align:center;font-weight:700;color:#3c4043;border-right:1px solid #E1E3E6}
 .nrs-fx-ico{flex:none;padding:0 10px;line-height:32px;font-family:Georgia,serif;font-style:italic;font-weight:700;color:#9aa0a6;border-right:1px solid #E1E3E6}
@@ -14439,7 +14441,7 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
   #neuroReferralLogMount{display:block;height:auto;min-height:0}
   .nrs-scroll{height:60vh}
 }
-.nrs-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nrs-scroll:focus-visible{outline:2px solid rgba(0,119,182,.35);outline-offset:-2px}
 .nrs-grid{border-collapse:separate;border-spacing:0;table-layout:fixed;width:max-content;font-size:12.5px;color:#202124}
 .nrs-grid th,.nrs-grid td{height:30px;padding:0 8px;background:#fff;border-right:1px solid #E2E3E3;border-bottom:1px solid #E2E3E3;text-align:left;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nrs-letters th{position:sticky;top:0;z-index:3;height:24px;background:#F8F9FA;color:#5f6368;font-size:11px;font-weight:600;text-align:center;border-bottom-color:#C7CACF}
@@ -14463,6 +14465,15 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nrs-row:hover td{background:#E8F0FE}
 .nrs-fill td{height:30px}
 .nrs-grid .is-sel{box-shadow:inset 0 0 0 2px #1A73E8}
+/* Editing: referral fields (nrs-ed) open an editor in the cell; chart details (nrs-ro) do not.
+   A pencil marks the editable columns' headers. */
+.nrs-ed{cursor:cell}
+.nrs-ro{cursor:default}
+.nrs-row td.nrs-ed:hover:not(.is-sel){box-shadow:inset 0 0 0 1px #9CC3E6}
+.nrs-ed-i{width:11px;height:11px;margin-right:5px;vertical-align:-1px;color:#90E0EF}
+.nrs-grid td.is-editing{padding:0;overflow:visible;box-shadow:inset 0 0 0 2px #1A73E8}
+.nrs-editor{display:block;box-sizing:border-box;width:100%;height:30px;margin:0;padding:0 8px;border:0;border-radius:0;
+  background:#fff;color:#202124;font:inherit;font-size:12.5px;outline:none;box-shadow:inset 0 0 0 2px #1A73E8}
 .nrs-w90{width:90px;min-width:90px;max-width:90px}
 .nrs-w110{width:110px;min-width:110px;max-width:110px}
 .nrs-w120{width:120px;min-width:120px;max-width:120px}
