@@ -1179,4 +1179,11 @@
   window.nrSearch = nrSearch;
   window.nrSearchClear = nrSearchClear;
   window.nrRefresh = nrRefresh;
+
+  // Shared with neuro-billing.js (Neurologist Billing / Payments), which works on the same patients.
+  window.ctgNeuro = {
+    patients: nrPatients, status: nrStatus, saved: nrSaved, step: nrStep, chart: nrChartValues,
+    doi: nrDoi, us: nrUs, today: nrToday, daysSince: nrDaysSince, esc: nrEsc, icon: nrIcon, idArg: nrIdArg,
+    openReferral: nrlOpenReferral
+  };
 })();

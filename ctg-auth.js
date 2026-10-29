@@ -29,6 +29,8 @@
     { key: 'registration',   label: 'Patient Registration',      group: 'Patient Workflow' },
     { key: 'referrals',      label: 'Referrals',                 group: 'Patient Workflow' },
     { key: 'neuroReferrals', label: 'Neurologist Referrals',     group: 'Patient Workflow' },
+    { key: 'neuroBilling',   label: 'Neurologist Billing',       group: 'Patient Workflow' },
+    { key: 'neuroPayments',  label: 'Neurologist Payments',      group: 'Patient Workflow' },
     { key: 'patientLists',   label: 'Patient Lists',             group: 'Patient Workflow' },
     { key: 'appointment',    label: 'Appointments',              group: 'Patient Workflow' },
     { key: 'apptConfigs',    label: 'Appointment Configs',       group: 'Patient Workflow' },

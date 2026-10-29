@@ -14498,3 +14498,90 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nrs-tab.active{background:#fff;color:#0077B6;box-shadow:inset 0 -3px 0 #0077B6}
 .nrs-tab-n{font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:#E8EAED;color:#3c4043}
 .nrs-tab.active .nrs-tab-n{background:#CAF0F8;color:#0077B6}
+
+/* ===== Neurologist Billing / Neurologist Payments (neuro-billing.js) =====
+   Built on the Neurologist Referrals pieces (.rf-* header, tabs, fields,
+   buttons; .nr-* tiles, list and form pane). New here: the claim-style service
+   lines, the billing grid, and the payment tables. Bill stages: not entered
+   (grey), unpaid (amber), partly paid (blue), paid in full (green). */
+.nb-st-none,.nb-is-none{--st:#64748B;--st-bg:rgba(100,116,139,.1);--st-bd:rgba(100,116,139,.28)}
+.nb-st-unpaid,.nb-is-unpaid{--st:#9a5b00;--st-bg:rgba(154,91,0,.1);--st-bd:rgba(154,91,0,.28)}
+.nb-st-partial,.nb-is-partial{--st:#0077B6;--st-bg:rgba(0,119,182,.1);--st-bd:rgba(0,119,182,.28)}
+.nb-st-paid,.nb-is-paid{--st:#15803d;--st-bg:rgba(22,163,74,.1);--st-bd:rgba(22,163,74,.26)}
+.nb-item-when{font-size:11.5px;font-weight:700;color:var(--st);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-neuroBilling .card:hover,#page-neuroPayments .card:hover{transform:none!important}
+#page-neuroBilling .nr-split .card{margin:0}
+/* The bill needs the full width for box 24's ten columns, as on the claim, so
+   here the patients sit in a compact grid above it rather than beside it. */
+.nb-split{grid-template-columns:minmax(0,1fr)}
+.nb-split .nr-list{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:6px;max-height:236px}
+.nb-split .nr-list-empty{grid-column:1/-1}
+.rf-f label.nb-radio{display:inline-flex;margin:0;font-size:13.5px;font-weight:600;letter-spacing:0;text-transform:none;color:#0f2f66}
+.nb-sub{margin:-6px 0 12px;font-size:12.5px;color:var(--muted)}
+
+/* Box 24: one row per service, columns titled with their box number as on the claim. */
+.nb-svc{border:1px solid #e2e9f5;border-radius:14px;overflow-x:auto;background:#fff}
+.nb-svc-row{display:grid;grid-template-columns:28px minmax(128px,1.3fr) minmax(128px,1.3fr) minmax(64px,.6fr) minmax(64px,.6fr) minmax(80px,.8fr) minmax(76px,.7fr) minmax(76px,.7fr) minmax(88px,.8fr) minmax(64px,.55fr) minmax(108px,1fr) 30px;
+  gap:8px;align-items:center;padding:8px 12px;min-width:1040px;border-top:1px solid #eef2f8}
+.nb-svc-head{border-top:0;align-items:end;padding:12px 12px 10px;background:#fafcff}
+.nb-svc-head span{font-size:11.5px;font-weight:700;color:#274b86;line-height:1.25}
+.nb-svc-head i{display:block;font-style:normal;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#1f6fd0}
+.nb-svc-n{font-size:12px;font-weight:700;color:#7b8db0;text-align:center}
+.nb-svc input{width:100%;min-width:0;height:38px;padding:0 10px;border:1px solid #e2e9f5;border-radius:9px;background:#f7f9fd;font:inherit;font-size:13px;color:#0f2f66;outline:none}
+.nb-svc input:focus{border-color:#1f6fd0;background:#fff;box-shadow:0 0 0 3px rgba(31,111,208,.13)}
+.nb-svc input::placeholder{color:#a7b4cc}
+.nb-money{text-align:right;font-variant-numeric:tabular-nums}
+.nb-svc-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:0;border-radius:8px;background:none;color:#7b8db0;cursor:pointer}
+.nb-svc-x svg{width:15px;height:15px}
+.nb-svc-x:hover{background:#fdecec;color:#B42318}
+.nb-svc-x:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.nb-svc-empty{padding:22px 16px;font-size:12.5px;color:var(--muted);text-align:center;border-top:1px solid #eef2f8}
+.nb-svc-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0 4px}
+.nb-total{font-size:12.5px;color:var(--muted)}
+.nb-total b{margin-left:8px;font-size:17px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+
+/* Boxes 25-33. */
+.nb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px;align-items:start}
+.nb-lbl{display:block;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#274b86;margin-bottom:6px}
+.nb-radios{display:flex;align-items:center;gap:16px;min-height:44px}
+.nb-radio{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:#0f2f66;cursor:pointer}
+.nb-radio input{width:16px;height:16px;margin:0;accent-color:#1f6fd0}
+.nb-clear{border:0;background:none;padding:6px 4px;font:inherit;font-size:13px;font-weight:700;color:#7b8db0;cursor:pointer}
+.nb-clear:hover{color:#123a7a}
+.nb-sum{display:grid;grid-template-columns:auto auto;justify-content:space-between;align-items:center;gap:6px 14px;padding:12px 14px;border:1px solid #e2e9f5;border-radius:12px;background:#f7f9fd;margin-bottom:15px}
+.nb-sum span{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#274b86}
+.nb-sum b{font-size:16px;font-weight:800;color:var(--text);text-align:right;font-variant-numeric:tabular-nums}
+.nb-sum b.is-owed,.nb-table b.is-owed{color:#9a5b00}
+.nb-sum b.is-clear,.nb-table b.is-clear{color:#15803d}
+
+/* Neurologist Payments: balances and history as tables. */
+.nb-table-card{padding:0;overflow:hidden}
+.nb-table-scroll{overflow-x:auto}
+.nb-table{width:100%;min-width:880px;border-collapse:collapse;font-size:13px;color:var(--text)}
+.nb-table th{padding:12px 14px;text-align:left;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#274b86;background:#fafcff;border-bottom:1px solid #e6ecf7;white-space:nowrap}
+.nb-table td{padding:12px 14px;border-bottom:1px solid #eef2f8;vertical-align:middle}
+.nb-table tbody tr.nb-row:hover td{background:#f7fbfe}
+.nb-table tfoot td{padding:12px 14px;font-weight:700;background:#fafcff}
+.nb-num{text-align:right!important;font-variant-numeric:tabular-nums;white-space:nowrap}
+.nb-muted{display:block;font-size:11.5px;color:var(--muted)}
+.nb-act{text-align:right;white-space:nowrap}
+.nb-btn-sm{padding:8px 14px;font-size:12.5px;min-height:36px}
+.nb-expand{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0;font:inherit;color:var(--text);cursor:pointer;text-align:left}
+.nb-expand b{font-weight:800}
+.nb-expand:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.nb-chev{width:14px;height:14px;flex:none;color:#7b8db0;transition:transform .15s ease}
+.nb-row.is-open .nb-chev{transform:rotate(90deg)}
+.nb-sub-row td{background:#fafcff;padding:6px 14px 12px 36px}
+.nb-pays{display:flex;flex-direction:column;gap:6px}
+.nb-pay{display:grid;grid-template-columns:96px 100px minmax(140px,1fr) minmax(120px,1.4fr) minmax(120px,1fr) 30px;gap:10px;align-items:center;padding:8px 10px;border:1px solid #e6ecf7;border-radius:10px;background:#fff;font-size:12.5px}
+.nb-pay b{font-variant-numeric:tabular-nums}
+.nb-pay .nb-muted{display:inline}
+.nb-pay-d{font-weight:700;color:#274b86}
+.nb-pays-empty{padding:6px 0}
+.nb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.nb-modal{max-width:640px}
+.nb-modal .rf-modal-hd p b{color:#9a5b00}
+
+@media(max-width:1180px){.nb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.nb-grid{grid-template-columns:minmax(0,1fr)}.nb-pay{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:reduce){.nb-chev{transition:none}}
