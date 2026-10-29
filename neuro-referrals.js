@@ -58,7 +58,8 @@
     'Portuguese', 'Russian', 'Arabic', 'Hindi', 'Italian', 'Dutch', 'Swedish', 'Polish', 'Vietnamese', 'Thai',
     'Turkish', 'Other'];
   var NR_PARTNERS = ['Concussion Therapy Group'];
-  var NR_CONDITIONS = ['Concussion/TBI'];
+  // The partner form's Condition Focus list, in its order.
+  var NR_CONDITIONS = ['Concussion/TBI', 'Headache/Migraine', 'Sleep', 'Epilepsy', 'Stroke', 'Tremor', 'Memory'];
 
   var NR_ICONS = {
     refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
