@@ -3,15 +3,19 @@
    Every patient whose Day 1 (ACE) says the incident happened in Virginia
    (Location / Jurisdiction, p.ace.formState.selects.jurisdiction) is listed
    here. Clicking a patient opens the neurologist referral form - the same
-   sections and fields the practice fills in on the partner's referral form -
-   filled from the chart, so staff only correct what is wrong and save.
+   sections and fields the practice fills in on the partner's referral form.
+
+   The patient's details (name, DOB, contact, state, ZIP from Registration;
+   language from Day 1) are read live from the chart and cannot be edited
+   here, so the referral always matches the chart; a correction is made in
+   the chart. Only Partner and Condition Focus are chosen on this page.
 
    Saved on the patient as p.neuroReferral:
      { status: 'pending' | 'submitted' | 'scheduled',
        referredOn, apptDate, notes, form: {...},
        updatedAt, updatedBy }
-   A field never saved shows the chart's value, so a chart edit made before
-   the referral is filled in still comes through. */
+   form is a copy of every field as it stood at the last save (what the
+   referral said); the page itself always shows the chart's current values. */
 (function () {
   'use strict';
 
@@ -54,10 +58,6 @@
     OK: 'Oklahoma', OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
     SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia',
     WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming' };
-  // The Day 1 Language list (app.js, #languageField), so a saved Day 1 answer is always an option.
-  var NR_LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Chinese (Mandarin)', 'Japanese', 'Korean',
-    'Portuguese', 'Russian', 'Arabic', 'Hindi', 'Italian', 'Dutch', 'Swedish', 'Polish', 'Vietnamese', 'Thai',
-    'Turkish', 'Other'];
   var NR_PARTNERS = ['Concussion Therapy Group'];
   // The partner form's Condition Focus list, in its order.
   var NR_CONDITIONS = ['Concussion/TBI', 'Headache/Migraine', 'Sleep', 'Epilepsy', 'Stroke', 'Tremor', 'Memory'];
@@ -72,6 +72,7 @@
     check: '<polyline points="20 6 9 17 4 12"/>',
     checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
     chart: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
+    sync: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
     alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
   };
@@ -151,35 +152,39 @@
     return m ? m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0') : '';
   }
 
-  /* What the chart already says, for every field of the referral form. */
-  function nrChartDefaults(p) {
+  /* The patient's details as the chart holds them right now. */
+  function nrChartValues(p) {
     var d = p.demographics || {}, fs = nrAce(p) || {};
     return {
-      partner: NR_PARTNERS[0],
       firstName: d.firstName || '',
       lastName: d.lastName || '',
-      dob: nrIsoDate(d.dob),
-      language: (fs.selects || {}).languageField || 'English',
+      dob: nrUs(nrIsoDate(d.dob)) || String(d.dob || ''),
+      language: (fs.selects || {}).languageField || '',
       email: d.email || '',
       phone: d.mobile || d.phone || '',
-      // The patient's home state; the incident state when no address is on file.
-      state: nrStateName(d.state) || 'Virginia',
-      zip: d.zip || '',
-      conditionFocus: NR_CONDITIONS[0]
+      state: nrStateName(d.state),
+      zip: d.zip || ''
     };
   }
-  // Draft over saved over chart, field by field.
+  // The two fields chosen on this page, and what each starts as.
+  var NR_CHOSEN = { partner: NR_PARTNERS[0], conditionFocus: NR_CONDITIONS[0] };
+  // A chosen field's value before this visit's changes: last saved, else the default.
+  function nrBaseValue(p, k) {
+    if (NR_CHOSEN[k] !== undefined) { var sf = nrSaved(p).form || {}; return sf[k] !== undefined ? sf[k] : NR_CHOSEN[k]; }
+    return k === 'status' ? nrStatus(p) : (nrSaved(p)[k] || '');
+  }
+  // Chart details, plus the chosen fields and the status (draft over saved).
   function nrFormValues(p) {
-    var out = nrChartDefaults(p), saved = nrSaved(p), sform = saved.form || {}, draft = nrDrafts[p.id] || {};
-    Object.keys(out).forEach(function (k) {
-      if (sform[k] !== undefined) out[k] = sform[k];
-      if (draft[k] !== undefined) out[k] = draft[k];
-    });
+    var out = nrChartValues(p), draft = nrDrafts[p.id] || {};
+    Object.keys(NR_CHOSEN).forEach(function (k) { out[k] = draft[k] !== undefined ? draft[k] : nrBaseValue(p, k); });
     var t = draft.__track || {};
-    NR_TRACK.forEach(function (k) {
-      out[k] = t[k] !== undefined ? t[k] : (k === 'status' ? nrStatus(p) : (saved[k] || ''));
-    });
+    NR_TRACK.forEach(function (k) { out[k] = t[k] !== undefined ? t[k] : nrBaseValue(p, k); });
     return out;
+  }
+  // Unsaved only when something differs from what was saved (picking the same value back is no change).
+  function nrIsDirty(id) {
+    var d = nrDrafts[id];
+    return !!d && (Object.keys(d).some(function (k) { return k !== '__track'; }) || !!(d.__track && Object.keys(d.__track).length));
   }
 
   /* -------------------------------- render -------------------------------- */
@@ -287,7 +292,7 @@
     return '<div class="nr-list card" role="listbox" aria-label="Virginia patients">' + rows.map(function (p) {
       var d = p.demographics || {}, id = nrIdArg(p.id), st = nrStatus(p);
       var initials = typeof initialsForPatient === 'function' ? initialsForPatient(p) : ((d.firstName || ' ')[0] + (d.lastName || ' ')[0]);
-      return '<div class="nr-item nr-is-' + st + (p.id === nrSelectedId ? ' active' : '') + (nrDrafts[p.id] ? ' dirty' : '') + '" role="option" tabindex="0"'
+      return '<div class="nr-item nr-is-' + st + (p.id === nrSelectedId ? ' active' : '') + (nrIsDirty(p.id) ? ' dirty' : '') + '" role="option" tabindex="0"'
         + ' aria-selected="' + (p.id === nrSelectedId ? 'true' : 'false') + '"'
         + ' data-onclick="nrSelect(\'' + id + '\')" data-onkeydown="nrItemKey(event,\'' + id + '\')">'
         + '<span class="nr-av">' + nrEsc(initials) + '</span>'
@@ -307,10 +312,15 @@
       + opts.map(function (o) { return '<option' + (o === value ? ' selected' : '') + '>' + nrEsc(o) + '</option>'; }).join('')
       + '</select>';
   }
-  function nrInputHTML(field, value, type, placeholder) {
-    return '<input id="nrf_' + field + '" type="' + (type || 'text') + '" value="' + nrEsc(value) + '"'
-      + (placeholder ? ' placeholder="' + nrEsc(placeholder) + '"' : '')
-      + ' data-oninput="nrField(\'' + field + '\',this.value)">';
+  /* A detail read from the chart: read-only, in the portal's "worked out for
+     you" style (.rf-auto, as Age on the referral form). An empty one says
+     where it is missing, so it reads as "not on file", not "forgot to fill". */
+  function nrAutoHTML(field, value, missing) {
+    return '<input id="nrf_' + field + '" class="rf-auto" type="text" readonly aria-readonly="true" value="' + nrEsc(value) + '"'
+      + ' placeholder="' + nrEsc(missing) + '">';
+  }
+  function nrSrcHTML(text) {
+    return '<span class="nr-src">' + nrIcon('sync') + text + '</span>';
   }
   // A real <label for>, so clicking the label focuses the field and screen readers name it.
   function nrF(label, field, control, hint) {
@@ -346,7 +356,7 @@
     if (!p) return '<div class="nr-form card"><div class="nr-list-empty">Select a patient to view their referral.</div></div>';
     var f = nrFormValues(p), saved = nrSaved(p), id = nrIdArg(p.id);
     var cur = NR_STEP_KEYS.indexOf(f.status);
-    var dirty = !!nrDrafts[p.id];
+    var dirty = nrIsDirty(p.id);
     var head = '<div class="nr-form-hd">'
       + '<div><h2>' + nrEsc(typeof naturalPatientName === 'function' ? naturalPatientName(p) : f.firstName + ' ' + f.lastName) + '</h2>'
       + '<div class="nr-facts">'
@@ -376,22 +386,22 @@
       + nrStepperHTML(f) + closed
       + (dates.length ? '<div class="rf-pair nr-dates">' + dates.join('') + '</div>' : '')
       + nrF('Notes <i>(optional)</i>', 'notes', '<textarea id="nrf_notes" rows="2" placeholder="e.g. Submitted through the partner portal; awaiting scheduling" data-oninput="nrTrack(\'notes\',this.value)">' + nrEsc(f.notes) + '</textarea>')
-      + '<div class="nr-autofill">' + nrIcon('info') + 'Pre-filled from the patient’s chart and Day 1 evaluation. Edits below apply to this referral only and do not change the chart.</div>'
+      + '<div class="nr-autofill">' + nrIcon('sync') + '<span>Patient details are pulled automatically from <b>Registration</b> and <b>Day 1</b>, so they always match the chart. To correct one, update it in the patient’s chart (<b>Open Chart</b>).</span></div>'
       + '<h3 class="nr-sec">Partner’s Info</h3>'
       + '<div class="rf-pair">' + nrF('Partner<span class="req-star" aria-hidden="true">*</span>', 'partner', nrSelectHTML('partner', f.partner, NR_PARTNERS, true)) + '<div></div></div>'
-      + '<h3 class="nr-sec">Patient’s Basic Info</h3>'
+      + '<h3 class="nr-sec"><span>Patient’s Basic Info</span>' + nrSrcHTML('Auto-filled from Registration &amp; Day 1') + '</h3>'
       + '<div class="rf-pair">'
-        + nrF('First Name', 'firstName', nrInputHTML('firstName', f.firstName))
-        + nrF('Last Name', 'lastName', nrInputHTML('lastName', f.lastName))
-        + nrF('Date of Birth <i>(MM/DD/YYYY)</i>', 'dob', nrInputHTML('dob', f.dob, 'date'))
-        + nrF('Language Preference', 'language', nrSelectHTML('language', f.language, NR_LANGUAGES))
+        + nrF('First Name', 'firstName', nrAutoHTML('firstName', f.firstName, 'Not on file in Registration'))
+        + nrF('Last Name', 'lastName', nrAutoHTML('lastName', f.lastName, 'Not on file in Registration'))
+        + nrF('Date of Birth <i>(MM/DD/YYYY)</i>', 'dob', nrAutoHTML('dob', f.dob, 'Not on file in Registration'))
+        + nrF('Language Preference', 'language', nrAutoHTML('language', f.language, 'Not recorded on Day 1'))
       + '</div>'
-      + '<h3 class="nr-sec">Contact Info</h3>'
+      + '<h3 class="nr-sec"><span>Contact Info</span>' + nrSrcHTML('Auto-filled from Registration') + '</h3>'
       + '<div class="rf-pair">'
-        + nrF('Email', 'email', nrInputHTML('email', f.email, 'email'), 'Leave blank if unknown')
-        + nrF('Phone Number', 'phone', nrInputHTML('phone', f.phone, 'tel'))
-        + nrF('State', 'state', nrSelectHTML('state', f.state, NR_STATES))
-        + nrF('ZIP Code', 'zip', nrInputHTML('zip', f.zip, 'text'))
+        + nrF('Email', 'email', nrAutoHTML('email', f.email, 'Not on file in Registration'))
+        + nrF('Phone Number', 'phone', nrAutoHTML('phone', f.phone, 'Not on file in Registration'))
+        + nrF('State', 'state', nrAutoHTML('state', f.state, 'Not on file in Registration'))
+        + nrF('ZIP Code', 'zip', nrAutoHTML('zip', f.zip, 'Not on file in Registration'))
       + '</div>'
       + '<h3 class="nr-sec">Care</h3>'
       + '<div class="rf-pair">' + nrF('Condition Focus', 'conditionFocus', nrSelectHTML('conditionFocus', f.conditionFocus, NR_CONDITIONS)) + '<div></div></div>'
@@ -406,7 +416,7 @@
     var NEXT = { pending: ['submitted', 'send', 'Submit Referral'], submitted: ['scheduled', 'calendar', 'Schedule Appointment'] };
     var savedSt = nrStatus(p), next = NEXT[savedSt];
     if (f.status !== savedSt && !(next && next[0] === f.status)) next = null;
-    var foot = '<div class="nr-form-ft"><span class="nr-meta">' + (dirty ? '<b class="nr-unsaved">Unsaved changes</b> · ' : '') + meta + '</span>'
+    var foot = '<div class="nr-form-ft"><span class="nr-meta"><b class="nr-unsaved"' + (dirty ? '' : ' hidden') + '>Unsaved changes · </b>' + meta + '</span>'
       + '<div class="nr-form-btns">'
       + (next
         ? '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrSave(\'\')">Save Changes</button>'
@@ -442,22 +452,27 @@
     if (!nrSelectedId) return null;
     return nrDrafts[nrSelectedId] || (nrDrafts[nrSelectedId] = {});
   }
-  // Typing does not repaint (that would steal the cursor); it only flags the row and footer.
+  /* Typing does not repaint (that would steal the cursor); it only flags the
+     row and footer, and unflags them when the value is put back as saved. */
   function nrMarkDirty() {
+    var dirty = nrIsDirty(nrSelectedId);
+    if (!dirty) delete nrDrafts[nrSelectedId];
     var item = document.querySelector('#neuroReferralsMount .nr-item.active');
-    if (item) item.classList.add('dirty');
-    var meta = document.querySelector('#neuroReferralsMount .nr-meta');
-    if (meta && !meta.querySelector('.nr-unsaved')) meta.insertAdjacentHTML('afterbegin', '<b class="nr-unsaved">Unsaved changes</b> · ');
+    if (item) item.classList.toggle('dirty', dirty);
+    var flag = document.querySelector('#neuroReferralsMount .nr-unsaved');
+    if (flag) flag.hidden = !dirty;
   }
   function nrField(field, value) {
-    var d = nrDraft(); if (!d) return;
-    d[field] = value;
+    var d = nrDraft(); if (!d || NR_CHOSEN[field] === undefined) return;
+    if (value === nrBaseValue(getPatient(nrSelectedId), field)) delete d[field];
+    else d[field] = value;
     nrMarkDirty();
   }
   function nrTrack(field, value) {
     var d = nrDraft(); if (!d) return;
     d.__track = d.__track || {};
-    d.__track[field] = value;
+    if (value === nrBaseValue(getPatient(nrSelectedId), field)) delete d.__track[field];
+    else d.__track[field] = value;
     if (nrError && nrError.field === field && value) {
       nrError = null;
       var box = document.getElementById('nrf_' + field);
@@ -472,9 +487,11 @@
     var d = nrDraft(); if (!d) return null;
     var p = getPatient(nrSelectedId);
     d.__track = d.__track || {};
-    d.__track.status = key;
+    if (key === nrBaseValue(p, 'status')) delete d.__track.status;
+    else d.__track.status = key;
     var s = nrStep(key);
     if (s.today && !nrFormValues(p)[s.date]) d.__track[s.date] = nrToday();
+    if (!nrIsDirty(p.id)) delete nrDrafts[p.id];
     return nrFormValues(p);
   }
   function nrSetStep(key) {
@@ -496,8 +513,9 @@
     var f = advance ? nrApplyStep(advance) : nrFormValues(p);
     if (!f.partner) { nrShowError('partner', 'Select the partner.'); return; }
     if (f.status === 'scheduled' && !f.apptDate) { nrShowError('apptDate', 'Enter the appointment date, then save.'); return; }
+    // A copy of what the referral said at this save: the chart's details as they are now, plus the choices.
     var form = {};
-    Object.keys(nrChartDefaults(p)).forEach(function (k) { form[k] = String(f[k] == null ? '' : f[k]).trim(); });
+    Object.keys(nrChartValues(p)).concat(Object.keys(NR_CHOSEN)).forEach(function (k) { form[k] = String(f[k] == null ? '' : f[k]).trim(); });
     var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
     var cur = NR_STEP_KEYS.indexOf(f.status);
     // A date belongs to a stage the referral has reached; stepping back clears the later ones.
