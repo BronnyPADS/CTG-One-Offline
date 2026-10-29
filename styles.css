@@ -14288,12 +14288,12 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
    (.rf-*), so the two pages read as one family. New here: the stat tiles,
    the patient list, the status tracker and the form pane.
    Stage colours: Pending amber (as Referrals' NEW pill), Submitted blue,
-   Scheduled navy, Completed green (the portal's success green, as the
-   RecoverArc chips). Every stage is also named in words and has its own icon. */
+   Scheduled - the last stage, referral complete - green (the portal's
+   success green, as the RecoverArc chips). Every stage is also named in
+   words and has its own icon. */
 .nr-st-pending,.nr-is-pending{--st:#9a5b00;--st-bg:rgba(154,91,0,.1);--st-bd:rgba(154,91,0,.28)}
 .nr-st-submitted,.nr-is-submitted{--st:#0077B6;--st-bg:rgba(0,119,182,.1);--st-bd:rgba(0,119,182,.28)}
-.nr-st-scheduled,.nr-is-scheduled{--st:#023E8A;--st-bg:rgba(2,62,138,.09);--st-bd:rgba(2,62,138,.26)}
-.nr-st-completed,.nr-is-completed{--st:#15803d;--st-bg:rgba(22,163,74,.1);--st-bd:rgba(22,163,74,.26)}
+.nr-st-scheduled,.nr-is-scheduled{--st:#15803d;--st-bg:rgba(22,163,74,.1);--st-bd:rgba(22,163,74,.26)}
 
 .nr-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:0 0 18px}
 .nr-kpi{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px;min-width:0}
@@ -14344,13 +14344,16 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nr-sec{margin:22px 0 14px;padding-bottom:9px;border-bottom:1px solid #e6ecf7;font-size:15px;font-weight:800;letter-spacing:-.01em;color:var(--text)}
 .nr-sec-first{margin-top:12px}
 
-/* Status tracker: four stages joined by a line that fills as the referral moves on. */
-.nr-steps{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+/* Status tracker: the stages joined by a line that fills as the referral
+   moves on. Each line runs between two circles and stops 10px short of
+   both (circle radius 22px + 10px = 32px from each centre), clear of the
+   current stage's halo; it never crosses a circle. */
+.nr-steps{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
 .nr-step{position:relative;min-width:0}
-.nr-step:not(:first-child)::before{content:'';position:absolute;top:25px;right:50%;width:100%;height:3px;border-radius:2px;background:#E3ECF5}
+.nr-step:not(:first-child)::before{content:'';position:absolute;top:25px;right:calc(50% + 32px);width:calc(100% - 64px);height:3px;border-radius:2px;background:#E3ECF5}
 .nr-step.is-done::before,.nr-step.is-current::before{background:#0077B6}
 .nr-steps.is-complete .nr-step::before{background:#16a34a}
-.nr-step button{position:relative;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:4px 4px 6px;font:inherit;cursor:pointer;border-radius:12px;text-align:center}
+.nr-step button{position:relative;z-index:1;width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:4px 4px 6px;font:inherit;cursor:pointer;border-radius:12px;text-align:center}
 .nr-step button:hover .nr-step-dot{border-color:var(--st)}
 .nr-step button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .nr-step-dot{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:2px solid #D5E3EF;color:#8AA4BA;box-shadow:0 0 0 4px var(--surface);transition:background .2s ease,border-color .2s ease,box-shadow .2s ease}
@@ -14394,7 +14397,7 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
   .nr-form-hd-r{align-items:flex-start;flex-direction:row}
   .nr-form-hd,.nr-form-body,.nr-form-ft{padding-left:16px;padding-right:16px}
   .nr-step-dot{width:38px;height:38px}
-  .nr-step:not(:first-child)::before{top:22px}
+  .nr-step:not(:first-child)::before{top:22px;right:calc(50% + 29px);width:calc(100% - 58px)}
   .nr-step-t{font-size:11px}
   .nr-step-d{font-size:10.5px}
 }
