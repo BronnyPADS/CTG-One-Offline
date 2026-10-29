@@ -7,16 +7,32 @@
    filled from the chart, so staff only correct what is wrong and save.
 
    Saved on the patient as p.neuroReferral:
-     { status: 'needed' | 'referred', referredOn, notes, form: {...},
+     { status: 'pending' | 'submitted' | 'scheduled' | 'completed',
+       referredOn, apptDate, completedOn, notes, form: {...},
        updatedAt, updatedBy }
    A field never saved shows the chart's value, so a chart edit made before
    the referral is filled in still comes through. */
 (function () {
   'use strict';
 
-  var nrFilter = 'needed';      // 'needed' | 'referred' | 'all'
+  /* The referral's four stages, in order. `date` is the field that stage
+     records; Submitted and Completed default to the day they are marked,
+     Scheduled needs the appointment date entered. */
+  var NR_STEPS = [
+    { key: 'pending', label: 'Pending Referral', tab: 'Pending', icon: 'clock' },
+    { key: 'submitted', label: 'Referral Submitted', tab: 'Submitted', icon: 'send', date: 'referredOn', dateLabel: 'Date Submitted', today: true },
+    { key: 'scheduled', label: 'Appointment Scheduled', tab: 'Scheduled', icon: 'calendar', date: 'apptDate', dateLabel: 'Appointment Date' },
+    { key: 'completed', label: 'Consultation Completed', tab: 'Completed', icon: 'checkCircle', date: 'completedOn', dateLabel: 'Date Completed', today: true }
+  ];
+  var NR_STEP_KEYS = NR_STEPS.map(function (s) { return s.key; });
+  // Statuses saved by the first version of this page.
+  var NR_LEGACY = { needed: 'pending', referred: 'submitted' };
+  var NR_TRACK = ['status', 'referredOn', 'apptDate', 'completedOn', 'notes'];
+
+  var nrFilter = 'pending';     // a step key, or 'all'
   var nrQuery = '';
   var nrSelectedId = null;
+  var nrError = null;           // { field, text } shown under that field until it changes
   /* Typing is kept per patient until it is saved, so clicking another
      patient and coming back does not lose a half-filled form. */
   var nrDrafts = {};
@@ -48,13 +64,15 @@
     refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
     search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
     pin: '<path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
-    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
     clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
     check: '<polyline points="20 6 9 17 4 12"/>',
+    checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    progress: '<path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M12 7v5l3 2"/>',
     chart: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
     info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
-    undo: '<polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>'
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
   };
   function nrIcon(name, cls) {
     return '<svg class="' + (cls || 'rf-i') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -67,6 +85,7 @@
   }
   // Ids go into data-onclick="nrSelect('...')"; anything but plain id characters is dropped.
   function nrIdArg(id) { return String(id || '').replace(/[^A-Za-z0-9_-]/g, ''); }
+  function nrStep(key) { return NR_STEPS[Math.max(0, NR_STEP_KEYS.indexOf(key))]; }
 
   /* ------------------------------- the data ------------------------------- */
   function nrAce(p) { return (p && p.ace && p.ace.formState) || null; }
@@ -74,7 +93,12 @@
     var fs = nrAce(p);
     return !!(fs && fs.selects && String(fs.selects.jurisdiction || '').trim() === 'Virginia');
   }
-  function nrStatus(p) { return (p.neuroReferral && p.neuroReferral.status) === 'referred' ? 'referred' : 'needed'; }
+  function nrSaved(p) { return p.neuroReferral || {}; }
+  function nrStatus(p) {
+    var s = nrSaved(p).status;
+    s = NR_LEGACY[s] || s;
+    return NR_STEP_KEYS.indexOf(s) !== -1 ? s : 'pending';
+  }
   function nrPatients() {
     var all = Array.isArray(window.ctgPatients) ? window.ctgPatients : (typeof ctgPatients !== 'undefined' ? ctgPatients : []);
     if (typeof patientsVisibleToCurrentUser === 'function') all = patientsVisibleToCurrentUser(all);
@@ -143,17 +167,17 @@
       conditionFocus: NR_CONDITIONS[0]
     };
   }
-  function nrSaved(p) { return p.neuroReferral || {}; }
   // Draft over saved over chart, field by field.
   function nrFormValues(p) {
-    var out = nrChartDefaults(p), saved = nrSaved(p).form || {}, draft = nrDrafts[p.id] || {};
+    var out = nrChartDefaults(p), saved = nrSaved(p), sform = saved.form || {}, draft = nrDrafts[p.id] || {};
     Object.keys(out).forEach(function (k) {
-      if (saved[k] !== undefined) out[k] = saved[k];
+      if (sform[k] !== undefined) out[k] = sform[k];
       if (draft[k] !== undefined) out[k] = draft[k];
     });
     var t = draft.__track || {};
-    out.referredOn = t.referredOn !== undefined ? t.referredOn : (nrSaved(p).referredOn || '');
-    out.notes = t.notes !== undefined ? t.notes : (nrSaved(p).notes || '');
+    NR_TRACK.forEach(function (k) {
+      out[k] = t[k] !== undefined ? t[k] : (k === 'status' ? nrStatus(p) : (saved[k] || ''));
+    });
     return out;
   }
 
@@ -167,7 +191,7 @@
     mount.innerHTML = nrHeaderHTML() + nrKpisHTML(all) + nrToolbarHTML(all)
       + (all.length ? '<div class="nr-split">' + nrListHTML(rows) + nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null) + '</div>'
         : nrEmptyHTML('No Virginia patients yet',
-          'A patient appears here as soon as their Day 1 is saved with Location / Jurisdiction set to Virginia.'));
+          'Patients appear here once their Day 1 is saved with Location / Jurisdiction set to Virginia.'));
   }
 
   function nrRows(all) {
@@ -178,83 +202,101 @@
       var d = p.demographics || {};
       return [d.firstName, d.lastName, d.mrn, d.lawFirm].join(' ').toLowerCase().indexOf(q) !== -1;
     }).sort(function (a, b) {
-      // Still to refer: longest wait first. Referred: most recent first.
-      var sa = nrStatus(a), sb = nrStatus(b);
-      if (sa !== sb) return sa === 'needed' ? -1 : 1;
-      if (sa === 'needed') return nrDay1Date(a).localeCompare(nrDay1Date(b));
-      return String(nrSaved(b).referredOn || '').localeCompare(String(nrSaved(a).referredOn || ''));
+      var sa = NR_STEP_KEYS.indexOf(nrStatus(a)), sb = NR_STEP_KEYS.indexOf(nrStatus(b));
+      if (sa !== sb) return sa - sb;
+      var ra = nrSaved(a), rb = nrSaved(b);
+      switch (NR_STEP_KEYS[sa]) {
+        case 'pending': return nrDay1Date(a).localeCompare(nrDay1Date(b));                       // longest wait first
+        case 'submitted': return String(ra.referredOn || '').localeCompare(String(rb.referredOn || '')); // longest awaiting a date first
+        case 'scheduled': return String(ra.apptDate || '').localeCompare(String(rb.apptDate || ''));     // soonest appointment first
+        default: return String(rb.completedOn || '').localeCompare(String(ra.completedOn || ''));        // latest first
+      }
     });
   }
 
   function nrHeaderHTML() {
     return '<div class="rf-head"><div class="rf-head-t"><h1>Neurologist Referrals</h1>'
-      + '<p>Patients whose incident happened in Virginia (from Day 1, Location / Jurisdiction). Click a patient to fill in their neurologist referral.</p></div>'
+      + '<p>Patients whose incident occurred in Virginia, per the Day 1 Location / Jurisdiction. Select a patient to complete and track their neurologist referral.</p></div>'
       + '<div class="rf-head-actions"><button type="button" class="btn btn-ghost" data-onclick="nrRefresh()">'
       + nrIcon('refresh') + 'Refresh</button></div></div>';
   }
 
+  function nrCounts(all) {
+    var n = { pending: 0, submitted: 0, scheduled: 0, completed: 0 };
+    all.forEach(function (p) { n[nrStatus(p)]++; });
+    return n;
+  }
+
   function nrKpisHTML(all) {
-    var needed = all.filter(function (p) { return nrStatus(p) === 'needed'; });
-    var referred = all.length - needed.length;
+    var n = nrCounts(all);
     var month = nrToday().slice(0, 7);
-    var thisMonth = all.filter(function (p) { return nrStatus(p) === 'referred' && String(nrSaved(p).referredOn || '').slice(0, 7) === month; }).length;
-    var oldest = needed.reduce(function (m, p) { var n = nrDaysSince(nrDay1Date(p)); return n !== null && n > m ? n : m; }, -1);
+    var doneThisMonth = all.filter(function (p) { return nrStatus(p) === 'completed' && String(nrSaved(p).completedOn || '').slice(0, 7) === month; }).length;
+    var oldest = all.filter(function (p) { return nrStatus(p) === 'pending'; })
+      .reduce(function (m, p) { var d = nrDaysSince(nrDay1Date(p)); return d !== null && d > m ? d : m; }, -1);
     function tile(cls, icon, label, value, sub) {
       return '<div class="nr-kpi ' + cls + '"><span class="nr-kpi-i">' + nrIcon(icon) + '</span>'
-        + '<div><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
-        + (sub ? '<div class="nr-kpi-s">' + sub + '</div>' : '') + '</div></div>';
+        + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
+        + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
     }
     return '<div class="nr-kpis">'
-      + tile('k-total', 'pin', 'Virginia patients', all.length, 'Incident in Virginia')
-      + tile('k-need', 'users', 'Need a referral', needed.length, needed.length ? 'Not sent to a neurologist yet' : 'All caught up')
-      + tile('k-done', 'send', 'Referred', referred, thisMonth + ' this month')
-      + tile('k-wait', 'clock', 'Longest wait', oldest < 0 ? '—' : oldest + (oldest === 1 ? ' day' : ' days'), oldest < 0 ? 'Nobody waiting' : 'Since Day 1, not referred')
+      + tile('k-total', 'pin', 'Virginia Patients', all.length, 'Incident location: Virginia')
+      + tile('k-pending', 'clock', 'Pending Referral', n.pending, oldest < 0 ? 'No patients awaiting referral' : 'Longest wait: ' + oldest + (oldest === 1 ? ' day' : ' days'))
+      + tile('k-progress', 'progress', 'In Progress', n.submitted + n.scheduled, n.submitted + ' submitted · ' + n.scheduled + ' scheduled')
+      + tile('k-done', 'checkCircle', 'Consultations Completed', n.completed, doneThisMonth + ' this month')
       + '</div>';
   }
 
   function nrToolbarHTML(all) {
-    var n = { needed: 0, referred: 0 };
-    all.forEach(function (p) { n[nrStatus(p)]++; });
+    var n = nrCounts(all);
     function tab(key, label, count) {
       return '<button type="button" class="rf-tab' + (nrFilter === key ? ' active' : '') + '" data-onclick="nrSetFilter(\'' + key + '\')">'
         + label + ' <span class="rf-badge">' + count + '</span></button>';
     }
     return '<div class="rf-toolbar"><div class="rf-tabs">'
-      + tab('needed', 'Needs referral', n.needed) + tab('referred', 'Referred', n.referred) + tab('all', 'All', all.length)
+      + NR_STEPS.map(function (s) { return tab(s.key, s.tab, n[s.key]); }).join('')
+      + tab('all', 'All', all.length)
       + '</div><div class="rf-search">' + nrIcon('search')
       + '<input id="nrSearch" type="search" autocomplete="off" placeholder="Search patient, account # or firm" value="' + nrEsc(nrQuery) + '" data-oninput="nrSearch(this.value)">'
       + (nrQuery ? '<button type="button" class="rf-search-x" data-onclick="nrSearchClear()" aria-label="Clear search">&times;</button>' : '')
       + '</div></div>';
   }
 
-  function nrPill(p) {
-    return nrStatus(p) === 'referred'
-      ? '<span class="nr-pill nr-pill-done">' + nrIcon('check') + 'Referred</span>'
-      : '<span class="nr-pill nr-pill-need">Needs referral</span>';
+  function nrPill(key) {
+    var s = nrStep(key);
+    return '<span class="nr-pill nr-st-' + s.key + '">' + nrIcon(s.icon) + s.label + '</span>';
+  }
+
+  // One line under the patient's name saying where the referral stands.
+  function nrWhen(p) {
+    var r = nrSaved(p);
+    switch (nrStatus(p)) {
+      case 'submitted': return r.referredOn ? 'Submitted ' + nrUs(r.referredOn) : 'Submitted';
+      case 'scheduled': return r.apptDate ? 'Appointment ' + nrUs(r.apptDate) : 'Appointment scheduled';
+      case 'completed': return r.completedOn ? 'Completed ' + nrUs(r.completedOn) : 'Completed';
+    }
+    var wait = nrDaysSince(nrDay1Date(p));
+    return wait === null ? 'Day 1 date not recorded' : wait === 0 ? 'Day 1 completed today' : wait + (wait === 1 ? ' day' : ' days') + ' since Day 1';
   }
 
   function nrListHTML(rows) {
     if (!rows.length) {
-      return '<div class="nr-list card"><div class="nr-list-empty">'
-        + (nrQuery ? 'No match for “' + nrEsc(nrQuery) + '”.' : nrFilter === 'needed' ? 'Everyone here has been referred.' : 'Nobody in this list yet.')
-        + '</div></div>';
+      var empty = nrQuery ? 'No patients match “' + nrEsc(nrQuery) + '”.'
+        : nrFilter === 'pending' ? 'No referrals pending. Every Virginia patient has been referred.'
+        : 'No patients at this stage.';
+      return '<div class="nr-list card"><div class="nr-list-empty">' + empty + '</div></div>';
     }
     return '<div class="nr-list card" role="listbox" aria-label="Virginia patients">' + rows.map(function (p) {
-      var d = p.demographics || {}, id = nrIdArg(p.id);
-      var wait = nrStatus(p) === 'needed' ? nrDaysSince(nrDay1Date(p)) : null;
-      var when = nrStatus(p) === 'referred'
-        ? 'Referred ' + nrUs(nrSaved(p).referredOn)
-        : (wait === null ? 'Day 1 date not saved' : wait === 0 ? 'Day 1 was today' : wait + (wait === 1 ? ' day' : ' days') + ' since Day 1');
+      var d = p.demographics || {}, id = nrIdArg(p.id), st = nrStatus(p);
       var initials = typeof initialsForPatient === 'function' ? initialsForPatient(p) : ((d.firstName || ' ')[0] + (d.lastName || ' ')[0]);
-      return '<div class="nr-item' + (p.id === nrSelectedId ? ' active' : '') + (nrDrafts[p.id] ? ' dirty' : '') + '" role="option" tabindex="0"'
+      return '<div class="nr-item nr-is-' + st + (p.id === nrSelectedId ? ' active' : '') + (nrDrafts[p.id] ? ' dirty' : '') + '" role="option" tabindex="0"'
         + ' aria-selected="' + (p.id === nrSelectedId ? 'true' : 'false') + '"'
         + ' data-onclick="nrSelect(\'' + id + '\')" data-onkeydown="nrItemKey(event,\'' + id + '\')">'
         + '<span class="nr-av">' + nrEsc(initials) + '</span>'
         + '<span class="nr-item-main"><b>' + nrEsc(typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName)) + '</b>'
         + '<span class="nr-item-sub">DOI ' + nrEsc(nrUs(nrDoi(p)) || '—') + (d.lawFirm ? ' · ' + nrEsc(d.lawFirm) : '') + '</span>'
-        + '<span class="nr-item-when">' + nrEsc(when) + '</span></span>'
-        // The tab already names the status; only the mixed list needs it per row.
-        + (nrFilter === 'all' ? nrPill(p) : '') + '</div>';
+        + '<span class="nr-item-when">' + nrIcon(nrStep(st).icon) + nrEsc(nrWhen(p)) + '</span></span>'
+        // The tab already names the stage; only the mixed list needs it per row.
+        + (nrFilter === 'all' ? nrPill(st) : '') + '</div>';
     }).join('') + '</div>';
   }
 
@@ -273,13 +315,38 @@
   }
   // A real <label for>, so clicking the label focuses the field and screen readers name it.
   function nrF(label, field, control, hint) {
-    return '<div class="rf-f"><label for="nrf_' + field + '">' + label + '</label>' + control
-      + (hint ? '<div class="nr-hint">' + nrIcon('info') + hint + '</div>' : '') + '</div>';
+    var err = nrError && nrError.field === field;
+    return '<div class="rf-f' + (err ? ' nr-has-err' : '') + '"><label for="nrf_' + field + '">' + label + '</label>' + control
+      + (err ? '<div class="nr-err" id="nrf_' + field + '_err" role="alert">' + nrIcon('alert') + nrEsc(nrError.text) + '</div>'
+        : hint ? '<div class="nr-hint">' + nrIcon('info') + hint + '</div>' : '') + '</div>';
+  }
+
+  /* The four stages as a progress tracker. Every stage is a button, so a
+     referral entered late can be set straight to where it really is. */
+  function nrStepperHTML(f) {
+    var cur = NR_STEP_KEYS.indexOf(f.status);
+    return '<ol class="nr-steps' + (f.status === 'completed' ? ' is-complete' : '') + '" aria-label="Referral status">' + NR_STEPS.map(function (s, i) {
+      var state = i < cur ? 'is-done' : i === cur ? 'is-current' : 'is-next';
+      var when = s.date && f[s.date] ? nrUs(f[s.date]) : (i === 0 && cur === 0 ? 'Awaiting referral' : '');
+      return '<li class="nr-step ' + state + ' nr-st-' + s.key + '">'
+        + '<button type="button" data-onclick="nrSetStep(\'' + s.key + '\')"' + (i === cur ? ' aria-current="step"' : '') + '>'
+        + '<span class="nr-step-dot">' + (i < cur || (i === cur && s.key === 'completed') ? nrIcon('check') : nrIcon(s.icon)) + '</span>'
+        + '<span class="nr-step-t">' + s.label + '</span>'
+        + '<span class="nr-step-d">' + nrEsc(when) + '</span>'
+        + '</button></li>';
+    }).join('') + '</ol>';
+  }
+
+  function nrDateInput(field, value) {
+    return '<input id="nrf_' + field + '" type="date" value="' + nrEsc(value) + '"'
+      + (nrError && nrError.field === field ? ' aria-invalid="true" aria-describedby="nrf_' + field + '_err"' : '')
+      + ' data-oninput="nrTrack(\'' + field + '\',this.value)">';
   }
 
   function nrFormHTML(p) {
-    if (!p) return '<div class="nr-form card"><div class="nr-list-empty">Pick a patient on the left.</div></div>';
-    var f = nrFormValues(p), saved = nrSaved(p), st = nrStatus(p), id = nrIdArg(p.id);
+    if (!p) return '<div class="nr-form card"><div class="nr-list-empty">Select a patient to view their referral.</div></div>';
+    var f = nrFormValues(p), saved = nrSaved(p), id = nrIdArg(p.id);
+    var cur = NR_STEP_KEYS.indexOf(f.status);
     var dirty = !!nrDrafts[p.id];
     var head = '<div class="nr-form-hd">'
       + '<div><h2>' + nrEsc(typeof naturalPatientName === 'function' ? naturalPatientName(p) : f.firstName + ' ' + f.lastName) + '</h2>'
@@ -290,12 +357,27 @@
         + (nrInjury(p) ? '<span class="nr-fact">' + nrEsc(nrInjury(p)) + '</span>' : '')
         + ((p.demographics || {}).mrn ? '<span class="nr-fact">Acct #: ' + nrEsc(p.demographics.mrn) + '</span>' : '')
       + '</div></div>'
-      + '<div class="nr-form-hd-r">' + nrPill(p)
-      + '<button type="button" class="nr-link" data-onclick="nrOpenChart(\'' + id + '\')">' + nrIcon('chart') + 'Open chart</button></div>'
+      + '<div class="nr-form-hd-r">' + nrPill(f.status)
+      + '<button type="button" class="nr-link" data-onclick="nrOpenChart(\'' + id + '\')">' + nrIcon('chart') + 'Open Chart</button></div>'
       + '</div>';
 
+    var closed = f.status === 'completed'
+      ? '<div class="nr-closed">' + nrIcon('checkCircle') + '<div><b>Consultation completed' + (f.completedOn ? ' on ' + nrEsc(nrUs(f.completedOn)) : '') + '</b>'
+        + '<span>This referral is closed. Select an earlier stage above to reopen it.</span></div></div>'
+      : '';
+
+    // Only the dates of stages reached so far, so the form asks for nothing ahead of time.
+    var dates = NR_STEPS.filter(function (s, i) { return s.date && i <= cur; }).map(function (s) {
+      return nrF(s.dateLabel, s.date, nrDateInput(s.date, f[s.date]));
+    });
+    while (dates.length % 2) dates.push('<div></div>');
+
     var body = '<div class="nr-form-body">'
-      + '<div class="nr-autofill">' + nrIcon('info') + 'Filled in from the patient’s chart and Day 1. Changes here are saved with this referral only; the chart stays as it is.</div>'
+      + '<h3 class="nr-sec nr-sec-first">Referral Status</h3>'
+      + nrStepperHTML(f) + closed
+      + (dates.length ? '<div class="rf-pair nr-dates">' + dates.join('') + '</div>' : '')
+      + nrF('Notes <i>(optional)</i>', 'notes', '<textarea id="nrf_notes" rows="2" placeholder="e.g. Submitted through the partner portal; awaiting scheduling" data-oninput="nrTrack(\'notes\',this.value)">' + nrEsc(f.notes) + '</textarea>')
+      + '<div class="nr-autofill">' + nrIcon('info') + 'Pre-filled from the patient’s chart and Day 1 evaluation. Edits below apply to this referral only and do not change the chart.</div>'
       + '<h3 class="nr-sec">Partner’s Info</h3>'
       + '<div class="rf-pair">' + nrF('Partner<span class="req-star" aria-hidden="true">*</span>', 'partner', nrSelectHTML('partner', f.partner, NR_PARTNERS, true)) + '<div></div></div>'
       + '<h3 class="nr-sec">Patient’s Basic Info</h3>'
@@ -314,24 +396,23 @@
       + '</div>'
       + '<h3 class="nr-sec">Care</h3>'
       + '<div class="rf-pair">' + nrF('Condition Focus', 'conditionFocus', nrSelectHTML('conditionFocus', f.conditionFocus, NR_CONDITIONS)) + '<div></div></div>'
-      + '<h3 class="nr-sec nr-sec-track">Referral</h3>'
-      + '<div class="rf-pair">'
-        + nrF('Date Referred', 'referredOn', '<input id="nrf_referredOn" type="date" value="' + nrEsc(f.referredOn) + '" data-oninput="nrTrack(\'referredOn\',this.value)">')
-        + '<div></div>'
-      + '</div>'
-      + nrF('Notes <i>(optional)</i>', 'notes', '<textarea id="nrf_notes" rows="2" placeholder="e.g. Sent through the partner form; waiting for their call" data-oninput="nrTrack(\'notes\',this.value)">' + nrEsc(f.notes) + '</textarea>')
       + '</div>';
 
     var meta = saved.updatedAt
-      ? 'Last saved ' + nrEsc(nrUs(String(saved.updatedAt).slice(0, 10))) + (saved.updatedBy ? ' by ' + nrEsc(saved.updatedBy) : '')
-      : 'Not saved yet';
+      ? 'Last updated ' + nrEsc(nrUs(String(saved.updatedAt).slice(0, 10))) + (saved.updatedBy ? ' by ' + nrEsc(saved.updatedBy) : '')
+      : 'Not yet saved';
+    /* The main button moves the referral one stage on from where it was SAVED,
+       so it still reads "Schedule Appointment" while the date is being entered.
+       A stage picked on the tracker instead is saved as it is. */
+    var NEXT = { pending: ['submitted', 'send', 'Submit Referral'], submitted: ['scheduled', 'calendar', 'Schedule Appointment'], scheduled: ['completed', 'checkCircle', 'Complete Consultation'] };
+    var savedSt = nrStatus(p), next = NEXT[savedSt];
+    if (f.status !== savedSt && !(next && next[0] === f.status)) next = null;
     var foot = '<div class="nr-form-ft"><span class="nr-meta">' + (dirty ? '<b class="nr-unsaved">Unsaved changes</b> · ' : '') + meta + '</span>'
       + '<div class="nr-form-btns">'
-      + (st === 'referred'
-        ? '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrSave(\'needed\')">' + nrIcon('undo') + 'Back to Needs referral</button>'
-          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nrSave(\'keep\')">' + nrIcon('check') + 'Save</button>'
-        : '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrSave(\'keep\')">Save</button>'
-          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nrSave(\'referred\')">' + nrIcon('send') + 'Save &amp; mark referred</button>')
+      + (next
+        ? '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrSave(\'\')">Save Changes</button>'
+          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nrSave(\'' + next[0] + '\')">' + nrIcon(next[1]) + next[2] + '</button>'
+        : '<button type="button" class="rf-btn rf-btn-go" data-onclick="nrSave(\'\')">' + nrIcon('check') + 'Save Changes</button>')
       + '</div></div>';
 
     return '<div class="nr-form card">' + head + body + foot + '</div>';
@@ -352,6 +433,7 @@
     var p = nrFind(id);
     if (!p) return;
     nrSelectedId = p.id;
+    nrError = null;
     renderNeuroReferrals();
   }
   function nrItemKey(ev, id) {
@@ -377,28 +459,63 @@
     var d = nrDraft(); if (!d) return;
     d.__track = d.__track || {};
     d.__track[field] = value;
+    if (nrError && nrError.field === field && value) {
+      nrError = null;
+      var box = document.getElementById('nrf_' + field);
+      var wrap = box && box.closest('.rf-f');
+      if (wrap) { wrap.classList.remove('nr-has-err'); var e = wrap.querySelector('.nr-err'); if (e) e.remove(); box.removeAttribute('aria-invalid'); }
+    }
     nrMarkDirty();
   }
-  /* mode: 'keep' saves the form as it is, 'referred' also marks it sent
-     (dated today unless a date is entered), 'needed' moves it back. */
-  function nrSave(mode) {
+  /* Moving to a stage fills in its date when that date is simply "today"
+     (submitted, completed); an appointment date has to be entered. */
+  function nrApplyStep(key) {
+    var d = nrDraft(); if (!d) return null;
+    var p = getPatient(nrSelectedId);
+    d.__track = d.__track || {};
+    d.__track.status = key;
+    var s = nrStep(key);
+    if (s.today && !nrFormValues(p)[s.date]) d.__track[s.date] = nrToday();
+    return nrFormValues(p);
+  }
+  function nrSetStep(key) {
+    if (NR_STEP_KEYS.indexOf(key) === -1) return;
+    nrError = null;
+    nrApplyStep(key);
+    renderNeuroReferrals();
+  }
+  function nrShowError(field, text) {
+    nrError = { field: field, text: text };
+    renderNeuroReferrals();
+    var box = document.getElementById('nrf_' + field);
+    if (box) { box.scrollIntoView({ block: 'center', behavior: 'smooth' }); box.focus({ preventScroll: true }); }
+  }
+  /* advance: '' saves as it is; a stage key moves the referral there first. */
+  function nrSave(advance) {
     var p = nrSelectedId ? getPatient(nrSelectedId) : null;
     if (!p) return;
-    var f = nrFormValues(p);
-    if (!f.partner) { showToast('Choose the partner first.', 'error'); return; }
+    var f = advance ? nrApplyStep(advance) : nrFormValues(p);
+    if (!f.partner) { nrShowError('partner', 'Select the partner.'); return; }
+    if (f.status === 'scheduled' || f.status === 'completed') {
+      if (!f.apptDate) { nrShowError('apptDate', 'Enter the appointment date, then save.'); return; }
+    }
     var form = {};
     Object.keys(nrChartDefaults(p)).forEach(function (k) { form[k] = String(f[k] == null ? '' : f[k]).trim(); });
-    var status = mode === 'referred' ? 'referred' : mode === 'needed' ? 'needed' : nrStatus(p);
-    var referredOn = f.referredOn || '';
-    if (status === 'referred' && !referredOn) referredOn = nrToday();
     var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
+    var cur = NR_STEP_KEYS.indexOf(f.status);
+    // A date belongs to a stage the referral has reached; stepping back clears the later ones.
+    var dateFor = function (key) { var s = nrStep(key); return NR_STEP_KEYS.indexOf(key) <= cur ? (f[s.date] || '') : ''; };
     p.neuroReferral = {
-      status: status, referredOn: referredOn, notes: String(f.notes || '').trim(), form: form,
+      status: f.status,
+      referredOn: dateFor('submitted'), apptDate: dateFor('scheduled'), completedOn: dateFor('completed'),
+      notes: String(f.notes || '').trim(), form: form,
       updatedAt: new Date().toISOString(), updatedBy: me ? (me.displayName || me.username || '') : ''
     };
     delete nrDrafts[p.id];
+    nrError = null;
     persistPatients();
-    showToast(mode === 'referred' ? 'Marked as referred.' : mode === 'needed' ? 'Moved back to Needs referral.' : 'Referral saved.', 'ok');
+    var MSG = { submitted: 'Referral submitted.', scheduled: 'Appointment scheduled.', completed: 'Consultation marked as completed.' };
+    showToast(MSG[advance] || 'Changes saved.', 'ok');
     renderNeuroReferrals();
   }
   function nrOpenChart(id) {
@@ -426,6 +543,7 @@
   window.nrItemKey = nrItemKey;
   window.nrField = nrField;
   window.nrTrack = nrTrack;
+  window.nrSetStep = nrSetStep;
   window.nrSave = nrSave;
   window.nrOpenChart = nrOpenChart;
   window.nrSetFilter = nrSetFilter;

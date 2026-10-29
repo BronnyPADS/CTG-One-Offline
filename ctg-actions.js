@@ -125,7 +125,7 @@
     'mtgToggleRecord', 'mtgToggleShare', 'mtgToggleSubtitles', 'mtgToggleTouch', 'mtgToggleVideo', 'mtgTranscribe',
     'nfCheckToken', 'nfLoadStatus', 'nfProbe', 'nfProbeFake', 'nfProbeKey', 'nfToggleRaw', 'notesFormEditLink',
     'notesFormLoad', 'notifSetActive', 'notifSetMedium', 'nrField', 'nrItemKey', 'nrOpenChart', 'nrRefresh',
-    'nrSave', 'nrSearch', 'nrSearchClear', 'nrSelect', 'nrSetFilter', 'nrTrack', 'openApptModal',
+    'nrSave', 'nrSearch', 'nrSearchClear', 'nrSelect', 'nrSetFilter', 'nrSetStep', 'nrTrack', 'openApptModal',
     'openArChargeModal', 'openArPaymentModal', 'openBillingTableEditor', 'openChangePassword',
     'openDailyNoteForPatient', 'openExamForPatient', 'openForgotPassword', 'openPatientExamDetail',
     'openPolicyLimitsManager', 'openSectionModal', 'paDecide', 'paOpenRecord', 'paViewClose',
