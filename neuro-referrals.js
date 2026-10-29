@@ -573,9 +573,9 @@
   var nrlQuery = '';
   var nrlSort = { key: 'patient', dir: 1 };
   var NRL_TABS = [['all', 'All Referrals'], ['submitted', 'Referral Submitted'], ['scheduled', 'Appointment Scheduled']];
-  var NRL_MIN_ROWS = 16;        // rows drawn (data + empty) so the grid fills like a sheet
   // date: the value is yyyy-mm-dd (sorted as such, shown and exported as MM/DD/YYYY).
   // link: an action in the sheet only, left out of the downloads.
+  // w: on-screen width; each is wide enough for its header label plus the sort arrow.
   var NRL_COLS = [
     { key: 'patient', label: 'Patient', w: 190 },
     { key: 'referral', label: 'Referral', w: 90, link: true, text: 'Open' },
@@ -584,15 +584,15 @@
     { key: 'referredOn', label: 'Date Submitted', w: 170, date: true },
     { key: 'apptDate', label: 'Appointment Date', w: 170, date: true },
     { key: 'partner', label: 'Partner', w: 210 },
-    { key: 'conditionFocus', label: 'Condition Focus', w: 140 },
-    { key: 'dob', label: 'Date of Birth', w: 120, date: true },
-    { key: 'phone', label: 'Phone Number', w: 130 },
+    { key: 'conditionFocus', label: 'Condition Focus', w: 170 },
+    { key: 'dob', label: 'Date of Birth', w: 150, date: true },
+    { key: 'phone', label: 'Phone Number', w: 160 },
     { key: 'email', label: 'Email', w: 210 },
     { key: 'state', label: 'State', w: 120 },
-    { key: 'zip', label: 'ZIP Code', w: 90 },
-    { key: 'language', label: 'Language', w: 110 },
+    { key: 'zip', label: 'ZIP Code', w: 120 },
+    { key: 'language', label: 'Language', w: 130 },
     { key: 'doi', label: 'DOI', w: 110, date: true },
-    { key: 'day1', label: 'Day 1 Date', w: 110, date: true },
+    { key: 'day1', label: 'Day 1 Date', w: 130, date: true },
     { key: 'injury', label: 'Injury Type', w: 210 },
     { key: 'lawFirm', label: 'Law Firm', w: 170 },
     { key: 'mrn', label: 'Acct #', w: 90 },
@@ -648,7 +648,6 @@
     var all = nrlAllRows(), rows = nrlRows();
     var n = { all: all.length, submitted: 0, scheduled: 0 };
     all.forEach(function (r) { n[r.st]++; });
-    var sortCol = NRL_COLS.filter(function (c) { return c.key === nrlSort.key; })[0];
 
     var h = '<div class="rf-head"><div class="rf-head-t"><h1>Neurologist Referral Log</h1>'
       + '<p>Every Virginia patient whose neurologist referral has been submitted or scheduled, in one sheet. Download it as Excel or CSV.</p></div>'
@@ -658,13 +657,18 @@
       + '<button type="button" class="btn btn-primary" data-onclick="nrlDownload(\'xlsx\')">' + nrIcon('download') + 'Download Excel</button>'
       + '</div></div>';
 
+    h += nrlKpisHTML(all, n);
+
     h += '<div class="nrs card">'
       + '<div class="nrs-bar">'
         + '<div class="rf-search">' + nrIcon('search')
         + '<input id="nrlSearch" type="search" autocomplete="off" placeholder="Search patient, partner, firm, phone…" value="' + nrEsc(nrlQuery) + '" data-oninput="nrlSearch(this.value)">'
         + (nrlQuery ? '<button type="button" class="rf-search-x" data-onclick="nrlSearch(\'\')" aria-label="Clear search">&times;</button>' : '')
         + '</div>'
-        + '<span class="nrs-count">' + rows.length + (rows.length === 1 ? ' row' : ' rows') + ' · sorted by ' + nrEsc(sortCol ? sortCol.label : 'Patient') + (nrlSort.dir > 0 ? ' (A→Z)' : ' (Z→A)') + '</span>'
+        + '<div class="nrs-meta">'
+          + '<span class="nrs-key"><i class="nrs-key-sw" aria-hidden="true"></i>Yellow rows: awaiting an appointment</span>'
+          + '<span class="nrs-count">' + rows.length + (rows.length === 1 ? ' row' : ' rows') + ' · sorted by ' + nrEsc(nrlSortLabel()) + '</span>'
+        + '</div>'
       + '</div>'
       // The cell bar: the selected cell's reference and its full text, as in a spreadsheet.
       + '<div class="nrs-fx"><span class="nrs-fx-ref" id="nrlFxRef">A1</span><span class="nrs-fx-ico">fx</span><span class="nrs-fx-val" id="nrlFxVal">Patient</span></div>';
@@ -711,8 +715,11 @@
           }).join('')
         + '</tr>';
     });
-    // Empty numbered rows below the data, so a short list still reads as a sheet.
-    for (var fr = Math.max(rows.length, 1) + 2; fr <= NRL_MIN_ROWS + 1; fr++) {
+    /* Empty numbered rows below the data, at least enough to fill the sheet
+       (it stretches to the bottom of the window, styles.css), so a short list
+       still reads as a sheet rather than a box with a gap under it. */
+    var fillTo = Math.max(10, Math.ceil(((window.innerHeight || 900) - 330) / 30));
+    for (var fr = Math.max(rows.length, 1) + 2; fr <= fillTo + 1; fr++) {
       h += '<tr class="nrs-fill" aria-hidden="true"><td class="nrs-num">' + fr + '</td>'
         + NRL_COLS.map(function (c, ci) { return '<td class="nrs-w' + c.w + (ci === 0 ? ' nrs-fix' : '') + '"></td>'; }).join('') + '</tr>';
     }
@@ -726,6 +733,35 @@
         }).join('')
       + '</div></div>';
     mount.innerHTML = h;
+  }
+
+  // "Patient (A→Z)", or for a date column "Appointment Date (oldest first)".
+  function nrlSortLabel() {
+    var col = NRL_COLS.filter(function (c) { return c.key === nrlSort.key; })[0] || NRL_COLS[0];
+    var dir = col.date ? (nrlSort.dir > 0 ? 'oldest first' : 'newest first') : (nrlSort.dir > 0 ? 'A→Z' : 'Z→A');
+    return col.label + ' (' + dir + ')';
+  }
+  // What the log holds at a glance, as the tiles on Neurologist Referrals.
+  function nrlKpisHTML(all, n) {
+    var today = nrToday();
+    var waits = all.filter(function (r) { return r.st === 'submitted'; }).map(function (r) { return nrDaysSince(r.referredOn); })
+      .filter(function (d) { return d !== null; });
+    var longest = waits.length ? Math.max.apply(null, waits) : null;
+    var upcoming = all.filter(function (r) { return r.st === 'scheduled' && r.apptDate >= today; })
+      .sort(function (a, b) { return a.apptDate.localeCompare(b.apptDate); });
+    var next = upcoming[0];
+    function tile(cls, icon, label, value, sub) {
+      return '<div class="nr-kpi ' + cls + '"><span class="nr-kpi-i">' + nrIcon(icon) + '</span>'
+        + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
+        + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
+    }
+    return '<div class="nr-kpis">'
+      + tile('k-total', 'sheet', 'Referrals in Log', n.all, 'Submitted or scheduled')
+      + tile('k-pending', 'clock', 'Awaiting Appointment', n.submitted,
+          longest === null ? 'None waiting' : 'Longest wait: ' + longest + (longest === 1 ? ' day' : ' days') + ' since submitted')
+      + tile('k-done', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming.length + ' upcoming')
+      + tile('k-progress', 'send', 'Next Appointment', next ? nrEsc(nrUs(next.apptDate)) : '—', next ? nrEsc(next.patient) : 'Nothing upcoming')
+      + '</div>';
   }
 
   function nrlCellClick(ev) {
@@ -787,58 +823,125 @@
     return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-  /* A real .xlsx built from scratch (JSZip, already used for the Excel
-     importer): black header row with white bold text, a frozen header and
-     first column, a filter on every column, column widths, and awaiting-
-     appointment rows tinted as on screen. Text cells are inline strings, so
-     nothing in them is ever read as a formula. */
-  function nrlXlsx(rows, cols) {
-    var last = nrlColLetter(cols.length - 1) + (rows.length + 1);
-    var cell = function (ref, text, s) {
-      return '<c r="' + ref + '" t="inlineStr" s="' + s + '"><is><t xml:space="preserve">' + nrlXml(text) + '</t></is></c>';
+  // Days since 1899-12-30: how Excel stores a date, so its filters sort and group them as dates.
+  function nrlSerial(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 86400000) : null;
+  }
+  /* The workbook's cell styles, made on demand: get({bold, size, color,
+     fill, border, date, wrap}) returns the style's index, reusing an
+     identical one. Index 0 is the plain default Excel expects first. */
+  function nrlStyles() {
+    var fonts = [], fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'], xfs = [];
+    var idx = function (list, xml) { var i = list.indexOf(xml); if (i === -1) { list.push(xml); i = list.length - 1; } return i; };
+    var get = function (o) {
+      o = o || {};
+      var font = '<font>' + (o.bold ? '<b/>' : '') + '<sz val="' + (o.size || 11) + '"/><color rgb="FF' + (o.color || '1F2937') + '"/>'
+        + '<name val="Calibri"/><family val="2"/></font>';
+      var fill = o.fill ? '<fill><patternFill patternType="solid"><fgColor rgb="FF' + o.fill + '"/><bgColor indexed="64"/></patternFill></fill>' : fills[0];
+      var align = '<alignment vertical="center"' + (o.border ? ' horizontal="left" indent="1"' : '') + (o.wrap ? ' wrapText="1"' : '') + '/>';
+      return idx(xfs, '<xf numFmtId="' + (o.date ? 164 : 0) + '" fontId="' + idx(fonts, font) + '" fillId="' + idx(fills, fill)
+        + '" borderId="' + (o.border ? 1 : 0) + '" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">'
+        + align + '</xf>');
     };
-    var sheetRows = ['<row r="1">' + cols.map(function (c, i) { return cell(nrlColLetter(i) + '1', c.label, 1); }).join('') + '</row>'];
+    get({});
+    return {
+      get: get,
+      xml: function () {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+          + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+          + '<numFmts count="1"><numFmt numFmtId="164" formatCode="mm/dd/yyyy"/></numFmts>'
+          + '<fonts count="' + fonts.length + '">' + fonts.join('') + '</fonts>'
+          + '<fills count="' + fills.length + '">' + fills.join('') + '</fills>'
+          + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+          + '<border><left style="thin"><color rgb="FFDDE3EA"/></left><right style="thin"><color rgb="FFDDE3EA"/></right>'
+          + '<top style="thin"><color rgb="FFDDE3EA"/></top><bottom style="thin"><color rgb="FFDDE3EA"/></bottom><diagonal/></border></borders>'
+          + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+          + '<cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs>'
+          + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      }
+    };
+  }
+  /* A real .xlsx built from scratch (JSZip, already used for the Excel
+     importer), laid out as a report: a heading block saying what the sheet
+     is (title, scope, the view's counts, search and sort, a colour key, who
+     made it and when, a PHI notice), then the table - navy header, frozen
+     header and first column, filters, banded rows, awaiting-appointment rows
+     tinted as on screen, status cells coloured by stage, real Excel dates.
+     Prints landscape, one page wide, header row repeated, numbered pages.
+     Text cells are inline strings, so nothing in them is read as a formula. */
+  var NRL_HEAD_ROW = 7;          // rows 1-5 heading block, 6 a spacer, 7 the table header
+  function nrlXlsx(rows, cols, meta) {
+    var S = nrlStyles(), H = NRL_HEAD_ROW, lastCol = nrlColLetter(cols.length - 1), lastRow = H + rows.length;
+    var text = function (ref, v, s) {
+      return '<c r="' + ref + '" t="inlineStr" s="' + s + '"><is><t xml:space="preserve">' + nrlXml(v) + '</t></is></c>';
+    };
+    var row = function (n, ht, cells) { return '<row r="' + n + '" ht="' + ht + '" customHeight="1">' + cells + '</row>'; };
+    var n = { submitted: 0, scheduled: 0 };
+    rows.forEach(function (r) { n[r.st]++; });
+
+    var out = [
+      row(1, 30, text('A1', 'Neurologist Referral Log', S.get({ size: 18, bold: true, color: '03045E' }))),
+      row(2, 18, text('A2', 'Concussion Therapy Group · Patients whose incident occurred in Virginia (Day 1 Location / Jurisdiction) '
+        + 'and whose neurologist referral has been submitted or scheduled.', S.get({ color: '475569' }))),
+      row(3, 20, text('A3', 'View: ' + meta.view + '   ·   ' + rows.length + (rows.length === 1 ? ' referral' : ' referrals')
+        + ' (' + n.submitted + ' Referral Submitted, ' + n.scheduled + ' Appointment Scheduled)'
+        + (meta.search ? '   ·   Search: "' + meta.search + '"' : '') + '   ·   Sorted by ' + meta.sort,
+        S.get({ bold: true, color: '0F172A' }))),
+      row(4, 18, text('A4', 'Yellow rows: referral submitted, still awaiting an appointment. Use the filter arrows on the header row to sort or filter.'
+        + '   Generated ' + meta.when + (meta.by ? ' by ' + meta.by : '') + ' from CTG One.', S.get({ size: 10, color: '475569' }))),
+      row(5, 18, text('A5', 'CONFIDENTIAL: contains protected health information (PHI). Store and share it only as the practice’s HIPAA policy allows.',
+        S.get({ size: 10, bold: true, color: 'B42318' }))),
+      row(6, 8, ''),
+      row(H, 30, cols.map(function (c, i) {
+        return text(nrlColLetter(i) + H, c.label, S.get({ bold: true, color: 'FFFFFF', fill: '0F172A', border: true, wrap: true }));
+      }).join(''))
+    ];
     rows.forEach(function (r, ri) {
-      var rn = ri + 2, base = r.st === 'submitted' ? 2 : 0;
-      sheetRows.push('<row r="' + rn + '">' + cols.map(function (c, ci) {
-        var s = c.key === 'status' ? (r.st === 'submitted' ? 3 : 4) : base;
-        return cell(nrlColLetter(ci) + rn, nrlCellText(r, c), s);
-      }).join('') + '</row>');
+      var rn = H + 1 + ri;
+      var fill = r.st === 'submitted' ? 'FFF8E1' : (ri % 2 ? 'F5F8FB' : null);
+      out.push(row(rn, 22, cols.map(function (c, ci) {
+        var ref = nrlColLetter(ci) + rn;
+        if (c.key === 'status') {
+          return text(ref, r.status, S.get({ bold: true, border: true, color: r.st === 'submitted' ? '0077B6' : '15803D', fill: r.st === 'submitted' ? 'E0F2FE' : 'DCFCE7' }));
+        }
+        if (c.date) {
+          var d = nrlSerial(r[c.key]), s = S.get({ border: true, date: true, fill: fill });
+          return d === null ? '<c r="' + ref + '" s="' + s + '"/>' : '<c r="' + ref + '" s="' + s + '"><v>' + d + '</v></c>';
+        }
+        return text(ref, nrlCellText(r, c), S.get({ border: true, fill: fill, bold: c.key === 'patient' }));
+      }).join('')));
     });
+
     var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-      + '<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/>'
-      + '<selection pane="bottomRight" activeCell="B2" sqref="B2"/></sheetView></sheetViews>'
-      + '<sheetFormatPr defaultRowHeight="18"/>'
-      + '<cols>' + cols.map(function (c, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.w / 7) + '" customWidth="1"/>'; }).join('') + '</cols>'
-      + '<sheetData>' + sheetRows.join('') + '</sheetData>'
-      + '<autoFilter ref="A1:' + last + '"/>'
+      + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
+      + '<sheetViews><sheetView workbookViewId="0" showGridLines="0">'
+      + '<pane xSplit="1" ySplit="' + H + '" topLeftCell="B' + (H + 1) + '" activePane="bottomRight" state="frozen"/>'
+      + '<selection pane="bottomRight" activeCell="B' + (H + 1) + '" sqref="B' + (H + 1) + '"/></sheetView></sheetViews>'
+      + '<sheetFormatPr defaultRowHeight="15"/>'
+      + '<cols>' + cols.map(function (c, i) {
+          /* Wide enough for the header on one line, and dates get room to
+             spare: shrunk to fit a printed page, a date that only just fits
+             on screen prints as ##### otherwise. */
+          var w = Math.max(c.label.length + 5, c.date ? 17 : Math.max(10, Math.round(c.w / 7)));
+          return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>';
+        }).join('') + '</cols>'
+      + '<sheetData>' + out.join('') + '</sheetData>'
+      + '<autoFilter ref="A' + H + ':' + lastCol + lastRow + '"/>'
+      + '<mergeCells count="5">' + [1, 2, 3, 4, 5].map(function (r) { return '<mergeCell ref="A' + r + ':' + lastCol + r + '"/>'; }).join('') + '</mergeCells>'
+      + '<pageMargins left="0.4" right="0.4" top="0.6" bottom="0.6" header="0.3" footer="0.3"/>'
+      + '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
+      + '<headerFooter><oddHeader>&amp;L&amp;"Calibri,Bold"Neurologist Referral Log&amp;R&amp;"Calibri,Bold"CONFIDENTIAL - PHI</oddHeader>'
+      + '<oddFooter>&amp;LConcussion Therapy Group&amp;CGenerated ' + nrlXml(meta.when) + '&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter>'
       + '</worksheet>';
-    var styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-      + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + '<fonts count="4"><font><sz val="10"/><name val="Arial"/></font>'
-      + '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>'
-      + '<font><b/><sz val="10"/><color rgb="FF0077B6"/><name val="Arial"/></font>'
-      + '<font><b/><sz val="10"/><color rgb="FF15803D"/><name val="Arial"/></font></fonts>'
-      + '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
-      + '<fill><patternFill patternType="solid"><fgColor rgb="FF0F172A"/><bgColor indexed="64"/></patternFill></fill>'
-      + '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF8E1"/><bgColor indexed="64"/></patternFill></fill></fills>'
-      + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
-      + '<border><left style="thin"><color rgb="FFD9DCE1"/></left><right style="thin"><color rgb="FFD9DCE1"/></right>'
-      + '<top style="thin"><color rgb="FFD9DCE1"/></top><bottom style="thin"><color rgb="FFD9DCE1"/></bottom><diagonal/></border></borders>'
-      + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-      + '<cellXfs count="5">'
-      + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'                                  // 0 cell
-      + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'      // 1 header
-      + '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>'                    // 2 awaiting-appointment row
-      + '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'      // 3 status: submitted
-      + '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>'                    // 4 status: scheduled
-      + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     var workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
       + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-      + '<sheets><sheet name="Referral Log" sheetId="1" r:id="rId1"/></sheets>'
-      + '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'Referral Log\'!$A$1:$'
-      + nrlColLetter(cols.length - 1) + '$' + (rows.length + 1) + '</definedName></definedNames></workbook>';
+      + '<sheets><sheet name="Referral Log" sheetId="1" r:id="rId1"/></sheets><definedNames>'
+      + '<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'Referral Log\'!$A$' + H + ':$' + lastCol + '$' + lastRow + '</definedName>'
+      + '<definedName name="_xlnm.Print_Titles" localSheetId="0">\'Referral Log\'!$' + H + ':$' + H + '</definedName>'
+      + '</definedNames></workbook>';
+    var styles = S.xml();
     return ensureJSZip().then(function (JSZip) {
       var zip = new JSZip();
       zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -872,8 +975,17 @@
       if (typeof ctgAuditListExport === 'function') ctgAuditListExport('neuro_referral_log', rows.length);
       showToast('Downloaded ' + rows.length + (rows.length === 1 ? ' referral.' : ' referrals.'), 'ok');
     };
+    // The CSV stays a plain table (no heading block), so it imports cleanly anywhere.
     if (kind === 'csv') { nrlSave(nrlCsv(rows, cols), nrlFileName('csv')); done(); return; }
-    nrlXlsx(rows, cols).then(function (blob) { nrlSave(blob, nrlFileName('xlsx')); done(); })
+    var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
+    var meta = {
+      view: NRL_TABS.filter(function (t) { return t[0] === nrlTab; })[0][1],
+      search: nrlQuery.trim(),
+      sort: nrlSortLabel(),
+      when: new Date().toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(',', ''),
+      by: me ? (me.displayName || me.username || '') : ''
+    };
+    nrlXlsx(rows, cols, meta).then(function (blob) { nrlSave(blob, nrlFileName('xlsx')); done(); })
       .catch(function (e) { showToast('Excel download failed: ' + (e && e.message ? e.message : e), 'err'); });
   }
 

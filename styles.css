@@ -14420,11 +14420,25 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nrs{padding:0;overflow:hidden;display:flex;flex-direction:column}
 .nrs-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid #E1E3E6;background:var(--surface)}
 .nrs-count{font-size:12px;font-weight:600;color:var(--muted)}
+.nrs-meta{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.nrs-key{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted)}
+.nrs-key-sw{width:14px;height:14px;border-radius:4px;background:#FFF8E1;border:1px solid #EBCB7A}
 .nrs-fx{display:flex;align-items:center;min-height:32px;border-bottom:1px solid #E1E3E6;background:#fff;font-size:12.5px}
 .nrs-fx-ref{flex:none;width:76px;padding:0 10px;line-height:32px;text-align:center;font-weight:700;color:#3c4043;border-right:1px solid #E1E3E6}
 .nrs-fx-ico{flex:none;padding:0 10px;line-height:32px;font-family:Georgia,serif;font-style:italic;font-weight:700;color:#9aa0a6;border-right:1px solid #E1E3E6}
 .nrs-fx-val{flex:1;min-width:0;padding:0 10px;line-height:32px;color:#202124;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nrs-scroll{overflow:auto;max-height:calc(100vh - 330px);min-height:280px;background:#fff}
+/* The page is exactly one window tall: header and tiles take what they need
+   (however the header wraps), and the sheet stretches over the rest, so there
+   is no dead space under it and the sheet tabs stay in view. A long list
+   scrolls inside the sheet, as in a spreadsheet. */
+#neuroReferralLogMount{display:flex;flex-direction:column;height:calc(100vh - 32px);min-height:600px}
+#neuroReferralLogMount>.rf-head,#neuroReferralLogMount>.nr-kpis{flex:none}
+#neuroReferralLogMount>.nrs{flex:1 1 auto;min-height:0;margin-bottom:0}
+.nrs-scroll{flex:1 1 auto;min-height:200px;overflow:auto;background:#fff}
+@media(max-width:900px){
+  #neuroReferralLogMount{display:block;height:auto;min-height:0}
+  .nrs-scroll{height:60vh}
+}
 .nrs-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .nrs-grid{border-collapse:separate;border-spacing:0;table-layout:fixed;width:max-content;font-size:12.5px;color:#202124}
 .nrs-grid th,.nrs-grid td{height:30px;padding:0 8px;background:#fff;border-right:1px solid #E2E3E3;border-bottom:1px solid #E2E3E3;text-align:left;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -14458,6 +14472,8 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nrs-w190{width:190px;min-width:190px;max-width:190px}
 .nrs-w210{width:210px;min-width:210px;max-width:210px}
 .nrs-w260{width:260px;min-width:260px;max-width:260px}
+.nrs-w150{width:150px;min-width:150px;max-width:150px}
+.nrs-w160{width:160px;min-width:160px;max-width:160px}
 .nrs-link{all:unset;cursor:pointer;color:#1155CC;text-decoration:underline;text-underline-offset:2px}
 .nrs-link:hover{color:#0B3D91}
 .nrs-link:focus-visible{outline:2px solid #1A73E8;outline-offset:2px;border-radius:2px}
