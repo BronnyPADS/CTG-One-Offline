@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261027a">
+<link rel="stylesheet" href="styles.css?v=20261029a">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261023b"></script>
+<script src="ctg-actions.js?v=20261029a"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -180,6 +180,11 @@
   <a class="side-link" id="sideReferrals" data-page="referrals" data-onclick="showPage('referrals')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l2 3h5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 14h6"/><path d="m13 11 3 3-3 3"/></svg>
     Referrals
+  </a>
+  <!-- Patients whose Day 1 incident was in Virginia (neuro-referrals.js). -->
+  <a class="side-link" id="sideNeuroReferrals" data-page="neuroReferrals" data-onclick="showPage('neuroReferrals')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 5v13"/></svg>
+    Neurologist Referrals
   </a>
   <a class="side-link" id="sidePatientLists" data-page="patientLists" data-onclick="showPage('patientLists')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -2377,6 +2382,11 @@
 </div>
 </div><!-- /page-referrals -->
 
+<!-- Neurologist Referrals (Virginia incidents; neuro-referrals.js owns the body) -->
+<div class="page" id="page-neuroReferrals">
+  <div id="neuroReferralsMount"></div>
+</div><!-- /page-neuroReferrals -->
+
 <div class="page" id="page-contacts">
 <div class="wrap" data-cs-boot="max-width:none">
   <div id="contactsMount"></div>
@@ -2753,7 +2763,7 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261028b"></script>
+<script src="app.js?v=20261029a"></script>
 <!-- Appointment scheduling (week grid) -->
 <script src="appointments.js?v=20261021z"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
@@ -2795,6 +2805,7 @@
      which calls cfTabHTML() when that tab is active. -->
 <script src="claimform.js?v=20261008a"></script>
 <script src="referrals.js?v=20261005e"></script>
+<script src="neuro-referrals.js?v=20261029a"></script>
 <!-- Authentication & role-based access control (static localStorage version) -->
 <script src="input-limits.js?v=20260916d"></script>
 <script src="backup-ui.js?v=20261005e"></script>
@@ -2814,7 +2825,7 @@
 <script src="day1-docx.js?v=20261020a"></script>
 <script src="fcr-docx.js?v=20261026h"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261012a"></script>
+<script src="ctg-auth.js?v=20261029a"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>

@@ -47,6 +47,7 @@ function showPage(name){
   else if(name==='patientCheckIn')renderPatientCheckIn()
   else if(name==='contacts')renderContacts()
   else if(name==='referrals'&&typeof renderReferrals==='function')renderReferrals()
+  else if(name==='neuroReferrals'&&typeof renderNeuroReferrals==='function')renderNeuroReferrals()
   else if(name==='patientChart')renderPatientChart()
   else if(name==='registrationList')renderRegistrationList()
   else if(name==='arSummary')renderArSummary()
@@ -6493,7 +6494,7 @@ const _patientBaseline=new Map()
 const PATIENT_SECTIONS=['ace','initialExam','reExams','finalExam','dailyNotes',
   'intake','billing','comments']
 const PATIENT_SCALARS=['demographics','notes','inactive','inactiveSince','dischargeDate',
-  'adminDischarged','pendingAce','aceComplete','pregnancy','notesPatientId']
+  'adminDischarged','pendingAce','aceComplete','pregnancy','notesPatientId','neuroReferral']
 
 function _sectionSnapshot(p){
   const out={}
