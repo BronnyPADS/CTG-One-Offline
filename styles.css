@@ -14409,3 +14409,65 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
   .nr-step-d{font-size:10.5px}
 }
 @media(prefers-reduced-motion:reduce){.nr-item,.nr-step-dot{transition:none}}
+
+/* ===== Neurologist Referral Log (neuro-referrals.js, renderNeuroReferralLog) =====
+   A spreadsheet inside a portal card: column letters, row numbers, a black
+   header row (as the practice's own sheets), frozen header + first column,
+   a cell bar showing the selected cell, and sheet tabs along the bottom.
+   Rows awaiting an appointment are tinted yellow, as pending rows are in
+   those sheets. Stage colours are the --st set above. */
+#page-neuroReferralLog .card:hover{transform:none!important}
+.nrs{padding:0;overflow:hidden;display:flex;flex-direction:column}
+.nrs-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid #E1E3E6;background:var(--surface)}
+.nrs-count{font-size:12px;font-weight:600;color:var(--muted)}
+.nrs-fx{display:flex;align-items:center;min-height:32px;border-bottom:1px solid #E1E3E6;background:#fff;font-size:12.5px}
+.nrs-fx-ref{flex:none;width:76px;padding:0 10px;line-height:32px;text-align:center;font-weight:700;color:#3c4043;border-right:1px solid #E1E3E6}
+.nrs-fx-ico{flex:none;padding:0 10px;line-height:32px;font-family:Georgia,serif;font-style:italic;font-weight:700;color:#9aa0a6;border-right:1px solid #E1E3E6}
+.nrs-fx-val{flex:1;min-width:0;padding:0 10px;line-height:32px;color:#202124;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nrs-scroll{overflow:auto;max-height:calc(100vh - 330px);min-height:280px;background:#fff}
+.nrs-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nrs-grid{border-collapse:separate;border-spacing:0;table-layout:fixed;width:max-content;font-size:12.5px;color:#202124}
+.nrs-grid th,.nrs-grid td{height:30px;padding:0 8px;background:#fff;border-right:1px solid #E2E3E3;border-bottom:1px solid #E2E3E3;text-align:left;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nrs-letters th{position:sticky;top:0;z-index:3;height:24px;background:#F8F9FA;color:#5f6368;font-size:11px;font-weight:600;text-align:center;border-bottom-color:#C7CACF}
+.nrs-head th{position:sticky;top:24px;z-index:3;padding:0;background:#0F172A;color:#fff;font-weight:700;border-right-color:#334155;border-bottom-color:#0F172A}
+.nrs-sort{all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;height:30px;padding:0 8px;cursor:pointer;font-weight:700;color:#fff}
+.nrs-sort:hover{background:#1E293B}
+.nrs-sort:focus-visible{outline:2px solid #48CAE4;outline-offset:-2px}
+.nrs-hl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nrs-sort-i{width:13px;height:13px;flex:none;opacity:.55}
+.nrs-sort.on .nrs-sort-i{opacity:1;color:#48CAE4}
+.nrs-hlabel{display:block;padding:0 8px;line-height:30px}
+/* Row numbers and the top-left corner stay put while the sheet scrolls. */
+.nrs-num,.nrs-corner{position:sticky;left:0;z-index:2;width:46px;min-width:46px;max-width:46px;padding:0!important;background:#F8F9FA!important;color:#5f6368;font-size:11px;text-align:center!important;border-right-color:#C7CACF!important}
+.nrs-corner{z-index:5}
+.nrs-head .nrs-num{z-index:5;background:#0F172A!important;color:#94A3B8;border-right-color:#334155!important}
+/* The first column (Patient) is frozen too, with the thicker freeze line a spreadsheet draws. */
+.nrs-fix{position:sticky;left:46px;z-index:1;box-shadow:inset -2px 0 0 #C7CACF}
+.nrs-letters .nrs-fix,.nrs-head .nrs-fix{z-index:4}
+.nrs-row td.nrs-fix{font-weight:700}
+.nrs-row.nr-is-submitted td{background:#FFF8E1}
+.nrs-row:hover td{background:#E8F0FE}
+.nrs-fill td{height:30px}
+.nrs-grid .is-sel{box-shadow:inset 0 0 0 2px #1A73E8}
+.nrs-w90{width:90px;min-width:90px;max-width:90px}
+.nrs-w110{width:110px;min-width:110px;max-width:110px}
+.nrs-w120{width:120px;min-width:120px;max-width:120px}
+.nrs-w130{width:130px;min-width:130px;max-width:130px}
+.nrs-w140{width:140px;min-width:140px;max-width:140px}
+.nrs-w170{width:170px;min-width:170px;max-width:170px}
+.nrs-w190{width:190px;min-width:190px;max-width:190px}
+.nrs-w210{width:210px;min-width:210px;max-width:210px}
+.nrs-w260{width:260px;min-width:260px;max-width:260px}
+.nrs-link{all:unset;cursor:pointer;color:#1155CC;text-decoration:underline;text-underline-offset:2px}
+.nrs-link:hover{color:#0B3D91}
+.nrs-link:focus-visible{outline:2px solid #1A73E8;outline-offset:2px;border-radius:2px}
+.nrs-chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--st);background:var(--st-bg);border:1px solid var(--st-bd)}
+.nrs-chip svg{width:12px;height:12px;flex:none}
+.nrs-grid td.nrs-empty{height:auto;padding:44px 12px;text-align:center;white-space:normal;color:var(--muted)}
+.nrs-tabs{display:flex;align-items:stretch;gap:2px;padding:0 10px;background:#F1F3F4;border-top:1px solid #DADCE0;overflow-x:auto}
+.nrs-tab{all:unset;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;min-height:24px;cursor:pointer;font-size:12.5px;font-weight:700;color:#3c4043;white-space:nowrap}
+.nrs-tab:hover{background:#E8EAED}
+.nrs-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nrs-tab.active{background:#fff;color:#0077B6;box-shadow:inset 0 -3px 0 #0077B6}
+.nrs-tab-n{font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:#E8EAED;color:#3c4043}
+.nrs-tab.active .nrs-tab-n{background:#CAF0F8;color:#0077B6}

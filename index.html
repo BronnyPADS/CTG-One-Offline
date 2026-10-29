@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261029d">
+<link rel="stylesheet" href="styles.css?v=20261029f">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261029b"></script>
+<script src="ctg-actions.js?v=20261029c"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -2387,6 +2387,12 @@
   <div id="neuroReferralsMount"></div>
 </div><!-- /page-neuroReferrals -->
 
+<!-- Neurologist Referral Log: the sheet of submitted/scheduled referrals. No
+     sidebar link; opened from the Referral Log button on Neurologist Referrals. -->
+<div class="page" id="page-neuroReferralLog">
+  <div id="neuroReferralLogMount"></div>
+</div><!-- /page-neuroReferralLog -->
+
 <div class="page" id="page-contacts">
 <div class="wrap" data-cs-boot="max-width:none">
   <div id="contactsMount"></div>
@@ -2763,7 +2769,7 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261029a"></script>
+<script src="app.js?v=20261029b"></script>
 <!-- Appointment scheduling (week grid) -->
 <script src="appointments.js?v=20261021z"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
@@ -2805,7 +2811,7 @@
      which calls cfTabHTML() when that tab is active. -->
 <script src="claimform.js?v=20261008a"></script>
 <script src="referrals.js?v=20261005e"></script>
-<script src="neuro-referrals.js?v=20261029e"></script>
+<script src="neuro-referrals.js?v=20261029h"></script>
 <!-- Authentication & role-based access control (static localStorage version) -->
 <script src="input-limits.js?v=20260916d"></script>
 <script src="backup-ui.js?v=20261005e"></script>
@@ -2825,7 +2831,7 @@
 <script src="day1-docx.js?v=20261020a"></script>
 <script src="fcr-docx.js?v=20261026h"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261029a"></script>
+<script src="ctg-auth.js?v=20261029b"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>

@@ -48,6 +48,7 @@ function showPage(name){
   else if(name==='contacts')renderContacts()
   else if(name==='referrals'&&typeof renderReferrals==='function')renderReferrals()
   else if(name==='neuroReferrals'&&typeof renderNeuroReferrals==='function')renderNeuroReferrals()
+  else if(name==='neuroReferralLog'&&typeof renderNeuroReferralLog==='function')renderNeuroReferralLog()
   else if(name==='patientChart')renderPatientChart()
   else if(name==='registrationList')renderRegistrationList()
   else if(name==='arSummary')renderArSummary()

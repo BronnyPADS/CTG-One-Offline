@@ -73,6 +73,12 @@
     checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
     chart: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
     sync: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    sheet: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    sortBoth: '<polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>',
+    sortUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/>',
+    sortDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="18 13 12 19 6 13"/>',
     info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
     alert: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'
   };
@@ -222,8 +228,10 @@
   function nrHeaderHTML() {
     return '<div class="rf-head"><div class="rf-head-t"><h1>Neurologist Referrals</h1>'
       + '<p>Patients whose incident occurred in Virginia, per the Day 1 Location / Jurisdiction. Select a patient to complete and track their neurologist referral.</p></div>'
-      + '<div class="rf-head-actions"><button type="button" class="btn btn-ghost" data-onclick="nrRefresh()">'
-      + nrIcon('refresh') + 'Refresh</button></div></div>';
+      + '<div class="rf-head-actions">'
+      + '<button type="button" class="btn btn-primary" data-onclick="showPage(\'neuroReferralLog\')">' + nrIcon('sheet') + 'Referral Log</button>'
+      + '<button type="button" class="btn btn-ghost" data-onclick="nrRefresh()">' + nrIcon('refresh') + 'Refresh</button>'
+      + '</div></div>';
   }
 
   function nrCounts(all) {
@@ -552,6 +560,330 @@
       Promise.resolve(loadPatientStore()).then(renderNeuroReferrals, renderNeuroReferrals);
     } else renderNeuroReferrals();
   }
+
+  /* ============================ Referral Log ==============================
+     Every referral that has been submitted or scheduled, laid out like a
+     spreadsheet (column letters, row numbers, a frozen header and first
+     column, a cell bar, sheet tabs), and downloadable as Excel or CSV.
+     It has no sidebar link of its own: it opens from the Referral Log
+     button on Neurologist Referrals and shares that page's permission
+     (SUBPAGE_PARENT in ctg-auth.js / rbac.js). Read-only: a referral is
+     changed on its own form (the Open link). */
+  var nrlTab = 'all';           // 'all' | 'submitted' | 'scheduled'
+  var nrlQuery = '';
+  var nrlSort = { key: 'patient', dir: 1 };
+  var NRL_TABS = [['all', 'All Referrals'], ['submitted', 'Referral Submitted'], ['scheduled', 'Appointment Scheduled']];
+  var NRL_MIN_ROWS = 16;        // rows drawn (data + empty) so the grid fills like a sheet
+  // date: the value is yyyy-mm-dd (sorted as such, shown and exported as MM/DD/YYYY).
+  // link: an action in the sheet only, left out of the downloads.
+  var NRL_COLS = [
+    { key: 'patient', label: 'Patient', w: 190 },
+    { key: 'referral', label: 'Referral', w: 90, link: true, text: 'Open' },
+    { key: 'chart', label: 'Chart', w: 110, link: true, text: 'Open Chart' },
+    { key: 'status', label: 'Status', w: 210 },
+    { key: 'referredOn', label: 'Date Submitted', w: 170, date: true },
+    { key: 'apptDate', label: 'Appointment Date', w: 170, date: true },
+    { key: 'partner', label: 'Partner', w: 210 },
+    { key: 'conditionFocus', label: 'Condition Focus', w: 140 },
+    { key: 'dob', label: 'Date of Birth', w: 120, date: true },
+    { key: 'phone', label: 'Phone Number', w: 130 },
+    { key: 'email', label: 'Email', w: 210 },
+    { key: 'state', label: 'State', w: 120 },
+    { key: 'zip', label: 'ZIP Code', w: 90 },
+    { key: 'language', label: 'Language', w: 110 },
+    { key: 'doi', label: 'DOI', w: 110, date: true },
+    { key: 'day1', label: 'Day 1 Date', w: 110, date: true },
+    { key: 'injury', label: 'Injury Type', w: 210 },
+    { key: 'lawFirm', label: 'Law Firm', w: 170 },
+    { key: 'mrn', label: 'Acct #', w: 90 },
+    { key: 'notes', label: 'Notes', w: 260 },
+    { key: 'updated', label: 'Last Updated', w: 210 }
+  ];
+
+  function nrlColLetter(i) {
+    var s = '';
+    for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s;
+    return s;
+  }
+  // One row per submitted or scheduled referral: chart details live, referral fields as saved.
+  function nrlAllRows() {
+    return nrPatients().filter(function (p) { return nrStatus(p) !== 'pending'; }).map(function (p) {
+      var d = p.demographics || {}, r = nrSaved(p), c = nrChartValues(p), f = r.form || {};
+      return {
+        id: p.id, st: nrStatus(p),
+        patient: typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName),
+        status: nrStep(nrStatus(p)).label,
+        referredOn: r.referredOn || '', apptDate: r.apptDate || '',
+        partner: f.partner || NR_CHOSEN.partner, conditionFocus: f.conditionFocus || NR_CHOSEN.conditionFocus,
+        dob: nrIsoDate(d.dob), phone: c.phone, email: c.email, state: c.state, zip: c.zip, language: c.language,
+        doi: nrDoi(p), day1: nrDay1Date(p), injury: nrInjury(p), lawFirm: d.lawFirm || '', mrn: d.mrn || '',
+        notes: r.notes || '',
+        updated: r.updatedAt ? nrUs(String(r.updatedAt).slice(0, 10)) + (r.updatedBy ? ' · ' + r.updatedBy : '') : '',
+        updatedSort: r.updatedAt || ''
+      };
+    });
+  }
+  function nrlRows() {
+    var q = nrlQuery.trim().toLowerCase(), k = nrlSort.key, dir = nrlSort.dir;
+    var sortKey = k === 'updated' ? 'updatedSort' : k;
+    return nrlAllRows().filter(function (r) {
+      if (nrlTab !== 'all' && r.st !== nrlTab) return false;
+      if (!q) return true;
+      return [r.patient, r.partner, r.conditionFocus, r.phone, r.email, r.lawFirm, r.mrn, r.notes, r.injury].join(' ').toLowerCase().indexOf(q) !== -1;
+    }).sort(function (a, b) {
+      var x = String(a[sortKey] || ''), y = String(b[sortKey] || '');
+      if (!x !== !y) return x ? -1 : 1;            // blanks last, either direction
+      var c = x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' });
+      return (c || a.patient.localeCompare(b.patient)) * dir;
+    });
+  }
+  function nrlCellText(r, col) {
+    var v = r[col.key];
+    return col.date ? nrUs(v) : String(v == null ? '' : v);
+  }
+
+  function renderNeuroReferralLog() {
+    var mount = document.getElementById('neuroReferralLogMount');
+    if (!mount) return;
+    var all = nrlAllRows(), rows = nrlRows();
+    var n = { all: all.length, submitted: 0, scheduled: 0 };
+    all.forEach(function (r) { n[r.st]++; });
+    var sortCol = NRL_COLS.filter(function (c) { return c.key === nrlSort.key; })[0];
+
+    var h = '<div class="rf-head"><div class="rf-head-t"><h1>Neurologist Referral Log</h1>'
+      + '<p>Every Virginia patient whose neurologist referral has been submitted or scheduled, in one sheet. Download it as Excel or CSV.</p></div>'
+      + '<div class="rf-head-actions">'
+      + '<button type="button" class="btn btn-ghost" data-onclick="showPage(\'neuroReferrals\')">' + nrIcon('back') + 'Neurologist Referrals</button>'
+      + '<button type="button" class="btn btn-ghost" data-onclick="nrlDownload(\'csv\')">' + nrIcon('download') + 'Download CSV</button>'
+      + '<button type="button" class="btn btn-primary" data-onclick="nrlDownload(\'xlsx\')">' + nrIcon('download') + 'Download Excel</button>'
+      + '</div></div>';
+
+    h += '<div class="nrs card">'
+      + '<div class="nrs-bar">'
+        + '<div class="rf-search">' + nrIcon('search')
+        + '<input id="nrlSearch" type="search" autocomplete="off" placeholder="Search patient, partner, firm, phone…" value="' + nrEsc(nrlQuery) + '" data-oninput="nrlSearch(this.value)">'
+        + (nrlQuery ? '<button type="button" class="rf-search-x" data-onclick="nrlSearch(\'\')" aria-label="Clear search">&times;</button>' : '')
+        + '</div>'
+        + '<span class="nrs-count">' + rows.length + (rows.length === 1 ? ' row' : ' rows') + ' · sorted by ' + nrEsc(sortCol ? sortCol.label : 'Patient') + (nrlSort.dir > 0 ? ' (A→Z)' : ' (Z→A)') + '</span>'
+      + '</div>'
+      // The cell bar: the selected cell's reference and its full text, as in a spreadsheet.
+      + '<div class="nrs-fx"><span class="nrs-fx-ref" id="nrlFxRef">A1</span><span class="nrs-fx-ico">fx</span><span class="nrs-fx-val" id="nrlFxVal">Patient</span></div>';
+
+    h += '<div class="nrs-scroll" role="region" aria-label="Neurologist referral log" tabindex="0">'
+      + '<table class="nrs-grid" data-onclick="nrlCellClick(event)"><thead>'
+      + '<tr class="nrs-letters"><th class="nrs-corner" aria-hidden="true"></th>'
+      + NRL_COLS.map(function (c, i) { return '<th class="nrs-w' + c.w + (i === 0 ? ' nrs-fix' : '') + '" aria-hidden="true">' + nrlColLetter(i) + '</th>'; }).join('')
+      + '</tr><tr class="nrs-head"><th class="nrs-num" aria-hidden="true">1</th>'
+      + NRL_COLS.map(function (c, i) {
+          var on = nrlSort.key === c.key;
+          var sortable = !c.link;
+          return '<th class="nrs-w' + c.w + (i === 0 ? ' nrs-fix' : '') + '" data-ref="' + nrlColLetter(i) + '1"'
+            + (sortable ? ' aria-sort="' + (on ? (nrlSort.dir > 0 ? 'ascending' : 'descending') : 'none') + '"' : '') + '>'
+            + (sortable
+              ? '<button type="button" class="nrs-sort' + (on ? ' on' : '') + '" data-onclick="nrlSortBy(\'' + c.key + '\')"><span class="nrs-hl">' + nrEsc(c.label) + '</span>'
+                + nrIcon(on ? (nrlSort.dir > 0 ? 'sortUp' : 'sortDown') : 'sortBoth', 'nrs-sort-i') + '</button>'
+              : '<span class="nrs-hlabel">' + nrEsc(c.label) + '</span>')
+            + '</th>';
+        }).join('')
+      + '</tr></thead><tbody>';
+    if (!rows.length) {
+      h += '<tr><td class="nrs-num">2</td><td class="nrs-empty" colspan="' + NRL_COLS.length + '">'
+        + (nrlQuery ? 'No referrals match “' + nrEsc(nrlQuery) + '”.' : all.length ? 'No referrals at this stage.' : 'No referrals yet. A patient is added here once their neurologist referral is submitted.')
+        + '</td></tr>';
+    }
+    rows.forEach(function (r, ri) {
+      var rn = ri + 2, id = nrIdArg(r.id);
+      h += '<tr class="nrs-row nr-is-' + r.st + '"><td class="nrs-num">' + rn + '</td>'
+        + NRL_COLS.map(function (c, ci) {
+            var ref = nrlColLetter(ci) + rn, cls = 'nrs-w' + c.w + (ci === 0 ? ' nrs-fix' : '');
+            if (c.link) {
+              // Function names written out: the click allowlist is read from the source (tools/actions-codemod.js).
+              var act = c.key === 'referral' ? 'data-onclick="nrlOpenReferral(\'' + id + '\')"' : 'data-onclick="nrOpenChart(\'' + id + '\')"';
+              return '<td class="' + cls + '" data-ref="' + ref + '"><button type="button" class="nrs-link" ' + act + '>'
+                + nrEsc(c.text) + '</button></td>';
+            }
+            if (c.key === 'status') {
+              return '<td class="' + cls + '" data-ref="' + ref + '" data-val="' + nrEsc(r.status) + '"><span class="nrs-chip nr-st-' + r.st + '">'
+                + nrIcon(nrStep(r.st).icon) + nrEsc(r.status) + '</span></td>';
+            }
+            var t = nrlCellText(r, c);
+            return '<td class="' + cls + '" data-ref="' + ref + '" title="' + nrEsc(t) + '">' + nrEsc(t) + '</td>';
+          }).join('')
+        + '</tr>';
+    });
+    // Empty numbered rows below the data, so a short list still reads as a sheet.
+    for (var fr = Math.max(rows.length, 1) + 2; fr <= NRL_MIN_ROWS + 1; fr++) {
+      h += '<tr class="nrs-fill" aria-hidden="true"><td class="nrs-num">' + fr + '</td>'
+        + NRL_COLS.map(function (c, ci) { return '<td class="nrs-w' + c.w + (ci === 0 ? ' nrs-fix' : '') + '"></td>'; }).join('') + '</tr>';
+    }
+    h += '</tbody></table></div>';
+
+    // Sheet tabs along the bottom, as in a spreadsheet.
+    h += '<div class="nrs-tabs" role="tablist" aria-label="Referral stage">'
+      + NRL_TABS.map(function (t) {
+          return '<button type="button" role="tab" aria-selected="' + (nrlTab === t[0]) + '" class="nrs-tab' + (nrlTab === t[0] ? ' active' : '') + '" data-onclick="nrlSetTab(\'' + t[0] + '\')">'
+            + nrEsc(t[1]) + '<span class="nrs-tab-n">' + n[t[0]] + '</span></button>';
+        }).join('')
+      + '</div></div>';
+    mount.innerHTML = h;
+  }
+
+  function nrlCellClick(ev) {
+    var cell = ev && ev.target && ev.target.closest ? ev.target.closest('td[data-ref],th[data-ref]') : null;
+    if (!cell) return;
+    var grid = cell.closest('.nrs-grid');
+    var prev = grid && grid.querySelector('.is-sel');
+    if (prev) prev.classList.remove('is-sel');
+    cell.classList.add('is-sel');
+    var ref = document.getElementById('nrlFxRef'), val = document.getElementById('nrlFxVal');
+    if (ref) ref.textContent = cell.getAttribute('data-ref');
+    if (val) val.textContent = cell.getAttribute('data-val') || cell.textContent;
+  }
+  function nrlSortBy(key) {
+    nrlSort = nrlSort.key === key ? { key: key, dir: -nrlSort.dir } : { key: key, dir: 1 };
+    renderNeuroReferralLog();
+  }
+  function nrlSetTab(t) { nrlTab = t; renderNeuroReferralLog(); }
+  function nrlSearch(v) {
+    nrlQuery = String(v || '');
+    renderNeuroReferralLog();
+    var box = document.getElementById('nrlSearch');
+    if (box && nrlQuery) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  }
+  // Open the referral's own form, on the tab that holds it.
+  function nrlOpenReferral(id) {
+    var p = nrFind(id);
+    if (!p) return;
+    nrFilter = nrStatus(p);
+    nrSelectedId = p.id;
+    nrQuery = '';
+    showPage('neuroReferrals');
+  }
+
+  /* -------------------------------- downloads ------------------------------- */
+  function nrlExportCols() { return NRL_COLS.filter(function (c) { return !c.link; }); }
+  function nrlFileName(ext) {
+    var tab = NRL_TABS.filter(function (t) { return t[0] === nrlTab; })[0][1];
+    return 'Neurologist Referral Log - ' + tab + ' - ' + nrUs(nrToday()).replace(/\//g, '-') + '.' + ext;
+  }
+  function nrlSave(blob, name) {
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  /* Spreadsheet formula injection: a cell starting with = + - @ (or a tab or
+     carriage return) runs as a formula in Excel even inside quotes, so it gets
+     a leading apostrophe - the same rule as the Registration List export. */
+  function nrlCsv(rows, cols) {
+    var safe = function (v) { var s = String(v == null ? '' : v); return (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) ? "'" + s : s; };
+    var esc = function (v) { return '"' + safe(v).replace(/"/g, '""') + '"'; };
+    var lines = [cols.map(function (c) { return esc(c.label); }).join(',')];
+    rows.forEach(function (r) { lines.push(cols.map(function (c) { return esc(nrlCellText(r, c)); }).join(',')); });
+    // The byte-order mark makes Excel read the file as UTF-8 (names with accents).
+    return new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  }
+  function nrlXml(s) {
+    return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  /* A real .xlsx built from scratch (JSZip, already used for the Excel
+     importer): black header row with white bold text, a frozen header and
+     first column, a filter on every column, column widths, and awaiting-
+     appointment rows tinted as on screen. Text cells are inline strings, so
+     nothing in them is ever read as a formula. */
+  function nrlXlsx(rows, cols) {
+    var last = nrlColLetter(cols.length - 1) + (rows.length + 1);
+    var cell = function (ref, text, s) {
+      return '<c r="' + ref + '" t="inlineStr" s="' + s + '"><is><t xml:space="preserve">' + nrlXml(text) + '</t></is></c>';
+    };
+    var sheetRows = ['<row r="1">' + cols.map(function (c, i) { return cell(nrlColLetter(i) + '1', c.label, 1); }).join('') + '</row>'];
+    rows.forEach(function (r, ri) {
+      var rn = ri + 2, base = r.st === 'submitted' ? 2 : 0;
+      sheetRows.push('<row r="' + rn + '">' + cols.map(function (c, ci) {
+        var s = c.key === 'status' ? (r.st === 'submitted' ? 3 : 4) : base;
+        return cell(nrlColLetter(ci) + rn, nrlCellText(r, c), s);
+      }).join('') + '</row>');
+    });
+    var sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/>'
+      + '<selection pane="bottomRight" activeCell="B2" sqref="B2"/></sheetView></sheetViews>'
+      + '<sheetFormatPr defaultRowHeight="18"/>'
+      + '<cols>' + cols.map(function (c, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + Math.round(c.w / 7) + '" customWidth="1"/>'; }).join('') + '</cols>'
+      + '<sheetData>' + sheetRows.join('') + '</sheetData>'
+      + '<autoFilter ref="A1:' + last + '"/>'
+      + '</worksheet>';
+    var styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<fonts count="4"><font><sz val="10"/><name val="Arial"/></font>'
+      + '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>'
+      + '<font><b/><sz val="10"/><color rgb="FF0077B6"/><name val="Arial"/></font>'
+      + '<font><b/><sz val="10"/><color rgb="FF15803D"/><name val="Arial"/></font></fonts>'
+      + '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+      + '<fill><patternFill patternType="solid"><fgColor rgb="FF0F172A"/><bgColor indexed="64"/></patternFill></fill>'
+      + '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF8E1"/><bgColor indexed="64"/></patternFill></fill></fills>'
+      + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
+      + '<border><left style="thin"><color rgb="FFD9DCE1"/></left><right style="thin"><color rgb="FFD9DCE1"/></right>'
+      + '<top style="thin"><color rgb="FFD9DCE1"/></top><bottom style="thin"><color rgb="FFD9DCE1"/></bottom><diagonal/></border></borders>'
+      + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+      + '<cellXfs count="5">'
+      + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>'                                  // 0 cell
+      + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'      // 1 header
+      + '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>'                    // 2 awaiting-appointment row
+      + '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'      // 3 status: submitted
+      + '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/>'                    // 4 status: scheduled
+      + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    var workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<sheets><sheet name="Referral Log" sheetId="1" r:id="rId1"/></sheets>'
+      + '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">\'Referral Log\'!$A$1:$'
+      + nrlColLetter(cols.length - 1) + '$' + (rows.length + 1) + '</definedName></definedNames></workbook>';
+    return ensureJSZip().then(function (JSZip) {
+      var zip = new JSZip();
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml" ContentType="application/xml"/>'
+        + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        + '</Types>');
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/workbook.xml', workbook);
+      zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        + '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        + '</Relationships>');
+      zip.file('xl/worksheets/sheet1.xml', sheet);
+      zip.file('xl/styles.xml', styles);
+      return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    });
+  }
+  // Downloads the rows on screen (this tab, search and sort).
+  function nrlDownload(kind) {
+    var rows = nrlRows(), cols = nrlExportCols();
+    if (!rows.length) { showToast('Nothing to download in this view.', 'err'); return; }
+    var done = function () {
+      if (typeof ctgAuditListExport === 'function') ctgAuditListExport('neuro_referral_log', rows.length);
+      showToast('Downloaded ' + rows.length + (rows.length === 1 ? ' referral.' : ' referrals.'), 'ok');
+    };
+    if (kind === 'csv') { nrlSave(nrlCsv(rows, cols), nrlFileName('csv')); done(); return; }
+    nrlXlsx(rows, cols).then(function (blob) { nrlSave(blob, nrlFileName('xlsx')); done(); })
+      .catch(function (e) { showToast('Excel download failed: ' + (e && e.message ? e.message : e), 'err'); });
+  }
+
+  window.renderNeuroReferralLog = renderNeuroReferralLog;
+  window.nrlCellClick = nrlCellClick;
+  window.nrlSortBy = nrlSortBy;
+  window.nrlSetTab = nrlSetTab;
+  window.nrlSearch = nrlSearch;
+  window.nrlOpenReferral = nrlOpenReferral;
+  window.nrlDownload = nrlDownload;
 
   window.renderNeuroReferrals = renderNeuroReferrals;
   window.nrSelect = nrSelect;

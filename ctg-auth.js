@@ -239,7 +239,8 @@
     patientAce: 'day1',
     patientExamEdit: 'day2',
     patientExamDetail: 'day2',
-    patientDailyNote: 'dailyNotes'
+    patientDailyNote: 'dailyNotes',
+    neuroReferralLog: 'neuroReferrals'
   };
 
   var ROLE_LABELS = {
