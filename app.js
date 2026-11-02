@@ -14013,15 +14013,15 @@ function buildPDF(name,opts){
     para([progTxt])
   }
 
-  // A typed-in description goes between commas (see dischargeIncidentPhrase).
-  const incidentSegs=(injType!=='—'&&injuryTypeIsWriteIn(injType,itSelected))
-    ?[{t:'injury incident, '},{t:injType,b:true},{t:', that occurred on '}]
-    :[{t:injType,b:true},{t:' injury incident that occurred on '}]
+  // Plain text, as in every other report: no bold name, injury type or date
+  // (staff, 2 Nov 2026). A typed-in description goes between commas (see
+  // dischargeIncidentPhrase).
+  const incident=dischargeIncidentPhrase(injType,itSelected)
   H2('Causation')
-  para([{t:'Based on review of '},{t:name,b:true},{t:"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "},{t:pn.poss},{t:' injuries and the '},...incidentSegs,{t:doi,b:true},{t:'.'}])
+  para(["Based on review of "+name+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+incident+" that occurred on "+doi+"."])
 
   H2('Medical Necessity')
-  para([{t:'The care and treatment rendered to '},{t:name,b:true},{t:' has been medically necessary for the injuries sustained in the '},...incidentSegs,{t:doi,b:true},{t:'.'}])
+  para(['The care and treatment rendered to '+name+' has been medically necessary for the injuries sustained in the '+incident+' that occurred on '+doi+'.'])
 
   H2('Reasonableness')
   para(['The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'])
