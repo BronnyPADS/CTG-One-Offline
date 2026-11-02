@@ -35,7 +35,8 @@
     refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
     chevron: '<polyline points="9 18 15 12 9 6"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
-    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>'
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'
   };
   function nbIcon(name, cls) {
     return '<svg class="' + (cls || 'rf-i') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
@@ -303,6 +304,7 @@
       : 'Not yet saved';
     var foot = '<div class="nr-form-ft"><span class="nr-meta"><b class="nr-unsaved"' + (dirty ? '' : ' hidden') + '>Unsaved changes · </b>' + meta + '</span>'
       + '<div class="nr-form-btns">'
+      + (saved && (saved.lines || []).length ? '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbDownloadPdf()">' + nbIcon('download') + 'Download PDF</button>' : '')
       + (saved && t.balance > 0 ? '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbGoPay(\'' + id + '\')">' + nbIcon('wallet') + 'Record a Payment</button>' : '')
       + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbSaveBill()">' + nbIcon('check') + 'Save Bill</button>'
       + '</div></div>';
@@ -390,6 +392,173 @@
     npTab = 'owed'; npQuery = '';
     showPage('neuroPayments');
     npOpenPay(id);
+  }
+
+  /* ---------------------------- the bill as a PDF ---------------------------- */
+  /* The saved bill on the practice letterhead, laid out as on the page: the
+     service lines, the billing details with the totals, and the payments
+     recorded. Unsaved changes are not in it, so the button asks for a save
+     first. The PDF's fonts are Latin-1 only, hence nbPdfText. */
+  var NB_PDF_SERVICES = [
+    ['from', 'Date from', 54], ['to', 'Date to', 54], ['pos', 'Place of service', 62], ['emg', 'Emergency', 52],
+    ['cpt', 'Procedure code', 52], ['mod', 'Modifiers', 50], ['dxPtr', 'Diagnosis pointer', 48], ['charge', 'Charges', 62],
+    ['units', 'Days or units', 40], ['npi', 'Rendering provider NPI', 58]
+  ];
+  var NB_PDF_PAYMENTS = [
+    ['date', 'Date', 66], ['amount', 'Amount', 76], ['method', 'Method', 96], ['ref', 'Reference', 92],
+    ['note', 'Note', 132], ['by', 'Recorded by', 70]
+  ];
+  function nbPdfText(v) {
+    return String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+      .replace(/[–—]/g, '-').replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
+  }
+  function nbPdfDate(v) { var s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? us(s.slice(0, 10)) : s; }
+  function nbBuildBillPdf(p) {
+    var b = nbBill(p), t = nbTotals(b), r = N().saved(p), chart = N().chart(p), T = nbPdfText;
+    var name = (typeof naturalPatientName === 'function' ? naturalPatientName(p) : '') || nbName(p);
+    var doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    var PW = 612, PH = 792, ML = 40, MR = 40, CW = PW - ML - MR, BOTTOM = 46, y = 0;
+    function f(style, size) { doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size || 9); doc.setTextColor(0, 0, 0); }
+    // The letterhead every CTG document carries (as on the Case Discharge Summary).
+    function letterhead() {
+      doc.setTextColor(0, 0, 0); doc.setFont('times', 'bold'); doc.setFontSize(12);
+      doc.text('CONCUSSION THERAPY GROUP', ML, 52);
+      doc.setFont('times', 'normal'); doc.setFontSize(10);
+      ['2411 Crofton Lane, Suite 13A', 'Crofton, MD, 21114-1336', 'Phone: 410-451-9870', 'Fax: 410-451-9872'].forEach(function (l, i) {
+        doc.text(l, PW - MR, 36 + i * 13, { align: 'right' });
+      });
+      y = 112;
+    }
+    function newPage() { doc.addPage(); letterhead(); }
+    function heading(text) { if (y + 50 > PH - BOTTOM) newPage(); f('bold', 11); doc.text(text, ML, y); y += 8; }
+    // A bordered table with a grey header row, repeated on each new page; money columns align right.
+    function table(cols, rows, money) {
+      var X = [], cx = ML;
+      cols.forEach(function (c) { X.push(cx); cx += c[2]; });
+      var at = function (i) { return money.indexOf(cols[i][0]) !== -1 ? [X[i] + cols[i][2] - 3, { align: 'right' }] : [X[i] + 3, {}]; };
+      var grid = function (top, h) { doc.rect(ML, top, CW, h); X.forEach(function (x, i) { if (i) doc.line(x, top, x, top + h); }); };
+      var cells = function (ls, top, step) {
+        ls.forEach(function (l, i) { var a = at(i); l.forEach(function (s, k) { doc.text(s, a[0], top + k * step, a[1]); }); });
+      };
+      function head() {
+        f('bold', 7.5);
+        var ls = cols.map(function (c) { return doc.splitTextToSize(c[1], c[2] - 6); });
+        var h = Math.max.apply(null, ls.map(function (l) { return l.length; })) * 9 + 7;
+        if (y + h + 20 > PH - BOTTOM) newPage();
+        f('bold', 7.5);
+        doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.6); doc.setFillColor(241, 241, 241);
+        doc.rect(ML, y, CW, h, 'F'); grid(y, h); cells(ls, y + 10, 9);
+        y += h;
+      }
+      head();
+      rows.forEach(function (row) {
+        f('normal', 8.5);
+        var ls = cols.map(function (c) { return doc.splitTextToSize(T(row[c[0]]), c[2] - 6); });
+        var h = Math.max.apply(null, ls.map(function (l) { return l.length || 1; })) * 10 + 6;
+        if (y + h > PH - BOTTOM) { newPage(); head(); f('normal', 8.5); }
+        doc.setLineWidth(0.5); grid(y, h); cells(ls, y + 11, 10);
+        y += h;
+      });
+      return X;
+    }
+
+    letterhead();
+    f('bold', 14); doc.text('NEUROLOGIST BILL', ML, y);
+    f('bold', 9); doc.text('Status: ' + NB_STAGES[nbStage(b)].label, PW - MR, y, { align: 'right' });
+    y += 14;
+    f('normal', 8.5); doc.setTextColor(70, 70, 70);
+    doc.text("Concussion Therapy Group's own record of what the neurologist billed for this referred patient and what has been paid.", ML, y);
+    y += 14;
+
+    // Who the bill is for.
+    var half = CW / 2, rowH = 18, box = [
+      [['Patient', name], ['Date of Birth', chart.dob]],
+      [['Account No.', b.accountNo], ['Partner', (r.form || {}).partner || '']],
+      [['Referral', N().step(N().status(p)).label], ['Appointment', nbPdfDate(r.apptDate)]]
+    ];
+    doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.7); doc.rect(ML, y, CW, rowH * box.length);
+    box.forEach(function (row, i) {
+      if (i) doc.line(ML, y + rowH * i, ML + CW, y + rowH * i);
+      row.forEach(function (c, j) {
+        var x = ML + j * half + 6, ty = y + rowH * i + 12.5;
+        f('bold', 9); doc.text(c[0] + ': ', x, ty);
+        var w = doc.getTextWidth(c[0] + ': ');
+        f('normal', 9); doc.text(doc.splitTextToSize(T(c[1]), half - 12 - w)[0] || '', x + w, ty);
+      });
+    });
+    doc.line(ML + half, y, ML + half, y + rowH * box.length);
+    y += rowH * box.length + 24;
+
+    heading('Services');
+    var X = table(NB_PDF_SERVICES, (b.lines || []).map(function (l) {
+      return { from: nbPdfDate(l.from), to: nbPdfDate(l.to), pos: l.pos, emg: l.emg, cpt: l.cpt, mod: l.mod, dxPtr: l.dxPtr,
+        charge: nbFmt(nbMoney(l.charge)), units: l.units, npi: l.npi };
+    }), ['charge']);
+    if (y + 18 > PH - BOTTOM) newPage();
+    var ci = 7;   // the Charges column
+    doc.setLineWidth(0.5); doc.rect(ML, y, CW, 18); doc.line(X[ci], y, X[ci], y + 18); doc.line(X[ci + 1], y, X[ci + 1], y + 18);
+    f('bold', 9); doc.text('Total charge', X[ci] - 6, y + 12.5, { align: 'right' });
+    doc.text(nbFmt(t.billed), X[ci] + NB_PDF_SERVICES[ci][2] - 3, y + 12.5, { align: 'right' });
+    y += 36;
+
+    heading('Billing');
+    if (y + 74 > PH - BOTTOM) { newPage(); heading('Billing'); }
+    var top = y + 4, rx = ML + CW * 0.6, rw = CW * 0.4, ky = top + 12;
+    [['Patient Account No.', b.accountNo],
+      ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
+      ['Signature of Physician or Supplier', b.signature],
+      ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
+      var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';
+      f('bold', 9); doc.text(label, ML, ky);
+      var w = doc.getTextWidth(label);
+      f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w)[0] || '', ML + w, ky);
+      ky += 17;
+    });
+    [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)], ['Balance Owed', nbFmt(t.balance)]].forEach(function (s, i, all) {
+      var by = top + i * 20, last = i === all.length - 1;
+      doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.7);
+      if (last) { doc.setFillColor(241, 241, 241); doc.rect(rx, by, rw, 20, 'FD'); } else doc.rect(rx, by, rw, 20);
+      f(last ? 'bold' : 'normal', 9.5); doc.text(s[0], rx + 6, by + 13.5);
+      f('bold', 9.5); doc.text(s[1], rx + rw - 6, by + 13.5, { align: 'right' });
+    });
+    y = Math.max(ky, top + 60) + 22;
+
+    heading('Payments');
+    var pays = ((b.payments) || []).slice().sort(function (a, c) { return String(a.date || '').localeCompare(String(c.date || '')); });
+    if (!pays.length) {
+      f('normal', 9); doc.setTextColor(70, 70, 70); doc.text('No payments recorded yet.', ML, y + 10); y += 20;
+    } else {
+      table(NB_PDF_PAYMENTS, pays.map(function (x) {
+        return { date: nbPdfDate(x.date), amount: nbFmt(nbMoney(x.amount)), method: x.method, ref: x.ref, note: x.note, by: x.by };
+      }), ['amount']);
+    }
+
+    // Footer on every page: who and what, the day it was made, and the page count.
+    var total = doc.internal.getNumberOfPages(), made = us(N().today());
+    var left = T(['Concussion Therapy Group', 'Neurologist Bill', name, chart.dob].filter(Boolean).join(' / '));
+    for (var i = 1; i <= total; i++) {
+      doc.setPage(i); f('normal', 8);
+      var right = 'Printed ' + made + '   Page ' + i + ' of ' + total;
+      doc.text(doc.splitTextToSize(left, CW - doc.getTextWidth(right) - 18)[0], ML, PH - 20);
+      doc.text(right, PW - MR, PH - 20, { align: 'right' });
+    }
+    return doc;
+  }
+  function nbDownloadPdf() {
+    var p = nbCurrent(); if (!p) return;
+    if (nbIsDirty(p)) { showToast('Save the bill first. The PDF is made from the saved bill.', 'err'); return; }
+    if (!nbBill(p) || !(nbBill(p).lines || []).length) { showToast('Enter and save the bill first.', 'err'); return; }
+    loadJsPDF(function () {
+      try {
+        var doc = nbBuildBillPdf(p);
+        doc.save('CTG_Neurologist_Bill_' + ((nbName(p) || 'Patient').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')) + '_' + N().today() + '.pdf');
+        if (typeof ctgAuditExport === 'function') ctgAuditExport(p.id, 'neuro_bill');
+        showToast('Neurologist bill PDF downloaded.', 'ok');
+      } catch (e) {
+        console.error('Neurologist bill PDF', e);
+        showToast('Could not make the PDF: ' + e.message, 'err');
+      }
+    });
   }
 
   /* =========================== Neurologist Payments ========================= */
@@ -638,6 +807,8 @@
   window.nbSaveBill = nbSaveBill;
   window.nbOpenReferral = nbOpenReferral;
   window.nbGoPay = nbGoPay;
+  window.nbDownloadPdf = nbDownloadPdf;
+  window.nbBuildBillPdf = nbBuildBillPdf;
   window.npOpenPay = npOpenPay;
   window.npClosePay = npClosePay;
   window.npBackdrop = npBackdrop;
