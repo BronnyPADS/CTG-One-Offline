@@ -118,6 +118,37 @@
       '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
   }
 
+  // A picture from an uploaded page (a signature) in its line, at its size in points.
+  function inlinePictureXml(rid, id, wPt, hPt, name) {
+    var cx = Math.round(wPt * 12700), cy = Math.round(hPt * 12700)
+    return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
+      '<wp:extent cx="' + cx + '" cy="' + cy + '"/>' +
+      '<wp:docPr id="' + id + '" name="' + esc(name) + '" descr="' + esc(name) + '"/>' +
+      '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+      '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+      '<pic:pic><pic:nvPicPr><pic:cNvPr id="' + id + '" name="' + esc(name) + '.png"/><pic:cNvPicPr/></pic:nvPicPr>' +
+      '<pic:blipFill><a:blip r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+      '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm>' +
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>' +
+      '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>'
+  }
+  /* The pictures of an uploaded report page that go into its Word copy, top
+     to bottom: [{top, x, w, h, png}] (points from the page's top and left).
+     null: keep the whole page as a picture instead - a scan under its text, or
+     a picture that cannot be placed (turned, a stencil, unreadable) - so a
+     signature is never lost from the Word copy (2 Nov 2026). */
+  function placePictures(tp) {
+    var pics = [], list = tp.images || []
+    for (var i = 0; i < list.length; i++) {
+      var im = list[i], role = pictureRole(im, tp.w, tp.h)
+      if (role === 'scan') return null
+      if (role !== 'place') continue
+      if (!im.png) return null
+      pics.push({ top: tp.h - im.y1, x: im.x0, w: im.x1 - im.x0, h: im.y1 - im.y0, png: im.png })
+    }
+    return pics.sort(function (a, b) { return a.top - b.top })
+  }
+
   /* The footer of a page without the letterhead (an upload, the Medical Bill):
      the reports' footer line - left, its text; right, "Page X of Y" at the
      margin (land: a sideways page) - in the reports' footer type. */
@@ -206,6 +237,88 @@
     return gfx
   }
 
+  /* The pictures an uploaded report page paints - a signature on a signed
+     form, a logo - each with where it sits (PDF points, like the text) and,
+     for one that may go into the Word copy (pictureRole), its pixels as PNG.
+     A picture is a unit square under the transform in force where it is
+     painted; upright: neither turned nor flipped, so its pixels go in as they
+     are. */
+  var PIC_MIN = 24   // points: a smaller picture is an icon beside the text (a checkbox mark)
+  function pictureRole(im, pw, ph) {
+    var w = im.x1 - im.x0, h = im.y1 - im.y0
+    if (w * h > pw * ph * 0.4) return 'scan'                       // a scanned page under its text
+    if (w < PIC_MIN && h < PIC_MIN) return 'skip'                  // an icon: left out, as before
+    if (ph - im.y0 < 112 || ph - im.y1 > ph - 40) return 'skip'    // all in the letterhead or the footer
+    return 'place'
+  }
+  function objOf(page, id) {
+    return new Promise(function (res) {
+      var store = /^g_/.test(String(id)) ? page.commonObjs : page.objs
+      var t = setTimeout(function () { res(null) }, 4000)
+      var got = function (o) { clearTimeout(t); res(o || null) }
+      try { if (store.has(id)) return got(store.get(id)); store.get(id, got) } catch (e) { got(null) }
+    })
+  }
+  // pdf.js's decoded picture (an ImageBitmap, or raw pixels by kind: 1 = 1 bit grey, 2 = RGB, 3 = RGBA) as PNG bytes.
+  async function imagePng(img) {
+    if (!img || !(img.width > 0) || !(img.height > 0)) return null
+    var w = img.width, h = img.height
+    var c = document.createElement('canvas')
+    c.width = w; c.height = h
+    var cx = c.getContext('2d')
+    if (img.bitmap) cx.drawImage(img.bitmap, 0, 0)
+    else if (img.data) {
+      var d = cx.createImageData(w, h), px = d.data, src = img.data, i, q
+      if (img.kind === 3) for (i = 0; i < w * h * 4; i++) px[i] = src[i]
+      else if (img.kind === 2) for (i = 0, q = 0; i < w * h; i++) { px[q++] = src[i * 3]; px[q++] = src[i * 3 + 1]; px[q++] = src[i * 3 + 2]; px[q++] = 255 }
+      else if (img.kind === 1) {
+        var row = (w + 7) >> 3
+        for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+          var v = ((src[y * row + (x >> 3)] >> (7 - (x & 7))) & 1) ? 255 : 0
+          q = (y * w + x) * 4; px[q] = px[q + 1] = px[q + 2] = v; px[q + 3] = 255
+        }
+      } else return null
+      cx.putImageData(d, 0, 0)
+    } else return null
+    var blob = await new Promise(function (res) { c.toBlob(res, 'image/png') })
+    c.width = 0; c.height = 0
+    return blob ? new Uint8Array(await blob.arrayBuffer()) : null
+  }
+  async function readImages(page, ol, OPS, pw, ph) {
+    if (!OPS || !ol) return []
+    var out = [], m = [1, 0, 0, 1, 0, 0], stack = []
+    var mul = function (a) {
+      m = [a[0] * m[0] + a[1] * m[2], a[0] * m[1] + a[1] * m[3], a[2] * m[0] + a[3] * m[2], a[2] * m[1] + a[3] * m[3],
+        a[4] * m[0] + a[5] * m[2] + m[4], a[4] * m[1] + a[5] * m[3] + m[5]]
+    }
+    for (var i = 0; i < ol.fnArray.length; i++) {
+      var op = ol.fnArray[i], a = ol.argsArray[i]
+      if (op === OPS.save) stack.push(m.slice())
+      else if (op === OPS.restore) { if (stack.length) m = stack.pop() }
+      else if (op === OPS.transform) mul(a)
+      else if (op === OPS.paintFormXObjectBegin) { stack.push(m.slice()); if (a && a[0]) mul(a[0]) }
+      else if (op === OPS.paintFormXObjectEnd) { if (stack.length) m = stack.pop() }
+      else if (op === OPS.paintImageXObject || op === OPS.paintInlineImageXObject || op === OPS.paintImageMaskXObject) {
+        var xs = [m[4], m[0] + m[4], m[2] + m[4], m[0] + m[2] + m[4]], ys = [m[5], m[1] + m[5], m[3] + m[5], m[1] + m[3] + m[5]]
+        out.push({
+          op: op, ref: a && a[0],
+          x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs), y0: Math.min.apply(null, ys), y1: Math.max.apply(null, ys),
+          upright: m[0] > 0 && m[3] > 0 && Math.abs(m[1]) < 1e-6 && Math.abs(m[2]) < 1e-6
+        })
+      }
+    }
+    for (var k = 0; k < out.length; k++) {
+      var im = out[k]
+      // A stencil mask (ink painted through a 1-bit shape) is not read: such a page stays a picture (placePictures).
+      if (pictureRole(im, pw, ph) !== 'place' || !im.upright || im.op === OPS.paintImageMaskXObject) continue
+      try {
+        var obj = im.op === OPS.paintInlineImageXObject ? im.ref : await objOf(page, im.ref)
+        im.png = await imagePng(obj)
+      } catch (e) { im.png = null }
+    }
+    return out
+  }
+
   async function readTextPage(pdf, n) {
     var page = await pdf.getPage(n)
     var vp = page.getViewport({ scale: 1 })
@@ -230,8 +343,13 @@
       items.push({ s: it.str, x: t[4], y: t[5], w: it.width, size: size, f: fontOf(page, tc.styles, it.fontName) })
     })
     var gfx = opsToGfx(ol, window.pdfjsLib && window.pdfjsLib.OPS)
+    /* A page with the practice letterhead may become editable Word text
+       (build): read its pictures now, while pdf.js still holds them, so a
+       signature goes along. */
+    var letterhead = items.some(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' && vp.height - it.y < 112 })
+    var images = letterhead ? await readImages(page, ol, window.pdfjsLib && window.pdfjsLib.OPS, vp.width, vp.height) : []
     page.cleanup()
-    return { items: items, w: vp.width, h: vp.height, gfx: gfx }
+    return { items: items, w: vp.width, h: vp.height, gfx: gfx, images: images }
   }
 
   /* The upright lines the page draws (table cell edges): [{x, y0, y1}] in PDF
@@ -607,15 +725,23 @@
      goes where its top is. box: {top, bottom} in points, where the page's text
      area starts and ends (a report under a Word header and footer); the
      0.25in margin otherwise. */
-  function textPageParagraphs(tp, box, tables) {
+  function textPageParagraphs(tp, box, tables, pics) {
     var TOP = (box && box.top) || M_PT, BOTTOM = (box && box.bottom) || M_PT
     var paras = toParagraphs(toLines(tp.items, tp.gfx ? verticalRules(tp.gfx) : []))
     var blocks = paras.map(function (p) { return { p: p, top: tp.h - p.lines[0].y - p.lines[0].size } })
     ;(tables || []).forEach(function (t) { blocks.push({ t: t, top: tp.h - t.top }) })
+    // pics (placePictures): a picture - a signature - goes where its top is, as a table does.
+    ;(pics || []).forEach(function (pc) { blocks.push({ pic: pc, top: pc.top }) })
     blocks.sort(function (a, b) { return a.top - b.top })
     var avail = tp.h - TOP - BOTTOM - 1      // a point to spare against Word's rounding
     var out = [], T = 0
     blocks.forEach(function (bk) {
+      if (bk.pic) {
+        var pBefore = Math.max(0, bk.top - TOP - T)
+        T += pBefore + bk.pic.h
+        out.push({ before: pBefore, pic: bk.pic })
+        return
+      }
       if (bk.t) {
         var tBefore = Math.max(0, (tp.h - bk.t.top) - TOP - T)
         T += tBefore + (bk.t.top - bk.t.bottom)
@@ -666,6 +792,15 @@
     if (out.length) out[0].before = 0
     var res = [{ pPr: gapPPr(top), runs: '' }]
     out.forEach(function (p) {
+      if (p.pic) {
+        // A line of its own, as tall as the picture (the style's 1pt type adds nothing), at the picture's left edge.
+        res.push({
+          pPr: '<w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/><w:spacing w:before="' + tw(p.before) + '" w:after="0" w:line="240" w:lineRule="auto"/>' +
+            '<w:ind w:left="' + tw(Math.max(0, p.pic.x - M_PT)) + '" w:right="0"/>',
+          runs: p.pic.xml
+        })
+        return
+      }
       if (p.table) {
         /* A table has no room above it of its own: an empty line holds it,
            and keeps two tables in a row apart (Word joins them). */
@@ -1032,7 +1167,8 @@
                 if (!uploadDocs[ukey]) uploadDocs[ukey] = {}
                 tp.items = usp.body
                 var utables = findTables(tp)   // a ruled grid becomes a real Word table; its words leave tp.items
-                if (utables.some(function (t) { return t.badFit })) {
+                var upics = placePictures(tp)  // a signature goes along; null keeps the page a picture
+                if (!upics || utables.some(function (t) { return t.badFit })) {
                   /* A grid did not come apart cleanly (a word is wider than its
                      column - the symptom table beside its "Exertion/Overall
                      Rating" text, a page-split grid, ...). Reconstructing it
@@ -1040,7 +1176,13 @@
                      faithful picture instead (done stays false -> picture
                      block). The plain-text report pages stay editable. */
                 } else {
-                  var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables)
+                  upics.forEach(function (pc, k) {
+                    var rid = 'rIdI' + n + '_' + (k + 1), file = 'upload-' + n + '-' + (k + 1) + '.png'
+                    zip.file('word/media/' + file, pc.png, { compression: 'STORE' })
+                    rels += '<Relationship Id="' + rid + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' + file + '"/>'
+                    pc.xml = inlinePictureXml(rid, 200000 + n * 100 + k + 1, pc.w, pc.h, 'Picture ' + (k + 1) + ' of page ' + n)
+                  })
+                  var uparas = textPageParagraphs(tp, { top: REPORT_TOP, bottom: REPORT_BOTTOM }, utables, upics)
                   /* No background raster for an uploaded report: findTables
                      already turns its grids into real Word tables, and the only
                      other lines are hyperlink underlines. A raster of those
