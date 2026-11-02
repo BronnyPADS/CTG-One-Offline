@@ -2576,29 +2576,27 @@ function patientPronoun(p) {
    p.ace.riskFactors). Every daily note used to print "Multiple Head Impacts",
    whatever the patient's Day 1 said. */
 function dnRiskFactorsText(p){
-  return String((p&&p.ace&&p.ace.riskFactors)||aceRiskFactorsText(p)||'').trim()||'None identified'
+  return riskFactorsOrBlank((p&&p.ace&&p.ace.riskFactors)||aceRiskFactorsText(p))
 }
 function dnBoilerplate(name, doi) {
   const n = (name||'PT Name').trim()
   const d = (doi||'[date of injury]').trim()
   const p = getPatient(selectedPatientId)
-  let injType = '[injury type]'
+  let incident = '[injury type] injury incident'
   if (p && p.ace && p.ace.formState) {
     const saved = p.ace.formState
-    injType = (saved.selects && saved.selects.injuryType) || (saved.inputs && saved.inputs.injuryType) || '[injury type]'
+    const injType = (saved.selects && saved.selects.injuryType) || (saved.inputs && saved.inputs.injuryType) || ''
+    if (injType) incident = dischargeIncidentPhrase(injType, saved.itSelected, injuryIsPlural(injType))
   }
   const pron = patientPronoun(p)
-  const plural = injuryIsPlural(injType)
-  const incidentWord = plural ? 'injury incidents' : 'injury incident'
-  const thatOccurred = plural ? 'that occurred' : 'that occurred'
   return {
     symptoms: DN_SYMPTOMS_TEXT,
     highScore: `Trailmaking (Neurocognitive) is today's highest score of the patient's rehab activities today.`,
     lowScore: `Immediate Memory (Neurocognitive) is today's lowest score of the patient's rehab activities today.`,
     recoveryStatus: 'Slight improvement with occasional exacerbation',
     riskFactors: dnRiskFactorsText(p),
-    causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${injType} ${incidentWord} that occurred on ${d}.`,
-    medicalNecessity: `The care and treatment rendered to the patient, ${n}, has been medically necessary for the injuries sustained in their ${injType} ${incidentWord} that occurred on ${d}.`,
+    causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${d}.`,
+    medicalNecessity: `The care and treatment rendered to the patient, ${n}, has been medically necessary for the injuries sustained in their ${incident} that occurred on ${d}.`,
     reasonableness: 'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'
   }
 }
@@ -2682,7 +2680,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       boldLine('OBJECTIVE',12);boldLine('OBJECTIVE DAILY CONCUSSION FINDINGS:',12)
       inlineBoldNormal('Neuro/Vestibular Today\'s High Score:',' '+bp.highScore,12);inlineBoldNormal('Neuro/Vestibular Today\'s Low Score:',' '+bp.lowScore,12);gap(13)
       boldLine('ASSESSMENT',12);boldLine('Recovery Status',12);normalLine(bp.recoveryStatus,12)
-      boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity',12);normalLine(bp.riskFactors,12)
+      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity',12);normalLine(bp.riskFactors,12)}
       boldLine('Causation',12);normalLine(bp.causation,12);boldLine('Medical Necessity',12);normalLine(bp.medicalNecessity,12);boldLine('Reasonableness',12);normalLine(bp.reasonableness,12);gap(13)
       boldLine('PLAN',12);boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY',12);gap(13)
       boldLine('97112 Neuromuscular Re-Education (NMR)',12);inlineBoldNormal('Neuromuscular Re-education:',' rehabilitation of vestibular and/or brain-based balance, movement, coordination, kinesthetic sense, posture and proprioception particularly eye movement and balance in order to improve function.',12);gap(13)
@@ -2911,8 +2909,10 @@ function downloadDailyNotesPdf() {
     boldLine('ASSESSMENT', 12)
     boldLine('Recovery Status', 12)
     normalLine(bp.recoveryStatus, 12)
-    boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity', 12)
-    normalLine(bp.riskFactors, 12)
+    if (bp.riskFactors) {
+      boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity', 12)
+      normalLine(bp.riskFactors, 12)
+    }
     boldLine('Causation', 12)
     normalLine(bp.causation, 12)
     boldLine('Medical Necessity', 12)
@@ -6198,7 +6198,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       if(!ace&&!day2AceInput('ptName',''))return
       const name=day2SavedPatientName()
       const doi=clean((ace&&ace.dateOfInjury)||day2AceInput('doi')||(p&&p.demographics?p.demographics.doi:'')||'—')
-      const injType=clean(day2AceSelect('injuryType','—')||'—')
+      const incident=dischargeIncidentPhrase(clean(day2AceSelect('injuryType','—')||'—'),p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected)
       const pn=day2LocalPron(day2AceSelect('ptGender',p&&p.demographics?p.demographics.gender:''))
       const risks=day2SavedAssessmentRisks()
       const dxLines=day2SavedDiagnosisLines()
@@ -6206,9 +6206,10 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultHeading('ASSESSMENT',11)
       resultHeading('Impression',10)
       resultText(day2SavedImpression(),9.6,5)
-      resultRichParagraph([
+      // Left out when no risk factors were ticked.
+      if(risks.length)resultRichParagraph([
         {text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Long-Term Recurring Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},
-        {text:risks.length?risks.join(', '):'None identified'}
+        {text:risks.join(', ')}
       ],{size:12,space:6})
       resultHeading('Diagnosis',10)
       if(dxLines.length){dxLines.forEach(dx=>resultText(dx,9.6,2))}else{resultText('No diagnosis code selected',9.6,2)}
@@ -6216,9 +6217,9 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultHeading('Prognosis',10)
       resultText(day2SavedPrognosis(),9.6,5)
       resultHeading('Causation',10)
-      resultText("Based on review of "+name+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+injType+" injury incident that occurred on "+doi+".",9.6,5)
+      resultText("Based on review of "+name+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+incident+" that occurred on "+doi+".",9.6,5)
       resultHeading('Medical Necessity',10)
-      resultText('The care and treatment rendered to '+name+' has been medically necessary for the injuries sustained in the '+injType+' injury incident that occurred on '+doi+'.',9.6,5)
+      resultText('The care and treatment rendered to '+name+' has been medically necessary for the injuries sustained in the '+incident+' that occurred on '+doi+'.',9.6,5)
       resultHeading('Reasonableness',10)
       resultText('The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.',9.6,8)
     }
@@ -6226,7 +6227,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       const ace=p&&p.ace?p.ace:null
       const name=day2SavedPatientName()
       const doi=clean((ace&&ace.dateOfInjury)||day2AceInput('doi')||(p&&p.demographics?p.demographics.doi:'')||'—')
-      const injType=clean(day2AceSelect('injuryType','—')||'—')
+      const incident=dischargeIncidentPhrase(clean(day2AceSelect('injuryType','—')||'—'),p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected)
       const pn=day2LocalPron(day2AceSelect('ptGender',p&&p.demographics?p.demographics.gender:''))
       const risks=day2SavedAssessmentRisks()
       const dxLines=day2SavedDiagnosisLines()
@@ -6305,18 +6306,18 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
         ?'Discharged. No Concussion.'
         :'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. Patient is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'
       resultRichParagraph([{text:'Final Status:   ',bold:true,size:12},{text:finalStatusText}],{size:12,space:8})
-      // Risk Factors line is omitted for no-follow-up cases.
-      if(!noFollowup)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:risks.length?risks.join(', '):'None identified'}],{size:12,space:6})
+      // Risk Factors line is omitted for no-follow-up cases and when none were ticked.
+      if(!noFollowup&&risks.length)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:risks.join(', ')}],{size:12,space:6})
       // Diagnosis
       resultHeading('Diagnosis',10)
       if(dxLines.length){dxLines.forEach(dx=>resultText(dx,9.6,2))}else{resultText('No diagnosis code selected',9.6,2)}
       y+=3
       // Causation
       resultHeading('Causation',10)
-      resultText("Based on review of "+name+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+injType+" injury incident that occurred on "+doi+".",9.6,5)
+      resultText("Based on review of "+name+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+incident+" that occurred on "+doi+".",9.6,5)
       // Medical Necessity
       resultHeading('Medical Necessity',10)
-      resultText('The care and treatment rendered to '+name+' has been medically necessary for the injuries sustained in the '+injType+' injury incident that occurred on '+doi+'.',9.6,5)
+      resultText('The care and treatment rendered to '+name+' has been medically necessary for the injuries sustained in the '+incident+' that occurred on '+doi+'.',9.6,5)
       // Reasonableness
       resultHeading('Reasonableness',10)
       resultText('The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.',9.6,8)
@@ -9897,9 +9898,6 @@ function aceInjuryTypeText(p){
   const fs=(p&&p.ace&&p.ace.formState)||{}
   return String((fs.selects||{}).injuryType||(fs.inputs||{}).injuryType||(fs.inputs||{}).itOtherText||'').trim()
 }
-/* "the <type> injury incident" for a type from the Day 1 list; a typed
-   description goes in brackets so the sentence still reads; with none at
-   all, just "the injury incident" rather than naming a collision. */
 /* Risk factors ticked in Day 1's Assessment (the list the Day 2 report and
    the Day 1 Impression print). The summary used to print "second head
    impact" for everyone unless it was typed in. */
@@ -9908,11 +9906,31 @@ function aceRiskFactorsText(p){
   const list=(fs.checks&&Array.isArray(fs.checks.assessRiskList))?fs.checks.assessRiskList:[]
   return list.map(x=>String(x||'').trim()).filter(Boolean).join(', ')
 }
-function dischargeIncidentPhrase(type){
+/* The risk factors text, or '' when there are none - the reports then leave
+   the Risk Factors line out rather than print "None identified". An uploaded
+   Day 1 can carry that wording itself. */
+function riskFactorsOrBlank(text){
+  const t=String(text||'').trim()
+  return /^(none( identified| reported)?|n\/a)\.?$/i.test(t)?'':t
+}
+/* Whether the Day 1 injury type is a description typed under "Others" / "No
+   Vehicle Involved" rather than a type from the list (or one added with Type
+   Here/Add). picked is the picker's saved choice (formState.itSelected);
+   records saved before it was kept go by whether the text is on the list. */
+function injuryTypeIsWriteIn(type,picked){
+  if(picked)return picked==='Others'||picked==='No Vehicle Involved'
+  return !IT_GROUPS.some(g=>(g.options||[]).includes(type))
+}
+/* "the ___ that occurred on" in Causation / Medical Necessity: "motor vehicle
+   collision injury incident" for a listed type, "injury incident, struck on
+   the head by ..., " for a typed description, plain "injury incident" with
+   none. The description used to go in brackets, which staff took for
+   something they had typed. */
+function dischargeIncidentPhrase(type,picked,plural){
   const t=String(type||'').trim()
-  if(!t)return 'injury incident'
-  const listed=IT_GROUPS.some(g=>(g.options||[]).includes(t))
-  return listed?t+' injury incident':'injury incident ('+t+')'
+  const word=plural?'injury incidents':'injury incident'
+  if(!t||t==='—')return word
+  return injuryTypeIsWriteIn(t,picked)?word+', '+t+',':t+' '+word
 }
 function getCaseDischargeData(p){
   const cd=p.caseDischarge||{}
@@ -9939,9 +9957,9 @@ function getCaseDischargeData(p){
     dischargeDate,
     totalDates:totalDates||'',
     finalStatus:cd.finalStatus||(isPatientAceNoFollowup(p)?'Discharged. No concussion.':'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. Patient is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'),
-    riskFactors:cd.riskFactors||(p?.ace?.riskFactors||'')||aceRiskFactorsText(p)||'None identified',
+    riskFactors:riskFactorsOrBlank(cd.riskFactors||(p?.ace?.riskFactors||'')||aceRiskFactorsText(p)),
     injuryType:injuryType,
-    incidentPhrase:dischargeIncidentPhrase(injuryType),
+    incidentPhrase:dischargeIncidentPhrase(injuryType,cd.injuryType?'':p?.ace?.formState?.itSelected),
     dxLines:Array.isArray(p?.ace?.diagnosisCodes)?p.ace.diagnosisCodes:[]
   }
 }
@@ -9988,8 +10006,9 @@ function buildCaseDischargeDoc(p){
   richPara([{t:'Discharge Date:',b:true},{t:cd.dischargeDate||'—'}],12,2)
   richPara([{t:'Total Dates of service:',b:true},{t:cd.totalDates||'—'}],12,8)
   richPara([{t:'Final Status:',b:true},{t:cd.finalStatus}],12,6)
-  // Risk Factors line is omitted for no-follow-up cases (matches the inline ACE copy).
-  if(!isPatientAceNoFollowup(p))richPara([{t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms:',b:true},{t:cd.riskFactors||'None identified'}],12,8)
+  // Risk Factors line is omitted for no-follow-up cases (matches the inline ACE copy)
+  // and when there are none to list.
+  if(!isPatientAceNoFollowup(p)&&cd.riskFactors)richPara([{t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms:',b:true},{t:cd.riskFactors}],12,8)
   heading('Diagnosis',12)
   richPara([{t:(cd.dxLines&&cd.dxLines.length)?cd.dxLines.join(', '):'No diagnosis code selected'}],11,8)
   heading('Causation',12)
@@ -13098,13 +13117,13 @@ document.addEventListener('click', e => {
 function updateBoilerplates(){
   const name=document.getElementById('ptName').value.trim()||'PT Name'
   const doi=document.getElementById('doi').value.trim()||'[date of injury]'
-  const injType=document.getElementById('injuryType').value||'[injury type]'
+  const injType=document.getElementById('injuryType').value
+  const picked=(typeof itSelected!=='undefined')?itSelected:''
+  const incident=escHtml(injType?dischargeIncidentPhrase(injType,picked,injuryIsPlural(injType)):'[injury type] injury incident')
   const pron=patientPronoun(getPatient(selectedPatientId))
-  const plural=injuryIsPlural(injType)
-  const incW=plural?'injury incidents':'injury incident'
   document.getElementById('bpBox').innerHTML=
-    `<strong>Causation:</strong> Based on review of ${name}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${injType} ${incW} that occurred on ${doi}.<br><br>`+
-    `<strong>Medical Necessity:</strong> The care and treatment rendered to ${name} has been medically necessary for the injuries sustained in the ${injType} ${incW} that occurred on ${doi}.<br><br>`+
+    `<strong>Causation:</strong> Based on review of ${escHtml(name)}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${escHtml(doi)}.<br><br>`+
+    `<strong>Medical Necessity:</strong> The care and treatment rendered to ${escHtml(name)} has been medically necessary for the injuries sustained in the ${incident} that occurred on ${escHtml(doi)}.<br><br>`+
     `<strong>Reasonableness:</strong> The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.`
 }
 
@@ -13971,10 +13990,11 @@ function buildPDF(name,opts){
   H1('ASSESSMENT')
   H2('Impression')
   para([getAceImpressionText()])
-  if(!isAceNoFollowupSelected()){
+  // Left out for no-follow-up and when no risk factors were ticked.
+  if(!isAceNoFollowupSelected()&&assessRisks.length>0){
     para([
       {t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Long-Term Recurring Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',b:true},
-      {t:assessRisks.length>0?assessRisks.join(', '):'None identified'}
+      {t:assessRisks.join(', ')}
     ])
   }
 
@@ -13993,11 +14013,15 @@ function buildPDF(name,opts){
     para([progTxt])
   }
 
+  // A typed-in description goes between commas (see dischargeIncidentPhrase).
+  const incidentSegs=(injType!=='—'&&injuryTypeIsWriteIn(injType,itSelected))
+    ?[{t:'injury incident, '},{t:injType,b:true},{t:', that occurred on '}]
+    :[{t:injType,b:true},{t:' injury incident that occurred on '}]
   H2('Causation')
-  para([{t:'Based on review of '},{t:name,b:true},{t:"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "},{t:pn.poss},{t:' injuries and the '},{t:injType,b:true},{t:' injury incident that occurred on '},{t:doi,b:true},{t:'.'}])
+  para([{t:'Based on review of '},{t:name,b:true},{t:"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "},{t:pn.poss},{t:' injuries and the '},...incidentSegs,{t:doi,b:true},{t:'.'}])
 
   H2('Medical Necessity')
-  para([{t:'The care and treatment rendered to '},{t:name,b:true},{t:' has been medically necessary for the injuries sustained in the '},{t:injType,b:true},{t:' injury incident that occurred on '},{t:doi,b:true},{t:'.'}])
+  para([{t:'The care and treatment rendered to '},{t:name,b:true},{t:' has been medically necessary for the injuries sustained in the '},...incidentSegs,{t:doi,b:true},{t:'.'}])
 
   H2('Reasonableness')
   para(['The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'])
@@ -14032,9 +14056,9 @@ function buildPDF(name,opts){
     H2('Diagnosis')
     para([{t:(cd.dxLines&&cd.dxLines.length)?cd.dxLines.join(', '):'No diagnosis code selected'}])
     H2('Causation')
-    para(["Based on review of "+(cd.name||name)+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between their injuries and the "+dischargeIncidentPhrase(injType||cd.injuryType)+" that occurred on "+(cd.doi||'—')+"."])
+    para(["Based on review of "+(cd.name||name)+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between their injuries and the "+dischargeIncidentPhrase(injType!=='—'?injType:cd.injuryType,injType!=='—'?itSelected:'')+" that occurred on "+(cd.doi||'—')+"."])
     H2('Medical Necessity')
-    para(['The care and treatment rendered to the patient, '+(cd.name||name)+', has been medically necessary for the injuries sustained in the '+dischargeIncidentPhrase(injType||cd.injuryType)+' that occurred on '+(cd.doi||'—')+'.'])
+    para(['The care and treatment rendered to the patient, '+(cd.name||name)+', has been medically necessary for the injuries sustained in the '+dischargeIncidentPhrase(injType!=='—'?injType:cd.injuryType,injType!=='—'?itSelected:'')+' that occurred on '+(cd.doi||'—')+'.'])
     H2('Reasonableness')
     para(['The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'])
   }else{
