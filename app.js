@@ -2680,7 +2680,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       boldLine('OBJECTIVE',12);boldLine('OBJECTIVE DAILY CONCUSSION FINDINGS:',12)
       inlineBoldNormal('Neuro/Vestibular Today\'s High Score:',' '+bp.highScore,12);inlineBoldNormal('Neuro/Vestibular Today\'s Low Score:',' '+bp.lowScore,12);gap(13)
       boldLine('ASSESSMENT',12);boldLine('Recovery Status',12);normalLine(bp.recoveryStatus,12)
-      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity',12);normalLine(bp.riskFactors,12)}
+      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity',12);normalLine(reportSentence(bp.riskFactors),12)}
       boldLine('Causation',12);normalLine(bp.causation,12);boldLine('Medical Necessity',12);normalLine(bp.medicalNecessity,12);boldLine('Reasonableness',12);normalLine(bp.reasonableness,12);gap(13)
       boldLine('PLAN',12);boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY',12);gap(13)
       boldLine('97112 Neuromuscular Re-Education (NMR)',12);inlineBoldNormal('Neuromuscular Re-education:',' rehabilitation of vestibular and/or brain-based balance, movement, coordination, kinesthetic sense, posture and proprioception particularly eye movement and balance in order to improve function.',12);gap(13)
@@ -2911,7 +2911,7 @@ function downloadDailyNotesPdf() {
     normalLine(bp.recoveryStatus, 12)
     if (bp.riskFactors) {
       boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity', 12)
-      normalLine(bp.riskFactors, 12)
+      normalLine(reportSentence(bp.riskFactors), 12)
     }
     boldLine('Causation', 12)
     normalLine(bp.causation, 12)
@@ -6209,7 +6209,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       // Left out when no risk factors were ticked.
       if(risks.length)resultRichParagraph([
         {text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Long-Term Recurring Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},
-        {text:risks.join(', ')}
+        {text:reportSentence(risks.join(', '))}
       ],{size:12,space:6})
       resultHeading('Diagnosis',10)
       if(dxLines.length){dxLines.forEach(dx=>resultText(dx,9.6,2))}else{resultText('No diagnosis code selected',9.6,2)}
@@ -6307,7 +6307,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
         :'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. Patient is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'
       resultRichParagraph([{text:'Final Status:   ',bold:true,size:12},{text:finalStatusText}],{size:12,space:8})
       // Risk Factors line is omitted for no-follow-up cases and when none were ticked.
-      if(!noFollowup&&risks.length)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:risks.join(', ')}],{size:12,space:6})
+      if(!noFollowup&&risks.length)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:reportSentence(risks.join(', '))}],{size:12,space:6})
       // Diagnosis
       resultHeading('Diagnosis',10)
       if(dxLines.length){dxLines.forEach(dx=>resultText(dx,9.6,2))}else{resultText('No diagnosis code selected',9.6,2)}
@@ -10008,7 +10008,7 @@ function buildCaseDischargeDoc(p){
   richPara([{t:'Final Status:',b:true},{t:cd.finalStatus}],12,6)
   // Risk Factors line is omitted for no-follow-up cases (matches the inline ACE copy)
   // and when there are none to list.
-  if(!isPatientAceNoFollowup(p)&&cd.riskFactors)richPara([{t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms:',b:true},{t:cd.riskFactors}],12,8)
+  if(!isPatientAceNoFollowup(p)&&cd.riskFactors)richPara([{t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms:',b:true},{t:reportSentence(cd.riskFactors)}],12,8)
   heading('Diagnosis',12)
   richPara([{t:(cd.dxLines&&cd.dxLines.length)?cd.dxLines.join(', '):'No diagnosis code selected'}],11,8)
   heading('Causation',12)
@@ -13330,7 +13330,7 @@ function collectAll(containerId,items){
 function buildPDF(name,opts){
   const doi=gv('doi'),dos=gv('dos'),dob=gv('ptDOB'),age=gv('ptAge')
   const injType=gv('injuryType'),doiEv=gv('doi'),jur=gv('jurisdiction')
-  const jurClause=(jur&&jur!=='—')?[{t:' in '},{t:jur,b:true}]:[]
+  const jurClause=(jur&&jur!=='—')?[{t:' in '+jur}]:[]
   const aceScore=document.getElementById('scoreTotalBig').textContent
   let reporterVal=go('reporter')
   if(document.getElementById('reporter').value&&document.getElementById('reporter').value!=='Patient'&&gv('reporterOther')!=='—'&&gv('reporterOther').trim())reporterVal+=' — '+gv('reporterOther')
@@ -13687,12 +13687,15 @@ function buildPDF(name,opts){
 
   H1('INITIAL DATE OF SERVICE',dos)
   H1('ACUTE CONCUSSION EVALUATION (ACE)')
+  // Plain text, no bold (staff, 2 Nov 2026). A typed-in injury description
+  // goes between commas, as in Causation (see dischargeIncidentPhrase).
+  const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType+',':'a '+injType
   para([
-    {t:'Today the patient, '},{t:name,b:true},{t:', DOB: '},{t:dob,b:true},{t:' AGE: '},{t:age,b:true},
-    {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in a '},
-    {t:injType,b:true},{t:' on '},{t:doiEv,b:true},...jurClause,
+    {t:'Today the patient, '+name+', DOB: '+dob+' AGE: '+age},
+    {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in '},
+    {t:sustainedIn+' on '+doiEv},...jurClause,
     {t:'. The Acute Concussion Evaluation is the United States Centers for Disease Control and Prevention (CDC) standard initial assessment in the diagnosis pathway for acute (72 hours or less post-injury) traumatic brain injury concussion. The ACE contains similar questions to the post-concussion standard instrument questionnaire named The Rivermead Post-Concussion Symptoms Questionnaire, and is therefore used herein to establish indications for further neurocognitive and vestibular examination for both Acute and Post-Acute TBI symptoms. The '},
-    {t:reporterVal,b:true},
+    {t:reporterVal},
     {t:' has signed a consent document. The findings of this summary report are based on observation and responses to written and verbal questioning of the patient.'}
   ])
 
@@ -13994,7 +13997,7 @@ function buildPDF(name,opts){
   if(!isAceNoFollowupSelected()&&assessRisks.length>0){
     para([
       {t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Long-Term Recurring Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',b:true},
-      {t:assessRisks.join(', ')}
+      {t:reportSentence(assessRisks.join(', '))}
     ])
   }
 
