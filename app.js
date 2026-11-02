@@ -10952,6 +10952,8 @@ function collectAceFormState(){
     state.checks[id]=[...document.querySelectorAll('#'+id+' label.checked')].map(chkTxt)
   })
   state.icdCodes=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>el.querySelector('.icd-code')?.textContent.trim()).filter(Boolean)
+  // Code AND description: two rows share R42. (Dizziness, Vertigo), and by code alone reopening ticked both.
+  state.icdItems=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>(el.querySelector('.icd-code')?.textContent.trim()||'')+'|'+(el.querySelector('.icd-desc')?.textContent.trim()||''))
   // The injury-type picker's actual selection, 'No Vehicle Involved' against
   // the generic 'Others' write-in, has to be saved explicitly. Both collapse to
   // the same free-text value in state.selects, so restoring from that text
@@ -11049,10 +11051,13 @@ function applyAceFormState(state){
     })
   })
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>el.classList.remove('checked'))
-  const selected=new Set(state.icdCodes||[])
+  // By code and description when the save has them (see collectAceFormState); older saves by code.
+  const byItem=Array.isArray(state.icdItems)
+  const selected=new Set(byItem?state.icdItems:(state.icdCodes||[]))
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>{
     const code=el.querySelector('.icd-code')?.textContent.trim()
-    if(selected.has(code))el.classList.add('checked')
+    const key=byItem?code+'|'+(el.querySelector('.icd-desc')?.textContent.trim()||''):code
+    if(selected.has(key))el.classList.add('checked')
   })
   const n=document.querySelectorAll('#icdGrid .icd-item.checked').length
   const dx=document.getElementById('dxCount'); if(dx)dx.textContent=n+' selected'

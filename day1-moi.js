@@ -33,7 +33,11 @@
     ;(extra || []).forEach(function (t) { if (out.indexOf(t) === -1) out.push(t) })
     return out
   }
-  var lower = function (t) { return t.charAt(0).toLowerCase() + t.slice(1) }
+  // Lower-case the first letter to read mid-sentence ("a sedan"), but leave a
+  // capitalised abbreviation alone: "SUV" stays "SUV", not "sUV".
+  var lower = function (t) { return /^[A-Z]{2}/.test(t) ? t : t.charAt(0).toLowerCase() + t.slice(1) }
+  // Stories saved before that carry "sUV": give the abbreviation back its capital.
+  var capsBack = function (t) { return typeof t === 'string' && /^[a-z][A-Z]{2,}/.test(t) ? t.charAt(0).toUpperCase() + t.slice(1) : t }
 
   function chipSpecs() {
     var symptoms = (typeof IMMEDIATE_EXPERIENCE !== 'undefined' ? IMMEDIATE_EXPERIENCE : ['Headache', 'Dizziness', 'Nausea/Vomiting'])
@@ -134,7 +138,12 @@
   }
   function isYesNoWord(o) { return /^(yes|no|n\/a|na)$/i.test(String(o).trim()) }
   function parseData(raw) {
-    try { var d = JSON.parse(raw); return d && Array.isArray(d.tokens) ? d : null } catch (e) { return null }
+    try { var d = JSON.parse(raw) } catch (e) { return null }
+    if (!d || !Array.isArray(d.tokens)) return null
+    d.tokens.forEach(function (t) {
+      if (t && t.k === 'c') { if (Array.isArray(t.o)) t.o = t.o.map(capsBack); if (Array.isArray(t.s)) t.s = t.s.map(capsBack) }
+    })
+    return d
   }
 
   /* -------------------------------- editor ------------------------------- */
@@ -669,7 +678,7 @@
       return { v: 1, kind: 'nonvehicle', pristine: false, tokens: head.concat(cut === -1 ? [] : nv.tokens.slice(cut)) }
     }
     var d = fromTemplate(kind)
-    var low = function (v) { return v ? v.charAt(0).toLowerCase() + v.slice(1) : v }
+    var low = function (v) { return v ? lower(v) : v }
     var impacts = [domVal('dhi1'), domVal('ihi1')].filter(function (v) { return !blankish(v) })
     var symptoms = Array.prototype.map.call(document.querySelectorAll('#immedExperienceList label.checked'), function (l) {
       return typeof chkTxt === 'function' ? chkTxt(l) : l.textContent.trim()
