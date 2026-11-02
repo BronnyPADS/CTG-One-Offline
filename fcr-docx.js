@@ -218,6 +218,25 @@
       else if (op === OPS.setFillCMYKColor) gfx.push({ op: 'k', a: arr(a) })
       else if (op === OPS.paintFormXObjectBegin) { gfx.push({ op: 'q', a: [] }); gfx.push({ op: 'cm', a: arr(a && a[0]) }) }
       else if (op === OPS.paintFormXObjectEnd) gfx.push({ op: 'Q', a: [] })
+      else if (op === OPS.constructPath && Array.isArray(a[0])) {
+        /* pdf.js 3 (loadClassicPdfJs: the offline copy opened from the disk):
+           [codes, numbers, minMax], one code per drawing op, and the paint as
+           an op of its own after it. Read as pdf.js 6 paths, every line came
+           out empty, so no table was found: a daily note's Name / DOB box went
+           into the Word copy as two plain lines (2 Nov 2026). */
+        var codes = a[0], nums = arr(a[1]), at = 0
+        for (var ci = 0; ci < codes.length; ci++) {
+          var cd = codes[ci]
+          if (cd === OPS.moveTo) { gfx.push({ op: 'm', a: nums.slice(at, at + 2) }); at += 2 }
+          else if (cd === OPS.lineTo) { gfx.push({ op: 'l', a: nums.slice(at, at + 2) }); at += 2 }
+          else if (cd === OPS.curveTo) { gfx.push({ op: 'c', a: nums.slice(at, at + 6) }); at += 6 }
+          else if (cd === OPS.curveTo2 || cd === OPS.curveTo3) { gfx.push({ op: 'v', a: nums.slice(at, at + 4) }); at += 4 }
+          else if (cd === OPS.closePath) gfx.push({ op: 'h', a: [] })
+          else if (cd === OPS.rectangle) { gfx.push({ op: 're', a: nums.slice(at, at + 4) }); at += 4 }
+          else break   // an unknown code: stop rather than desync
+        }
+      }
+      else if (PAINT[op] || op === OPS.endPath) gfx.push({ op: PAINT[op] || 'n', a: [] })   // pdf.js 3's paint
       else if (op === OPS.constructPath) {
         var subs = a[1] || []
         for (var s = 0; s < subs.length; s++) {
@@ -404,20 +423,24 @@
     })
     lines.forEach(function (ln) {
       ln.items.sort(function (a, b) { return a.x - b.x })
-      var cols = [], col = null, prevEnd = -1e9, prevText = ''
+      var cols = [], col = null, prevEnd = -1e9, prevText = '', prevF = null
       ln.items.forEach(function (it) {
         var gap = it.x - prevEnd
+        /* A bold label and its value set close ("Session Date:08/28/2026",
+           "Symptoms:Headache" - a daily note from before 2 Nov 2026, or one
+           whose leading space pdf.js dropped) get the space between them. */
+        var label = prevF && prevF.b && it.f && !it.f.b && /:$/.test(prevText) && /^\S/.test(it.s)
         /* A cell whose words nearly fill it leaves less than the usual gap
            before the next cell; the line between them still makes it a new
            column, or the next cell's text joined this one and ran over the
            line ("VOR Vertical 0"). */
         if (!col || gap > Math.max(6, ln.size * 0.9) || ruled(prevEnd, it.x, it.y)) {
           col = { x: it.x, parts: [] }; cols.push(col)
-        } else if (gap > ln.size * 0.12 && !/\s$/.test(prevText) && !/^\s/.test(it.s)) {
+        } else if ((gap > ln.size * 0.12 || label) && !/\s$/.test(prevText) && !/^\s/.test(it.s)) {
           col.parts.push({ s: ' ', f: it.f, size: it.size })
         }
         col.parts.push({ s: it.s, f: it.f, size: it.size, color: it.color })
-        prevEnd = Math.max(prevEnd, it.x + it.w); prevText = it.s
+        prevEnd = Math.max(prevEnd, it.x + it.w); prevText = it.s; prevF = it.f
       })
       ln.cols = cols
       ln.left = cols[0].x
@@ -1019,6 +1042,65 @@
     foot.sort(function (a, b) { return a.x - b.x })
     return { head: head, body: body, foot: foot, pageNo: pageNo }
   }
+  /* The letterhead as the report's own PDF sets it, for its Word header: the
+     name and the address lines at the PDF's heights and sizes. The daily notes
+     and the case discharge put the name level with the second address line,
+     in 10pt lines 13pt apart; the shared header (day1-docx.js) has the Day 1's
+     11pt lines with the name at the bottom, which set a daily note's name a
+     line and a half low (2 Nov 2026). {xml, hd}: hd, the header's distance
+     from the page's top in points. null when it would not fit above the text
+     area (REPORT_TOP) - the Day 2 / ACE layout - and the shared one is used.
+     Heights as textPageParagraphs reckons them: a line h tall has its
+     baseline a descent (0.22 of the size) above its foot. */
+  function letterheadXml(rep) {
+    if (!rep.head || !rep.h) return null
+    var name = null, rows = []
+    rep.head.slice().sort(function (a, b) { return (b.y - a.y) || (a.x - b.x) }).forEach(function (it) {
+      var y = rep.h - it.y
+      if (it.s.trim() === 'CONCUSSION THERAPY GROUP') { if (!name) name = { it: it, y: y }; return }
+      var r = rows[rows.length - 1]
+      if (r && Math.abs(r.y - y) < 1.5) r.items.push(it); else rows.push({ y: y, items: [it] })
+    })
+    if (!name || rows.length < 2) return null
+    var n = rows.length, size = rows[0].items[0].size
+    var pitch = (rows[n - 1].y - rows[0].y) / (n - 1)
+    if (pitch < size || pitch > size * 2) return null
+    var nSize = name.it.size, nLine = nSize * 1.15, TINY = 1.15
+    var rTop = rows[0].y - pitch + size * 0.22, nTop = name.y - nLine + nSize * 0.22
+    var top = Math.min(rTop, nTop), hd = top - TINY
+    var bottom = Math.max(rows[n - 1].y + size * 0.22, name.y + nSize * 0.22) + TINY
+    if (hd < 9 || bottom > REPORT_TOP - 1) return null
+    var pPr = function (before, h, sz, jc) {
+      return '<w:pPr><w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/><w:spacing w:before="' + tw(before) + '" w:after="0" w:line="' + lineMult(h, sz) + '" w:lineRule="auto"/>' +
+        '<w:ind w:left="0" w:right="0"/>' + (jc ? '<w:jc w:val="' + jc + '"/>' : '') +
+        '<w:rPr><w:sz w:val="' + Math.round(sz * 2) + '"/><w:szCs w:val="' + Math.round(sz * 2) + '"/></w:rPr></w:pPr>'
+    }
+    var nameP = '<w:p>' + pPr(nTop - top, nLine, nSize) + runXml({ s: 'CONCUSSION THERAPY GROUP', f: name.it.f, size: nSize }) + '</w:p>'
+    var addrW = 0
+    var addrP = rows.map(function (r, i) {
+      var parts = []
+      r.items.sort(function (a, b) { return a.x - b.x }).forEach(function (it, k) {
+        if (k) parts.push({ s: ' ', f: it.f, size: it.size })
+        parts.push({ s: it.s.trim(), f: it.f, size: it.size })
+      })
+      addrW = Math.max(addrW, r.items[r.items.length - 1].x + r.items[r.items.length - 1].w - r.items[0].x)
+      return '<w:p>' + pPr(i ? 0 : rTop - top, pitch, size, 'right') + runsXml(parts) + '</w:p>'
+    }).join('')
+    // Name on the left, the address set right; each column wide enough for its words.
+    var W = tw(rep.right - rep.left)
+    var lw = Math.min(Math.max(Math.round(W / 2), tw(name.it.w + 6)), W - tw(addrW + 6))
+    var nil = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(function (s) { return '<w:' + s + ' w:val="nil"/>' }).join('')
+    var zero = ['top', 'left', 'bottom', 'right'].map(function (s) { return '<w:' + s + ' w:w="0" w:type="dxa"/>' }).join('')
+    var cell = function (w, xml) { return '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>' + xml + '</w:tc>' }
+    var tbl = '<w:tbl><w:tblPr><w:tblW w:w="' + W + '" w:type="dxa"/><w:tblInd w:w="' + tw(rep.left - M_PT) + '" w:type="dxa"/>' +
+      '<w:tblBorders>' + nil + '</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar>' + zero + '</w:tblCellMar></w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="' + lw + '"/><w:gridCol w:w="' + (W - lw) + '"/></w:tblGrid>' +
+      '<w:tr><w:trPr><w:cantSplit/></w:trPr>' + cell(lw, nameP) + cell(W - lw, addrP) + '</w:tr></w:tbl>'
+    // A 1pt line before the table (Google Docs cannot start a header with one) and after it.
+    var tiny = '<w:p><w:pPr>' + TINY_P + '</w:pPr></w:p>'
+    return { hd: hd, xml: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ' + NS + '>' + tiny + tbl + tiny + '</w:hdr>' }
+  }
+
   /* Whether a report's pages carry the letterhead, and where it and the footer
      sit (read from its first page), or null. doc.ctgFooterLeft: the footer
      line for a report whose PDF has none (the case discharge summary). */
@@ -1027,7 +1109,7 @@
     var info = null
     try {
       var at = doc.ctgPageNoAt
-      var sp = splitReportPage(readJsPdfPage(doc, 1), at)
+      var jp1 = readJsPdfPage(doc, 1), sp = splitReportPage(jp1, at)
       var name = sp.head.filter(function (it) { return it.s.trim() === 'CONCUSSION THERAPY GROUP' })[0]
       if (name) {
         var right = sp.head.reduce(function (m, it) { return Math.max(m, it.x + it.w) }, name.x + name.w)
@@ -1035,7 +1117,8 @@
           left: name.x, right: right,
           footLeft: sp.foot.length ? sp.foot[0].x : name.x,
           footRight: sp.pageNo ? sp.pageNo.x + sp.pageNo.w : at ? at.right : right,
-          footText: sp.foot.length ? sp.foot.map(function (it) { return it.s }).join(' ').trim() : String(doc.ctgFooterLeft || '')
+          footText: sp.foot.length ? sp.foot.map(function (it) { return it.s }).join(' ').trim() : String(doc.ctgFooterLeft || ''),
+          head: sp.head, h: jp1.h
         }
       }
     } catch (e) { info = null }
@@ -1069,15 +1152,16 @@
     }
     var reportSection = function (doc, rep) {
       for (var i = 0; i < reportSecs.length; i++) if (reportSecs[i].doc === doc) return reportSecs[i]
-      // The letterhead's table cells keep 5pt (100 twips) inside their edges: set it out by that much.
-      var hId = partFor(hdrParts, 'rIdHR', L.header({ ind: tw(rep.left - M_PT) - 100, width: tw(rep.right - rep.left) + 200 }))
+      var own = letterheadXml(rep)
+      // The shared letterhead's table cells keep 5pt (100 twips) inside their edges: set it out by that much.
+      var hId = partFor(hdrParts, 'rIdHR', own ? own.xml : L.header({ ind: tw(rep.left - M_PT) - 100, width: tw(rep.right - rep.left) + 200 }))
       // "Page X of Y" counts the whole file: no section starts again at 1.
       var fId = partFor(ftrParts, 'rIdFR', L.footer({}, 'NUMPAGES', { ind: tw(rep.footLeft - M_PT), tab: tw(rep.footRight - M_PT), text: rep.footText }))
       var sec = {
         doc: doc, key: 'R' + reportSecs.length,
         sect: '<w:sectPr><w:headerReference w:type="default" r:id="' + hId + '"/><w:footerReference w:type="default" r:id="' + fId + '"/>' +
           '<w:pgSz w:w="' + PAGE_W + '" w:h="' + PAGE_H + '"/>' +
-          '<w:pgMar w:top="' + tw(REPORT_TOP) + '" w:right="' + MARGIN + '" w:bottom="' + tw(REPORT_BOTTOM) + '" w:left="' + MARGIN + '" w:header="600" w:footer="400" w:gutter="0"/>' +
+          '<w:pgMar w:top="' + tw(REPORT_TOP) + '" w:right="' + MARGIN + '" w:bottom="' + tw(REPORT_BOTTOM) + '" w:left="' + MARGIN + '" w:header="' + (own ? tw(own.hd) : 600) + '" w:footer="400" w:gutter="0"/>' +
           '</w:sectPr>'
       }
       reportSecs.push(sec)
@@ -1161,7 +1245,8 @@
                   // Collapse the double spaces and drop any trailing page number
                   // ("Page X of Y", "N of M" or "N | M"): Word's field is the
                   // only page number. (The "|"/"of" forms avoid eating a date.)
-                  footText: usp.foot.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim().replace(/\s*(page\s+\d+\s+of\s+\d+|\d+\s*\|\s*\d+|\d+\s+of\s+\d+)\s*$/i, '').trim()
+                  footText: usp.foot.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim().replace(/\s*(page\s+\d+\s+of\s+\d+|\d+\s*\|\s*\d+|\d+\s+of\s+\d+)\s*$/i, '').trim(),
+                  head: usp.head, h: tp.h
                 }
                 var ukey = urep.footText || 'U'
                 if (!uploadDocs[ukey]) uploadDocs[ukey] = {}

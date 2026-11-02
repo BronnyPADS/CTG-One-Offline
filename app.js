@@ -2647,26 +2647,31 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
     function lw(w){doc.setLineWidth(w)}
     function dc(r,g,b){doc.setDrawColor(r,g,b)}
     function safe(v){return String(v||'').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").trim()||'—'}
+    /* A bold label's printed width. jsPDF measures with kerning it does not
+       print, so a long label ran into its value ("Symptoms:Headache"); each
+       value starts one space past this, drawn without a space of its own,
+       which the FCR's Word copy lost when it read the PDF back (2 Nov 2026). */
+    function lblW(t){return doc.getStringUnitWidth(t,{kerning:{}})*doc.internal.getFontSize()/doc.internal.scaleFactor}
     function drawPageHeader(){tc(0,0,0);sf('bold',12);doc.text('CONCUSSION THERAPY GROUP',ML,52);sf('normal',10);const rx=PW-MR;doc.text('2411 Crofton Lane, Suite 13A',rx,36,{align:'right'});doc.text('Crofton, MD, 21114-1336',rx,49,{align:'right'});doc.text('Phone: 410-451-9870',rx,62,{align:'right'});doc.text('Fax: 410-451-9872',rx,75,{align:'right'})}
     function drawPatientTable(note,noteNum){
       const x=ML,w=TW,colMid=w/2,rowH=22,top=90,sessionDate=dnFmtDate(note.sessionDate)
       lw(0.8);dc(0,0,0);doc.rect(x,top,w,rowH*2);doc.line(x,top+rowH,x+w,top+rowH);doc.line(x+colMid,top,x+colMid,top+rowH*2)
-      function cellLbl(lbl,val,cx,cy){sf('bold',12);doc.text(lbl,cx,cy);sf('normal',12);doc.text(val,cx+doc.getTextWidth(lbl),cy)}
-      cellLbl('Name:',' '+safe(patientName),x+5,top+15);cellLbl('DOB:',' '+safe(dob),x+colMid+5,top+15)
-      cellLbl('DOI:',' '+safe(doi),x+5,top+rowH+15);cellLbl('Session Date:',' '+safe(sessionDate),x+colMid+5,top+rowH+15)
-      const provY=top+rowH*2+13;sf('bold',10);doc.text('Provider:',x,provY);const provLblW=doc.getTextWidth('Provider:');sf('normal',10);doc.text(' '+safe(providerRaw),x+provLblW,provY);y=provY+10
+      function cellLbl(lbl,val,cx,cy){sf('bold',12);doc.text(lbl,cx,cy);const vx=cx+lblW(lbl);sf('normal',12);doc.text(val,vx+doc.getTextWidth(' '),cy)}
+      cellLbl('Name:',safe(patientName),x+5,top+15);cellLbl('DOB:',safe(dob),x+colMid+5,top+15)
+      cellLbl('DOI:',safe(doi),x+5,top+rowH+15);cellLbl('Session Date:',safe(sessionDate),x+colMid+5,top+rowH+15)
+      const provY=top+rowH*2+13;sf('bold',10);doc.text('Provider:',x,provY);const provLblW=lblW('Provider:');sf('normal',10);doc.text(safe(providerRaw),x+provLblW+doc.getTextWidth(' '),provY);y=provY+10
     }
     function newPage(){doc.addPage();drawPageHeader();y=95}
     function need(h){if(y+h>PH-50)newPage()}
     function boldLine(text,size){size=size||12;const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);sf('bold',size);tc(0,0,0);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
     function normalLine(text,size){size=size||12;sf('normal',size);tc(0,0,0);const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
     function inlineBoldNormal(boldText,normalText,size){
-      size=size||12;tc(0,0,0);sf('bold',size);const bw=doc.getTextWidth(boldText);const clean=safe(String(normalText||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' '))
+      size=size||12;tc(0,0,0);sf('bold',size);const bw=lblW(boldText);const clean=safe(String(normalText||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' '))
       if(!clean||clean==='—'){need(17);doc.text(boldText,ML,y);y+=13;return}
-      sf('normal',size);const firstW=TW-bw-2,words=clean.split(' ').filter(Boolean),lines=[];let cur='',wi=0
+      sf('normal',size);const sw=doc.getTextWidth(' '),firstW=TW-bw-sw,words=clean.split(' ').filter(Boolean),lines=[];let cur='',wi=0
       while(wi<words.length){const test=cur?cur+' '+words[wi]:words[wi];if(doc.getTextWidth(test)<=firstW){cur=test;wi++}else break}lines.push({txt:cur,first:true});cur=''
       while(wi<words.length){const test=cur?cur+' '+words[wi]:words[wi];if(doc.getTextWidth(test)<=TW){cur=test;wi++}else{lines.push({txt:cur,first:false});cur=words[wi];wi++}}if(cur)lines.push({txt:cur,first:false})
-      need(lines.length*13+4);lines.forEach((ln,idx)=>{if(idx===0){sf('bold',size);doc.text(boldText,ML,y);if(ln.txt){sf('normal',size);doc.text(ln.txt,ML+bw+2,y)}}else{sf('normal',size);doc.text(ln.txt,ML,y)}y+=13})
+      need(lines.length*13+4);lines.forEach((ln,idx)=>{if(idx===0){sf('bold',size);doc.text(boldText,ML,y);if(ln.txt){sf('normal',size);doc.text(ln.txt,ML+bw+sw,y)}}else{sf('normal',size);doc.text(ln.txt,ML,y)}y+=13})
     }
     function gap(n){y+=(n||8)}
     function drawOneNote(note,idx){
@@ -2732,6 +2737,11 @@ function downloadDailyNotesPdf() {
     function dc(r,g,b) { doc.setDrawColor(r,g,b) }
     function safe(v) { return String(v||'').replace(/[""]/g,'"').replace(/[']/g,"'").trim() || '—' }
     function safeOrEmpty(v) { const s=String(v||'').trim(); return s||'' }
+    /* A bold label's printed width. jsPDF measures with kerning it does not
+       print, so a long label ran into its value ("Symptoms:Headache"); each
+       value starts one space past this, drawn without a space of its own,
+       which the FCR's Word copy lost when it read the PDF back (2 Nov 2026). */
+    function lblW(t) { return doc.getStringUnitWidth(t, {kerning:{}}) * doc.internal.getFontSize() / doc.internal.scaleFactor }
 
     function drawPageHeader() {
       tc(0,0,0)
@@ -2755,16 +2765,17 @@ function downloadDailyNotesPdf() {
       tc(0,0,0)
       function cellLbl(lbl, val, cx, cy) {
         sf('bold',12); doc.text(lbl, cx, cy)
-        sf('normal',12); doc.text(val, cx+doc.getTextWidth(lbl), cy)
+        const vx = cx + lblW(lbl)
+        sf('normal',12); doc.text(val, vx + doc.getTextWidth(' '), cy)
       }
-      cellLbl('Name:',' '+safe(patientName), x+5, top+15)
-      cellLbl('DOB:',' '+safe(dob), x+colMid+5, top+15)
-      cellLbl('DOI:',' '+safe(doi), x+5, top+rowH+15)
-      cellLbl('Session Date:',' '+safe(sessionDate), x+colMid+5, top+rowH+15)
+      cellLbl('Name:', safe(patientName), x+5, top+15)
+      cellLbl('DOB:', safe(dob), x+colMid+5, top+15)
+      cellLbl('DOI:', safe(doi), x+5, top+rowH+15)
+      cellLbl('Session Date:', safe(sessionDate), x+colMid+5, top+rowH+15)
       const provY = top+rowH*2+13
       sf('bold',10); doc.text('Provider:', x, provY)
-      const provLblW = doc.getTextWidth('Provider:')
-      sf('normal',10); doc.text(' '+safe(providerRaw), x+provLblW, provY)
+      const provLblW = lblW('Provider:')
+      sf('normal',10); doc.text(safe(providerRaw), x+provLblW+doc.getTextWidth(' '), provY)
       y = provY + 10
     }
 
@@ -2816,7 +2827,7 @@ function downloadDailyNotesPdf() {
       size = size || 12
       tc(0,0,0)
       sf('bold', size)
-      const bw = doc.getTextWidth(boldText)
+      const bw = lblW(boldText)
       // Clean normal text - replace newlines with spaces, normalise quotes
       const cleanNormal = safe((normalText||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' '))
       if (!cleanNormal || cleanNormal === '—') {
@@ -2824,7 +2835,8 @@ function downloadDailyNotesPdf() {
       }
       // Word-by-word greedy wrap to avoid splitTextToSize slice-index bugs
       sf('normal', size)
-      const firstW = TW - bw - 2
+      const sw = doc.getTextWidth(' ')
+      const firstW = TW - bw - sw
       const words = cleanNormal.split(' ').filter(w=>w.length>0)
       const resultLines = []
       let cur = '', wi = 0
@@ -2846,7 +2858,7 @@ function downloadDailyNotesPdf() {
       resultLines.forEach((ln, idx) => {
         if (idx===0) {
           sf('bold',size); doc.text(boldText, ML, y)
-          if (ln.txt) { sf('normal',size); doc.text(ln.txt, ML+bw+2, y) }
+          if (ln.txt) { sf('normal',size); doc.text(ln.txt, ML+bw+sw, y) }
         } else {
           sf('normal',size); doc.text(ln.txt, ML, y)
         }
