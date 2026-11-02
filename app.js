@@ -6652,7 +6652,8 @@ function flushPatientSaves(){
         if(refusedFields.length){
           const lp=getPatient(id), stored=migratePatientRecords([res.patient])[0]||{}
           const LABEL={demographics:'patient details','demographics.lawFirm':'law firm',notes:'notes',inactive:'inactive status',inactiveSince:'inactive status',
-            dischargeDate:'discharge date',adminDischarged:'discharge status',pendingAce:'Day 1 pending status',aceComplete:'Day 1 status',pregnancy:'pregnancy status'}
+            dischargeDate:'discharge date',adminDischarged:'discharge status',pendingAce:'Day 1 pending status',aceComplete:'Day 1 status',pregnancy:'pregnancy status',
+            neuroReferral:'neurologist referral',neuroBilling:'neurologist bill and payments'}
           if(lp)refusedFields.forEach(f=>{
             if(f==='demographics.lawFirm')lp.demographics={...(lp.demographics||{}),lawFirm:(stored.demographics||{}).lawFirm||''}
             else if(stored[f]===undefined)delete lp[f]
@@ -9923,14 +9924,15 @@ function injuryTypeIsWriteIn(type,picked){
 }
 /* "the ___ that occurred on" in Causation / Medical Necessity: "motor vehicle
    collision injury incident" for a listed type, "injury incident, struck on
-   the head by ..., " for a typed description, plain "injury incident" with
+   the head by ..." for a typed description, plain "injury incident" with
    none. The description used to go in brackets, which staff took for
-   something they had typed. */
+   something they had typed; then between two commas, and staff asked for the
+   one after it to go (2 Nov 2026). */
 function dischargeIncidentPhrase(type,picked,plural){
   const t=String(type||'').trim()
   const word=plural?'injury incidents':'injury incident'
   if(!t||t==='—')return word
-  return injuryTypeIsWriteIn(t,picked)?word+', '+t+',':t+' '+word
+  return injuryTypeIsWriteIn(t,picked)?word+', '+t:t+' '+word
 }
 function getCaseDischargeData(p){
   const cd=p.caseDischarge||{}
@@ -13693,8 +13695,8 @@ function buildPDF(name,opts){
   H1('INITIAL DATE OF SERVICE',dos)
   H1('ACUTE CONCUSSION EVALUATION (ACE)')
   // Plain text, no bold (staff, 2 Nov 2026). A typed-in injury description
-  // goes between commas, as in Causation (see dischargeIncidentPhrase).
-  const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType+',':'a '+injType
+  // follows a comma, as in Causation (see dischargeIncidentPhrase).
+  const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType:'a '+injType
   para([
     {t:'Today the patient, '+name+', DOB: '+dob+' AGE: '+age},
     {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in '},
