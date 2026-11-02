@@ -4,8 +4,9 @@
    Previous Concussion, an ACE symptom scored 1, or a Vision Problems pick
    other than "No" - ticks its ICD-10 code in Section 6. Changing that answer
    to No or N/A unticks it again, but only a code this ticked itself, and only
-   when no other Yes still calls for it. A code staff tick or untick by hand
-   is theirs from then on.
+   when no other Yes still calls for it. A code staff tick by hand is never
+   unticked here; one they untick comes back only when an answer newly turns
+   Yes. A signed Day 1 is left alone.
 
    The codes this ticked ride along with the Day 1 in the hidden #dxAutoCodes
    box (saved like any other text field), so a No on a later visit still
@@ -119,12 +120,43 @@
     var sc = document.getElementById('icdSelCount'); if (sc) sc.textContent = n + ' codes selected'
   }
   function label(k) { return DX[k][0] + ' ' + DX[k][1] }
+  // A signed Day 1 disables its fields (ctgApplyRecordLock) but not its Yes/No buttons: leave its codes alone.
+  function locked() { var n = document.getElementById('ptName'); return !!(n && n.disabled) }
+
+  function first(test) { return MAP.filter(test)[0] || null }
+  // The code sheet question a click or key press is on, if any.
+  function sourceOf(t) {
+    if (!t || !t.closest) return null
+    var row = t.closest('#hpiList .yn-row')
+    if (row && t.closest('.yn-btn')) return first(function (m) { return m.hpi === row.dataset.item })
+    var sym = t.closest('.sym-btn') && t.closest('.sym-score-item')
+    if (sym) {
+      var list = sym.parentElement && sym.parentElement.id, s = sym.querySelector('span'), item = s ? s.textContent.trim() : ''
+      return first(function (m) { return m.sym === list && m.item === item })
+    }
+    // Previous Concussion: Yes / No / N/A buttons drawn over its dropdown (day1-extras.js).
+    var grp = t.closest('.xo-yn-btns'), sel = grp && t.closest('.yn-btn') && grp.parentNode.querySelector('select')
+    if (sel) return first(function (m) { return m.select === sel.id })
+    // Vision Problems: the chip that opens its pick list.
+    var chip = t.closest('.xq-chip'), ta = chip && chip.parentNode.querySelector('textarea[id]')
+    if (ta) return first(function (m) { return m.pick === ta.id })
+    return null
+  }
+  /* What each question said just before staff touched it. Only a change between Yes and not-Yes
+     moves a code, so clicking the answer a question already has, or adding a second vision
+     problem, does not tick again a code staff unticked by hand. */
+  var was = []
+  function note(e) { var m = sourceOf(e.target); if (m) was[MAP.indexOf(m)] = isYes(m) }
 
   // One answer just changed: tick its code on a Yes, or untick the one ticked here once nothing calls for it.
   function apply(m) {
+    if (locked()) return
+    var i = MAP.indexOf(m), yes = isYes(m), before = was[i]
+    was[i] = yes
+    if (before === yes) return
     var auto = readAuto(), key = dxKey(m.dx), el = dxItem(m.dx)
     if (!el) return
-    if (isYes(m)) {
+    if (yes) {
       if (el.classList.contains('checked')) return
       el.classList.add('checked')
       if (auto.indexOf(key) === -1) auto.push(key)
@@ -150,33 +182,30 @@
     var host = document.getElementById('aceFormHost')
     if (!host) return
     box()
+    // Before the buttons' own handlers (on the buttons themselves) record the new answer.
+    window.addEventListener('click', note, true)
+    window.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') note(e) }, true)
+    // Yes/No rows and symptom scores; Previous Concussion and Vision Problems answer through 'change' below.
     host.addEventListener('click', function (e) {
-      var t = e.target
-      if (!t || !t.closest) return
-      var row = t.closest('#hpiList .yn-row')
-      if (row && t.closest('.yn-btn')) {
-        soon(MAP.filter(function (m) { return m.hpi === row.dataset.item })[0])
-        return
-      }
-      var sym = t.closest('.sym-btn') && t.closest('.sym-score-item')
-      if (sym) {
-        var list = sym.parentElement && sym.parentElement.id, s = sym.querySelector('span')
-        soon(MAP.filter(function (m) { return m.sym === list && s && m.item === s.textContent.trim() })[0])
-        return
-      }
-      // Ticking or unticking a code by hand makes it staff's choice: never auto-unticked after that.
-      var icd = t.closest('#icdGrid .icd-item')
-      if (icd) {
-        var c = icd.querySelector('.icd-code'), d = icd.querySelector('.icd-desc')
-        var auto = readAuto(), key = (c ? c.textContent.trim() : '') + '|' + (d ? d.textContent.trim() : '')
-        if (auto.indexOf(key) !== -1) { auto.splice(auto.indexOf(key), 1); writeAuto(auto) }
-      }
+      var m = sourceOf(e.target)
+      if (m && (m.hpi || m.sym)) soon(m)
+    })
+    /* Ticking or unticking a code by hand makes it staff's choice: never auto-unticked after that.
+       On the document: "Float list" (setupIcdFloat) moves the codes out of the form. */
+    document.addEventListener('click', function (e) {
+      var icd = e.target && e.target.closest && e.target.closest('#icdGrid .icd-item')
+      if (!icd) return
+      var c = icd.querySelector('.icd-code'), d = icd.querySelector('.icd-desc')
+      var auto = readAuto(), key = (c ? c.textContent.trim() : '') + '|' + (d ? d.textContent.trim() : '')
+      if (auto.indexOf(key) !== -1) { auto.splice(auto.indexOf(key), 1); writeAuto(auto) }
+      // The form's own autosave listens on the form only, so it misses a tick in the floating list.
+      if (!host.contains(icd) && !locked() && typeof scheduleDraftSave === 'function') scheduleDraftSave(e)
     })
     // Dropdowns and pick lists announce a change; a saved Day 1 being opened fires these too, and is skipped.
     host.addEventListener('change', function (e) {
       if (restoring || !e.target) return
       var id = e.target.id
-      soon(MAP.filter(function (m) { return m.select === id || m.pick === id })[0])
+      soon(first(function (m) { return m.select === id || m.pick === id }))
     })
     if (window.ctgDay1Hooks) {
       window.ctgDay1Hooks.beforeRestore.push(function () {

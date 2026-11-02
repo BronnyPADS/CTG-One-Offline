@@ -2687,7 +2687,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       boldLine('97129 Cognitive Therapy (1 Unit)/ 97130 Cognitive Therapy',12);normalLine('Increase stimulation of dysfunctional brain functions particularly reaction time, immediate memory, delayed memory, response inhibition, attention.',12);gap(13)
       boldLine('97110 Therapeutic Exercise',12);inlineBoldNormal('Therapeutic Exercise:',' Therapeutic exercise will be applied to increase blood flow and oxygen to the brain and body. Also to increase strength and stability of weakened joint units.',12);gap(13)
       inlineBoldNormal('Tx. Effectiveness:',' Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings.',12)
-      inlineBoldNormal('Recommendation:',' Continue Treatment Plan',12)
+      inlineBoldNormal('Recommendation:',' Continue Treatment Plan.',12)
     }
     notes.forEach((note,idx)=>drawOneNote(note,idx))
     const total=doc.internal.getNumberOfPages(),footerY=PH-20,footerLeft='Concussion Therapy Group / '+safe(providerRaw)+' / '+safe(patientName)+' / '+safe(dob)
@@ -2943,7 +2943,7 @@ function downloadDailyNotesPdf() {
 
 
     inlineBoldNormal('Tx. Effectiveness:', '  Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings.', 12)
-    inlineBoldNormal('Recommendation:', '  Continue Treatment Plan', 12)
+    inlineBoldNormal('Recommendation:', '  Continue Treatment Plan.', 12)
 
     drawFooters()
 
@@ -13892,7 +13892,7 @@ function buildPDF(name,opts){
   H2('A. Injury Characteristics')
   kvLine('Date of Injury',doi)
   kvLine('Reporter',reporterVal)
-  kvLine('1. Injury Description (see above Mechanism of Injury)',injType)
+  kvLine('1. Injury Description (see above Mechanism of Injury)',injType,SENTENCE)
   kvLine('1a. Is there evidence of a forcible blow to the head (direct or indirect)?',(()=>{const v=go('ace_blow'),c=(document.getElementById('ace_blow_comment')?.value||'').trim();return v==='Yes'&&c?answerWithNote(v,c):v})())
   kvLine('1b. Is there evidence of intracranial injury or skull fracture?',go('ace_icf'))
   kvLine('1c. Location of Impact',gv('ace_loc'))
@@ -13911,7 +13911,7 @@ function buildPDF(name,opts){
     const notes=[parts.slice(1).join(' — '),d?'duration: '+d:''].filter(Boolean).join(', ')
     return answerWithNote(parts[0],notes)
   })())
-  kvLine('EARLY SIGNS',earlySigns.length>0?earlySigns.join(', '):'None observed')
+  kvLine('EARLY SIGNS',earlySigns.length>0?earlySigns.join(', '):'None observed',SENTENCE)
   {const seiz=go('ace_seiz'),sd=gv('ace_seiz_detail');kvLine('Seizures observed?',sd!=='—'&&seiz!=='—'?answerWithNote(seiz,sd):sd!=='—'?sd:seiz)}
 
   H2('B. Symptom Check List*',false,true)
@@ -14073,7 +14073,7 @@ function buildPDF(name,opts){
     kvLine('Plan',go('txPlan'))
     kvLine('Treatment Effectiveness','Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings.')
     kvLine('Home/Self Care','The patient was instructed to continue home care recommendations.')
-    kvLine('Recommendation',getAceRecommendationText())
+    kvLine('Recommendation',getAceRecommendationText(),SENTENCE)
   }
 
 
