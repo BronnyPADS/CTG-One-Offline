@@ -13805,7 +13805,7 @@ function buildPDF(name,opts){
   kvLine('Vision Problems',(window.ctgXq?ctgXq('xq_visionProblems'):''),SENTENCE)
   kvLine('Employment Status',go('employStatus'),SENTENCE)
   kvLine('Patient Goals',gv('ptGoals'),SENTENCE)
-  kvLine('Risk Factors for Injury Severity and Prolonged Recovery',risks.length>0?risks.join(', '):'None reported')
+  kvLine('Risk Factors for Injury Severity and Prolonged Recovery',risks.length>0?risks.join(', '):'None reported',SENTENCE)
 
   H1('PAST MEDICAL HISTORY (PMH)')
   const pmhItems=collectAll('pmhList',PMH_ITEMS)
