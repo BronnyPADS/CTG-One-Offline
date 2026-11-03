@@ -2596,7 +2596,8 @@ function dnBoilerplate(name, doi) {
     recoveryStatus: 'Slight improvement with occasional exacerbation',
     riskFactors: dnRiskFactorsText(p),
     causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${d}.`,
-    medicalNecessity: `The care and treatment rendered to the patient, ${n}, has been medically necessary for the injuries sustained in their ${incident} that occurred on ${d}.`,
+    // "in the ... incident", as on the discharge summary ("in their" read wrong, staff 3 Nov 2026).
+    medicalNecessity: `The care and treatment rendered to the patient, ${n}, has been medically necessary for the injuries sustained in the ${incident} that occurred on ${d}.`,
     reasonableness: 'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'
   }
 }
