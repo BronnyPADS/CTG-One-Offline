@@ -6262,7 +6262,8 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       // Neurocognitive Exam Report Dates: initial exam + all re-exams + final exam session dates
       const examDates=[]
       if(p?.initialExam?.sessionDate)examDates.push(day2FormatAnyDate(p.initialExam.sessionDate))
-      if(Array.isArray(p?.reExams)){p.reExams.forEach(rx=>{if(rx.sessionDate)examDates.push(day2FormatAnyDate(rx.sessionDate))})}
+      // A re-exam set as the Final Exam is the final exam's date below, not a re-exam too.
+      if(Array.isArray(p?.reExams)){p.reExams.forEach(rx=>{if(rx&&rx.sessionDate&&!reExamIsDesignatedFinal(p,rx))examDates.push(day2FormatAnyDate(rx.sessionDate))})}
       // Final exam date last (current final exam being generated, or saved finalExam)
       const finalExamDate=day2FormatAnyDate(p?.finalExam?.sessionDate||data.sessionDate||'')
       if(finalExamDate)examDates.push(finalExamDate)
@@ -9954,7 +9955,8 @@ function getCaseDischargeData(p){
   const doi=d.doi||''
   const examDates=[]
   if(p?.initialExam?.sessionDate)examDates.push(day2FormatAnyDate(p.initialExam.sessionDate))
-  ;(Array.isArray(p?.reExams)?p.reExams:[]).forEach(rx=>{if(rx&&rx.sessionDate)examDates.push(day2FormatAnyDate(rx.sessionDate))})
+  // A re-exam set as the Final Exam is listed once, as the final exam.
+  ;(Array.isArray(p?.reExams)?p.reExams:[]).forEach(rx=>{if(rx&&rx.sessionDate&&!reExamIsDesignatedFinal(p,rx))examDates.push(day2FormatAnyDate(rx.sessionDate))})
   if(p?.finalExam?.sessionDate)examDates.push(day2FormatAnyDate(p.finalExam.sessionDate))
   const initialDOS=cd.initialDOS||day2FormatAnyDate(p?.ace?.dateOfService||p?.initialExam?.sessionDate||'')||''
   // A Day 1 recommending no follow-up discharges the patient that day, so with no
