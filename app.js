@@ -14124,6 +14124,8 @@ function _bMoney(n){
 }
 // MM/DD/YYYY, month first (see fcrSegmentDateKey).
 function _bDateKey(s){const m=String(s||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?new Date(+m[3],+m[1]-1,+m[2]).getTime():Number.MAX_SAFE_INTEGER}
+// The first visit's line (Day 1 / ACE date). Was "Day 2 Exam Complex" until 4 Nov 2026.
+const BILLING_99203_DESC='99203 25 Initial Exam Complex'
 function _bTherapyRows(date){return [
   {date,code:'97110',desc:'Therapeutic Exercise',qty:1,charges:135,payments:0,adjustments:0,balance:135},
   {date,code:'97112',desc:'97112 Neuro Muscular Re-Education',qty:1,charges:135,payments:0,adjustments:0,balance:135},
@@ -14149,7 +14151,9 @@ function applyBillingEditsToGroups(p,groups){
       const e=edits[r._rowKey]
       if(!e)return
       if(e.code!=null)r.code=String(e.code)
-      if(e.desc!=null)r.desc=String(e.desc)
+      // An edit saved before 4 Nov 2026 keeps the old wording of the 99203 line;
+      // only that exact text is shown the new way, anything typed stays as typed.
+      if(e.desc!=null)r.desc=String(e.desc)==='99203 25 Day 2 Exam Complex'?BILLING_99203_DESC:String(e.desc)
       if(e.charges!=null&&e.charges!==''){
         const n=parseFloat(String(e.charges).replace(/[^0-9.\-]/g,''))
         if(!isNaN(n)){r.charges=n;r.balance=n}
@@ -14161,7 +14165,7 @@ function applyBillingEditsToGroups(p,groups){
 }
 function _sampleBillingGroups(){
   const g=[]
-  g.push(_bGroup('12/15/2025',[{date:'12/15/2025',code:'99203',desc:'99203 25 Day 2 Exam Complex',qty:1,charges:265,payments:0,adjustments:0,balance:265}]))
+  g.push(_bGroup('12/15/2025',[{date:'12/15/2025',code:'99203',desc:BILLING_99203_DESC,qty:1,charges:265,payments:0,adjustments:0,balance:265}]))
   g.push(_bGroup('12/16/2025',[
     {date:'12/16/2025',code:'92551',desc:'Audiologic Function Test',qty:1,charges:335,payments:0,adjustments:0,balance:335},
     {date:'12/16/2025',code:'96146',desc:'96146 NCAT Neurocognitive Exam, Automated',qty:1,charges:350,payments:0,adjustments:0,balance:350},
@@ -14215,7 +14219,7 @@ function deriveBillingServices(p){
   if(!p)return groups
   if(p.ace){
     const lockDate=day2FormatAnyDate(p.billingLocks?.ace?.date)||getDay2AceDateOfService(p)||day2FormatAnyDate(p.ace.dateOfService)||day2FormatAnyDate(p.ace.savedAt)||''
-    groups.push(_bGroup(lockDate,[_billingRow(lockDate,'99203','99203 25 Day 2 Exam Complex',265)],'ace'))
+    groups.push(_bGroup(lockDate,[_billingRow(lockDate,'99203',BILLING_99203_DESC,265)],'ace'))
   }
   const initialGroup=_billingInitialExamGroup(p.initialExam)
   if(initialGroup)groups.push(initialGroup)
