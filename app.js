@@ -2593,7 +2593,7 @@ function dnBoilerplate(name, doi) {
     symptoms: DN_SYMPTOMS_TEXT,
     highScore: `Trailmaking (Neurocognitive) is the highest score of the patient's rehab activities today.`,
     lowScore: `Immediate Memory (Neurocognitive) is the lowest score of the patient's rehab activities today.`,
-    recoveryStatus: 'Slight improvement with occasional exacerbation',
+    recoveryStatus: 'Slight improvement with occasional exacerbation.',
     riskFactors: dnRiskFactorsText(p),
     causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${d}.`,
     // "rendered to Name ... in the ... incident", as on the discharge summary (staff 3-4 Nov 2026).
@@ -2665,6 +2665,8 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
     function newPage(){doc.addPage();drawPageHeader();y=95}
     function need(h){if(y+h>PH-50)newPage()}
     function boldLine(text,size){size=size||12;sf('bold',size);const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);sf('bold',size);tc(0,0,0);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
+    // A bold label too long for one line, then its value on the label's last line.
+    function boldWrapNormal(b,n,size){size=size||12;sf('bold',size);const bl=doc.splitTextToSize(safe(b),TW);need(bl.length*13+4);for(let i=0;i<bl.length-1;i++){sf('bold',size);tc(0,0,0);doc.text(bl[i],ML,y);y+=13}inlineBoldNormal(bl[bl.length-1],n,size)}
     function normalLine(text,size){size=size||12;sf('normal',size);tc(0,0,0);const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
     function inlineBoldNormal(boldText,normalText,size){
       size=size||12;tc(0,0,0);sf('bold',size);const bw=lblW(boldText);const clean=safe(String(normalText||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' '))
@@ -2686,7 +2688,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       boldLine('OBJECTIVE',12);boldLine('OBJECTIVE DAILY CONCUSSION FINDINGS:',12)
       inlineBoldNormal('Neuro/Vestibular Today\'s High Score:',' '+bp.highScore,12);inlineBoldNormal('Neuro/Vestibular Today\'s Low Score:',' '+bp.lowScore,12);gap(13)
       boldLine('ASSESSMENT',12);boldLine('Recovery Status',12);normalLine(bp.recoveryStatus,12)
-      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:',12);normalLine(reportSentence(bp.riskFactors),12)}
+      if(bp.riskFactors)boldWrapNormal('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:',' '+reportSentence(bp.riskFactors),12)   // the value on the heading's line (staff, 4 Nov 2026)
       boldLine('Causation',12);normalLine(bp.causation,12);boldLine('Medical Necessity',12);normalLine(bp.medicalNecessity,12);boldLine('Reasonableness',12);normalLine(bp.reasonableness,12);gap(13)
       // Each heading moves to the next page with its first lines rather than sit alone at the bottom.
       need(95);boldLine('PLAN',12);boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY',12);gap(13)
@@ -2796,6 +2798,16 @@ function downloadDailyNotesPdf() {
       need(lines.length*13+4)
       sf('bold', size); tc(0,0,0)
       lines.forEach(l => { doc.text(l, ML, y); y+=13 })
+    }
+
+    // A bold label too long for one line, then its value on the label's last line.
+    function boldWrapNormal(b, n, size) {
+      size = size || 12
+      sf('bold', size)
+      const bl = doc.splitTextToSize(safe(b), TW)
+      need(bl.length*13+4)
+      for (let i = 0; i < bl.length-1; i++) { sf('bold', size); tc(0,0,0); doc.text(bl[i], ML, y); y+=13 }
+      inlineBoldNormal(bl[bl.length-1], n, size)
     }
 
     function normalLine(text, size, extraY) {
@@ -2925,8 +2937,7 @@ function downloadDailyNotesPdf() {
     boldLine('Recovery Status', 12)
     normalLine(bp.recoveryStatus, 12)
     if (bp.riskFactors) {
-      boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:', 12)
-      normalLine(reportSentence(bp.riskFactors), 12)
+      boldWrapNormal('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:', ' '+reportSentence(bp.riskFactors), 12)   // the value on the heading's line (staff, 4 Nov 2026)
     }
     boldLine('Causation', 12)
     normalLine(bp.causation, 12)
