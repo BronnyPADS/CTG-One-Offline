@@ -12130,7 +12130,7 @@ const HPI_ITEMS=[
   'Do you have full use of your upper body, lower body, and head?',
   'Are there any exercises that this patient cannot do at the moment?'
 ]
-const RISK_FACTORS=['Direct head impact','Second head impact','Previous TBI / concussion','Personal history of military deployment','History of migraines','Anxiety (pre-existing)','Depression (pre-existing)','Sleep disorder','ADHD','Learning disabilities','Age over 40','Repeated concussions']
+const RISK_FACTORS=['Direct head impact','Second head impact','Previous TBI / concussion','Personal history of military deployment','History of migraines','Anxiety (pre-existing)','Depression (pre-existing)','Sleep disorder','ADHD','Learning disabilities','Age over 40','Repeated concussions','History of MVC']
 const PMH_ITEMS=[
   'Strenuous exercise in the last 3 hours','Previous Motor Vehicle Collision','Residual Effects of Previous MVC',
   'Played Organized Contact Sport on Team','Legally Blind in One or Both Eyes','Wear Corrective Lenses',
