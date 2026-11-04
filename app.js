@@ -2596,8 +2596,8 @@ function dnBoilerplate(name, doi) {
     recoveryStatus: 'Slight improvement with occasional exacerbation',
     riskFactors: dnRiskFactorsText(p),
     causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${d}.`,
-    // "in the ... incident", as on the discharge summary ("in their" read wrong, staff 3 Nov 2026).
-    medicalNecessity: `The care and treatment rendered to the patient, ${n}, has been medically necessary for the injuries sustained in the ${incident} that occurred on ${d}.`,
+    // "rendered to Name ... in the ... incident", as on the discharge summary (staff 3-4 Nov 2026).
+    medicalNecessity: `The care and treatment rendered to ${n} has been medically necessary for the injuries sustained in the ${incident} that occurred on ${d}.`,
     reasonableness: 'The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'
   }
 }
@@ -14098,7 +14098,7 @@ function buildPDF(name,opts){
     H2('Causation')
     para(["Based on review of "+(cd.name||name)+"'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between "+pn.poss+" injuries and the "+dischargeIncidentPhrase(injType!=='—'?injType:cd.injuryType,injType!=='—'?itSelected:'')+" that occurred on "+(cd.doi||'—')+"."])
     H2('Medical Necessity')
-    para(['The care and treatment rendered to the patient, '+(cd.name||name)+', has been medically necessary for the injuries sustained in the '+dischargeIncidentPhrase(injType!=='—'?injType:cd.injuryType,injType!=='—'?itSelected:'')+' that occurred on '+(cd.doi||'—')+'.'])
+    para(['The care and treatment rendered to '+(cd.name||name)+' has been medically necessary for the injuries sustained in the '+dischargeIncidentPhrase(injType!=='—'?injType:cd.injuryType,injType!=='—'?itSelected:'')+' that occurred on '+(cd.doi||'—')+'.'])
     H2('Reasonableness')
     para(['The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'])
   }else{
