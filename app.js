@@ -5185,6 +5185,7 @@ function setReExamAsFinal(patientId, index){
   if(!p)return
   const rx=p.reExams?.[index]
   if(!rx)return
+  if(p.adminDischarged){showToast('This patient is Admin Discharged, so re-exams stay re-exams.','err');return}
   p.finalExam={...rx, examCategory:'Final Examination'}
   p.updatedAt=new Date().toISOString()
   persistPatients()
@@ -5202,6 +5203,44 @@ function unsetFinalExam(patientId){
   renderPatientDetails(patientId)
   showToast('Final Examination designation removed')
 }
+/* Discharge decides the Final Exam (staff, 4 Nov 2026):
+   - Admin Discharged: re-exams stay re-exams. A re-exam set as the Final goes back
+     to being a re-exam; a Final saved as its own Final Examination stays.
+   - Plain discharge (a Discharge Date, Admin Discharged not ticked) with no Final
+     Exam yet: the re-exam with the latest exam date becomes the Final Exam, as
+     "Set as Final" does (marked autoFinal, so the rule can move or undo it).
+   - Discharge cleared: a Final the rule set itself is undone.
+   A signed Final is never undone - the server keeps signed exams. Runs when the
+   discharge is saved and when a re-exam is saved or deleted, for an account with
+   the Exams page (the server refuses exam changes from anyone else). Returns a
+   short note for the toast, or ''. */
+function dischargeCanSetFinal(){return typeof window.ctgCanPage!=='function'||window.ctgCanPage('day2')}
+function applyDischargeFinalRule(p){
+  if(!p||!dischargeCanSetFinal())return ''
+  const reExams=(Array.isArray(p.reExams)?p.reExams:[]).filter(r=>r&&r.savedAt)
+  const fin=p.finalExam&&p.finalExam.savedAt?p.finalExam:null
+  const fromReExam=!!fin&&reExams.some(rx=>reExamIsDesignatedFinal(p,rx))
+  const signed=!!(fin&&fin.signedAt)
+  const plain=!p.adminDischarged&&!!String(p.dischargeDate||'').trim()
+  const drop=why=>{
+    if(signed)return 'The Final Exam is signed, so it stays the Final Exam.'
+    p.finalExam=null
+    return why
+  }
+  if(p.adminDischarged)return fromReExam?drop('Admin Discharged: the re-exam set as Final is a re-exam again.'):''
+  if(!plain)return fromReExam&&fin.autoFinal?drop('Not discharged: the last re-exam is a re-exam again.'):''
+  if(!reExams.length)return ''
+  // The latest exam date; an exam without one counts by when it was saved.
+  const when=rx=>{const k=_bDateKey(_billingExamDate(rx));return k!==Number.MAX_SAFE_INTEGER?k:(Date.parse(rx.savedAt)||0)}
+  let last=reExams[0]
+  reExams.forEach(rx=>{if(when(rx)>=when(last))last=rx})
+  if(fin){
+    // Keep a Final staff chose; only move one this rule set, onto a later re-exam.
+    if(!(fin.autoFinal&&fromReExam&&!signed)||last.savedAt===fin.savedAt)return ''
+  }
+  p.finalExam={...last,examCategory:'Final Examination',autoFinal:true}
+  return 'Discharged: Re-Exam #'+(p.reExams.indexOf(last)+1)+' (latest exam date) is now the Final Exam.'
+}
 async function deleteExamAttempt(patientId, arrayKey, index){
   const p=getPatient(patientId)
   if(!p)return
@@ -5213,11 +5252,12 @@ async function deleteExamAttempt(patientId, arrayKey, index){
   // billing charges are removed as well.
   if(removed&&p.finalExam&&removed.savedAt&&p.finalExam.savedAt===removed.savedAt)p.finalExam=null
   day2EditAttempt=null  // indexes shifted -> drop any stale edit context
+  const ruleNote=applyDischargeFinalRule(p)
   p.updatedAt=new Date().toISOString()
   persistPatients()
   renderPatientDetails(patientId)
   updateExamCategoryCounts()
-  showToast('Exam attempt deleted')
+  showToast('Exam attempt deleted'+(ruleNote?' · '+ruleNote:''))
 }
 function openExamForPatient(id, category){
   ctgAuditChartView(id,'exam')
@@ -5335,7 +5375,7 @@ function saveInitialExamForCurrentPatient(){
     syncLinkedDailyNoteFromExamSave(p,orig,examData,day2EditAttempt.arrayKey,day2EditAttempt.index)
     p[day2EditAttempt.arrayKey][day2EditAttempt.index]=examData
     if(p.finalExam && orig.savedAt && p.finalExam.savedAt===orig.savedAt){
-      p.finalExam={...examData, examCategory:'Final Examination'}
+      p.finalExam={...examData, examCategory:'Final Examination', ...(p.finalExam.autoFinal?{autoFinal:true}:{})}
     }
   } else if(editingSingle){
     const orig=p[day2EditAttempt.arrayKey]
@@ -5360,6 +5400,7 @@ function saveInitialExamForCurrentPatient(){
     // Keep the edit context on the saved record so repeated clicks update it.
     day2EditAttempt={patientId:p.id,arrayKey:day2EditAttempt.arrayKey,index:day2EditAttempt.index}
   }
+  const ruleNote=applyDischargeFinalRule(p)
   p.updatedAt=new Date().toISOString()
   persistPatients()
   renderPatientWorkflow()
@@ -5367,7 +5408,7 @@ function saveInitialExamForCurrentPatient(){
   updateDay2ContextBar()
   updateExamCategoryCounts()
   updateDay2SaveButtonLabel()
-  showToast((wasUpdating?'Exam updated under ':'Exam saved under ')+'"'+category+'" ✓')
+  showToast((wasUpdating?'Exam updated under ':'Exam saved under ')+'"'+category+'" ✓'+(ruleNote?' · '+ruleNote:''))
 }
 
 
@@ -10910,6 +10951,7 @@ async function saveModalUpdates(){
     }
     p.dischargeDate=rawVal('modalDischargeDate')
     p.adminDischarged=!!document.getElementById('modalAdminDischarged')?.checked
+    var dischargeNote=applyDischargeFinalRule(p)
     p.pendingAce=document.getElementById('modalPendingAce').checked
     try{
       const docs={...(p.documents||{})}
@@ -10936,7 +10978,7 @@ async function saveModalUpdates(){
   if(s==='notes')p.notes={text:gv('modalPatientNotes')}
   p.updatedAt=new Date().toISOString()
   persistPatients();closePatientModal();renderPatientWorkflow();renderPatientDetails(p.id)
-  showToast('Updates saved ✓')
+  showToast('Updates saved ✓'+(typeof dischargeNote==='string'&&dischargeNote?' · '+dischargeNote:''))
 }
 
 function mountAceFormForPatientPage(){
@@ -13903,9 +13945,9 @@ function buildPDF(name,opts){
   // Answers that read as a sentence end with a full stop (19 Oct 2026).
   const SENTENCE={sentence:true}
   kvLine('Chief Complaint',gv('immediateSyms'),SENTENCE)
-  // Every HPI question is retained, even when N/A / unanswered - a skipped
-  // question still appears in the FCR as N/A (Dr's request, 27 Oct 2026).
-  collectAll('hpiList',HPI_ITEMS).forEach(([item,ans])=>kvLine(item,ans))
+  // An N/A or unanswered question is left out (staff, 4 Nov 2026; they were all
+  // kept from 27 Oct). collectAll reads an unanswered row as 'N/A'.
+  collectAll('hpiList',HPI_ITEMS).filter(([,ans])=>ans!=='N/A').forEach(([item,ans])=>kvLine(item,ans))
   kvLine('Activity of Daily Living (ADL) Limitations',go('adlLimit'),SENTENCE)
   kvLine('Vision Problems',(window.ctgXq?ctgXq('xq_visionProblems'):''),SENTENCE)
   kvLine('Employment Status',go('employStatus'),SENTENCE)
@@ -13916,8 +13958,9 @@ function buildPDF(name,opts){
   const pmhItems=collectAll('pmhList',PMH_ITEMS)
     .map(([item,ans])=>PMH_YES_ONLY.has(item)?[item,pregnancyReportAnswer(ans)]:[item,ans])
     .filter(([item,ans])=>{
-      // Retain every question even when N/A / unanswered (Dr's request, 27 Oct
-      // 2026). Pregnancy stays Yes-only - "Not pregnant" says nothing about care.
+      // N/A or unanswered: left out, as for HPI (staff, 4 Nov 2026). Pregnancy
+      // stays Yes-only - "Not pregnant" says nothing about care.
+      if(ans==='N/A')return false
       if(PMH_YES_ONLY.has(item))return !!ans
       return true
     })
