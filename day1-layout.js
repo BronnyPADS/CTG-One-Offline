@@ -16,7 +16,7 @@
     'id:immediateSyms',
     'yn:Change in Swallowing', 'yn:Change in Appetite', 'yn:Change in Sense of Smell', 'yn:Change in Sense of Taste',
     'yn:Slurring Speech', 'yn:Stuttering Speech',
-    'yn:Aphasia - comprehension lag time', 'yn:Aphasia - a word choice lag time', 'yn:Aphasia - phonation lag time',
+    'yn:Aphasia - comprehension lag time', 'yn:Aphasia - word choice lag time', 'yn:Aphasia - phonation lag time',
     'yn:Tinnitus (Ringing in Ears)', 'yn:Hearing Difficulty', 'yn:Feeling of Fullness or Pressure in Ear',
     'id:xq_visionProblems', 'yn:Visual Disturbance', 'yn:Dizziness / Vertigo',
     'yn:Head Shake Screening Test — Possible Vestibular Dysfunction',
@@ -28,7 +28,7 @@
   ]
 
   var PMH = [
-    'yn:Strenuous exercise in last 3 hours', 'id:xq_nativeCountry', 'id:languageField',
+    'yn:Strenuous exercise in the last 3 hours', 'id:xq_nativeCountry', 'id:languageField',
     'yn:Previous Motor Vehicle Collision', 'yn:Residual Effects of Previous MVC',
     'id:rpr_priorConc', 'id:xq_residualConc', 'id:xq_prevConcResult', 'id:xq_priorLoc',
     'yn:Legally Blind in One or Both Eyes', 'yn:Wear Corrective Lenses', 'yn:History of Cerebral Infarct (Stroke)',
@@ -41,7 +41,7 @@
     'yn:Received Speech Therapy', 'yn:Attended IEP or Special Education Classes',
     'yn:Repeated One or More Grades', 'yn:Advanced One or More Grades',
     // Ours, not on the template.
-    'yn:Played Organized Contact Sport on Team', 'yn:Do you have any orthopedic problem or injuries?', 'yn:Are you currently pregnant?',
+    'yn:Played Organized Contact Sport on Team', 'yn:Do you have any orthopedic problems or injuries?', 'yn:Are you currently pregnant?',
     'id:xq_otherMedHx',
     'sdiv:Social History', 'id:jobDuties', 'id:xq_socialHabits', 'id:diet', 'id:exercise',
     'sdiv:Family History', 'id:xq_familyHistory',

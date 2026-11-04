@@ -2557,7 +2557,7 @@ function dnFmtDateShort(val) {
   return m[1]+'-'+m[2]+'-'+m[3].slice(2)
 }
 
-const DN_SYMPTOMS_TEXT = `Headache, Neck pain, Dizziness, Balance problems, Sensitivity to noise, Feeling like “in a fog”, Difficulty concentrating, Fatigue or low energy, Drowsiness, Irritability, Nervous or anxious and Symptoms worsen with physical activity, Pressure in head, Nausea, Blurred vision, Sensitivity to light, Feeling slowed down, Don’t feel right, Difficulty remembering, Confusion, More emotional, Sadness, Trouble falling asleep and Symptoms worsen with mental activity`
+const DN_SYMPTOMS_TEXT = `Headache, Neck pain, Dizziness, Balance problems, Sensitivity to noise, Feeling like “in a fog”, Difficulty concentrating, Fatigue or low energy, Drowsiness, Irritability, Nervous or anxious, Symptoms worsen with physical activity, Pressure in head, Nausea, Blurred vision, Sensitivity to light, Feeling slowed down, Don’t feel right, Difficulty remembering, Confusion, More emotional, Sadness, Trouble falling asleep and Symptoms worsen with mental activity.`
 function injuryIsPlural(injType) {
   const t = (injType || '').toLowerCase()
   if (/\b(multiple|double|triple|quadruple|several|two|three|four)\b/.test(t)) return true
@@ -2591,8 +2591,8 @@ function dnBoilerplate(name, doi) {
   const pron = patientPronoun(p)
   return {
     symptoms: DN_SYMPTOMS_TEXT,
-    highScore: `Trailmaking (Neurocognitive) is today's highest score of the patient's rehab activities today.`,
-    lowScore: `Immediate Memory (Neurocognitive) is today's lowest score of the patient's rehab activities today.`,
+    highScore: `Trailmaking (Neurocognitive) is the highest score of the patient's rehab activities today.`,
+    lowScore: `Immediate Memory (Neurocognitive) is the lowest score of the patient's rehab activities today.`,
     recoveryStatus: 'Slight improvement with occasional exacerbation',
     riskFactors: dnRiskFactorsText(p),
     causation: `Based on review of ${n}'s complaints, clinical course, medical records and examination, it is my opinion that there exists a reasonable degree of medical certainty of a direct causal connection between ${pron.poss} injuries and the ${incident} that occurred on ${d}.`,
@@ -2664,7 +2664,7 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
     }
     function newPage(){doc.addPage();drawPageHeader();y=95}
     function need(h){if(y+h>PH-50)newPage()}
-    function boldLine(text,size){size=size||12;const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);sf('bold',size);tc(0,0,0);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
+    function boldLine(text,size){size=size||12;sf('bold',size);const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);sf('bold',size);tc(0,0,0);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
     function normalLine(text,size){size=size||12;sf('normal',size);tc(0,0,0);const lines=doc.splitTextToSize(safe(text),TW);need(lines.length*13+4);lines.forEach(l=>{doc.text(l,ML,y);y+=13})}
     function inlineBoldNormal(boldText,normalText,size){
       size=size||12;tc(0,0,0);sf('bold',size);const bw=lblW(boldText);const clean=safe(String(normalText||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' '))
@@ -2686,12 +2686,13 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       boldLine('OBJECTIVE',12);boldLine('OBJECTIVE DAILY CONCUSSION FINDINGS:',12)
       inlineBoldNormal('Neuro/Vestibular Today\'s High Score:',' '+bp.highScore,12);inlineBoldNormal('Neuro/Vestibular Today\'s Low Score:',' '+bp.lowScore,12);gap(13)
       boldLine('ASSESSMENT',12);boldLine('Recovery Status',12);normalLine(bp.recoveryStatus,12)
-      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity',12);normalLine(reportSentence(bp.riskFactors),12)}
+      if(bp.riskFactors){boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:',12);normalLine(reportSentence(bp.riskFactors),12)}
       boldLine('Causation',12);normalLine(bp.causation,12);boldLine('Medical Necessity',12);normalLine(bp.medicalNecessity,12);boldLine('Reasonableness',12);normalLine(bp.reasonableness,12);gap(13)
-      boldLine('PLAN',12);boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY',12);gap(13)
+      // Each heading moves to the next page with its first lines rather than sit alone at the bottom.
+      need(95);boldLine('PLAN',12);boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY',12);gap(13)
       boldLine('97112 Neuromuscular Re-Education (NMR)',12);inlineBoldNormal('Neuromuscular Re-education:',' rehabilitation of vestibular and/or brain-based balance, movement, coordination, kinesthetic sense, posture and proprioception particularly eye movement and balance in order to improve function.',12);gap(13)
-      boldLine('97129 Cognitive Therapy (1 Unit)/ 97130 Cognitive Therapy',12);normalLine('Increase stimulation of dysfunctional brain functions particularly reaction time, immediate memory, delayed memory, response inhibition, attention.',12);gap(13)
-      boldLine('97110 Therapeutic Exercise',12);inlineBoldNormal('Therapeutic Exercise:',' Therapeutic exercise will be applied to increase blood flow and oxygen to the brain and body. Also to increase strength and stability of weakened joint units.',12);gap(13)
+      need(52);boldLine('97129 Cognitive Therapy (1 Unit)/ 97130 Cognitive Therapy',12);normalLine('Increase stimulation of dysfunctional brain functions particularly reaction time, immediate memory, delayed memory, response inhibition, attention.',12);gap(13)
+      need(52);boldLine('97110 Therapeutic Exercise',12);inlineBoldNormal('Therapeutic Exercise:',' Therapeutic exercise will be applied to increase blood flow and oxygen to the brain and body. Also to increase strength and stability of weakened joint units.',12);gap(13)
       inlineBoldNormal('Tx. Effectiveness:',' Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings.',12)
       inlineBoldNormal('Recommendation:',' Continue Treatment Plan.',12)
     }
@@ -2790,6 +2791,7 @@ function downloadDailyNotesPdf() {
 
     function boldLine(text, size) {
       size = size || 12
+      sf('bold', size)   // measure in bold: measured in regular type the heading ran past the margin
       const lines = doc.splitTextToSize(safe(text), TW)
       need(lines.length*13+4)
       sf('bold', size); tc(0,0,0)
@@ -2923,7 +2925,7 @@ function downloadDailyNotesPdf() {
     boldLine('Recovery Status', 12)
     normalLine(bp.recoveryStatus, 12)
     if (bp.riskFactors) {
-      boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity', 12)
+      boldLine('Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronicity:', 12)
       normalLine(reportSentence(bp.riskFactors), 12)
     }
     boldLine('Causation', 12)
@@ -2934,7 +2936,8 @@ function downloadDailyNotesPdf() {
     normalLine(bp.reasonableness, 12)
     gap(13)
 
-    // PLAN
+    // PLAN. Each heading moves to the next page with its first lines rather than sit alone at the bottom.
+    need(95)
     boldLine('PLAN', 12)
     boldLine('NEUROCOGNITIVE & VESTIBULAR DAILY TREATMENT THERAPY', 12)
     gap(13)
@@ -2945,11 +2948,13 @@ function downloadDailyNotesPdf() {
     gap(13)
 
     // 97129/97130
+    need(52)
     boldLine('97129 Cognitive Therapy (1 Unit)/ 97130 Cognitive Therapy', 12)
     normalLine('Increase stimulation of dysfunctional brain functions particularly reaction time, immediate memory, delayed memory, response inhibition, attention.', 12)
     gap(13)
 
     // 97110
+    need(52)
     boldLine('97110 Therapeutic Exercise', 12)
     inlineBoldNormal('Therapeutic Exercise:', ' Therapeutic exercise will be applied to increase blood flow and oxygen to the brain and body. Also to increase strength and stability of weakened joint units.', 12)
     gap(13)
@@ -4031,7 +4036,7 @@ function day2PreviewTest1Html(file,partType,total){
   h+=day2PreviewSubheading('Validated Symptom Questionnaire — Depression')
   h+=day2PreviewKvGrid([['PHQ-9 Depression Score',r.phqScore],['Progress Status',day2ProgressStatusForCategory(day2CurrentExamCategoryForPreview(),r.phqProgressStatus)]])
   h+=day2PreviewSubheading('Validated Symptom Questionnaire — Anxiety')
-  h+=day2PreviewKvGrid([['GAD-7 General Anxiety Disorder Score',r.gadScore],['Progress Status',day2ProgressStatusForCategory(day2CurrentExamCategoryForPreview(),r.gadProgressStatus)]])
+  h+=day2PreviewKvGrid([['GAD-7 Generalized Anxiety Disorder Score',r.gadScore],['Progress Status',day2ProgressStatusForCategory(day2CurrentExamCategoryForPreview(),r.gadProgressStatus)]])
   h+=day2PreviewSubheading('mBESS')
   h+=day2PreviewKvGrid(r.mbessRows)
   h+=day2PreviewSubheading('VOMS')
@@ -4719,7 +4724,7 @@ function day2PreviewTest3PdfHtml(file,index,total){
   if(!file||!day2NormResultText(file.text))return ''
   let title='AUDITORY SCREENING TEST FOR HEARING LOSS'
   if(total>1)title+=' — PDF '+(index+1)
-  let h=day2PreviewSubheading('Description')+'<div class="day2-result-line">The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant Hearing Loss; 2) Hearing loss; 3) Good hearing.</div>'
+  let h=day2PreviewSubheading('Description')+'<div class="day2-result-line">The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant hearing loss; 2) Hearing loss; 3) Good hearing.</div>'
   h+=day2PreviewSubheading('Auditory Screening Test for Hearing Loss Validation Research')+'<div class="day2-result-line">https://www.shoebox.md/clinical-validation/</div>'
   return day2PreviewSection(title,h)
 }
@@ -5526,7 +5531,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
     }
     function drawInitialExamOpeningText(){
       const examCat=data.examCategory||'Day 2'
-      const examLabel=examCat==='Final Examination'?'FINAL-EXAMINATION REPORT':examCat==='Re-Examination'?'RE-EXAMINATION':'INITIAL EXAMINATION'
+      const examLabel=examCat==='Final Examination'?'FINAL EXAMINATION REPORT':examCat==='Re-Examination'?'RE-EXAMINATION':'INITIAL EXAMINATION'
       introHeading(examLabel,10.5)
       introHeading('NEUROCOGNITIVE AND VESTIBULAR EXAMINATION',10.5)
       introHeading('Definition of Concussion from The United States Centers for Disease Control and Prevention (CDC):',9.8)
@@ -5541,7 +5546,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       y+=8
       introHeading('Significance of Second Head Impact on Concussion Severity',9.8)
       introPara('Second Head Impact Statement: "A second concussion soon after the first one does not have to be very strong for its effects to be permanently disabling."')
-      introLink('https://www.aans.org/en/Patients/Neurosurgical-Conditions-and-Treatments/Concussion')
+      // The AANS link once, under its name (it was also printed under the quote).
       introHeading('American Association of Neurological Surgeons.',9.8)
       introLink('https://www.aans.org/en/Patients/Neurosurgical-Conditions-and-Treatments/Concussion')
       y+=10
@@ -5906,7 +5911,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultLink('https://health.mil/News/Articles/2021/09/28/Mild-TBI-may-be-linked-to-Depression-Anxiety-and-PTSD-Studies-Show')
       resultBoldText('Peer-Reviewed GAD-7 Validation Research:',9.5)
       resultLink('https://jamanetwork.com/journals/jamainternalmedicine/fullarticle/410326#:~:text=A%20score%20of%2010%20or,depression%20on%20the%20PHQ%2D9.')
-      resultRichParagraph([{text:'GAD-7 General Anxiety Disorder Score: ',bold:true,size:12},{text:r.gadScore||'—',bold:false}],{size:12,space:4})
+      resultRichParagraph([{text:'GAD-7 Generalized Anxiety Disorder Score: ',bold:true,size:12},{text:r.gadScore||'—',bold:false}],{size:12,space:4})
       resultKV('Progress Status',day2ProgressStatusForCategory(data.examCategory,r.gadProgressStatus),{size:9.6,space:10})
       resultHeading('OBJECTIVE:',10.5)
       resultHeading('VESTIBULAR BALANCE TESTING',10)
@@ -5921,7 +5926,8 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultBoldText('Peer-Reviewed Validation Research for Sway Medical Balance:',9.5)
       resultLink('https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4004118/')
       resultHeading('Vestibular Balance Outcomes Testing',9.8)
-      resultBoldText('mBESS (Vestibular)',9.6)
+      // The heading only with a result under it: with no mBESS numbers it printed on its own.
+      if([r.mbess.avg,r.mbess.range,r.mbess.percentile,r.mbess.rank,r.mbess.baselineCount].some(day2IsPresentValue))resultBoldText('mBESS (Vestibular)',9.6)
       resultKVPresent('Baseline Average',r.mbess.avg,{size:9.3})
       resultKVPresent('Range',r.mbess.range,{size:9.3})
       resultKVPresent('Percentile',r.mbess.percentile,{size:9.3})
@@ -5935,7 +5941,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultTable(['','Headache','Dizziness','Nausea','Fogging','Total','Comments'],r.voms.rows,[82,82,82,82,82,82,92])
       resultHeading('COGNITIVE THOUGHT AND REACTION TIME TESTING',10)
       // One piece: clean() trims each piece, which ran "Testing:" into "Date:".
-      resultInline([{text:'Cognitive Thought Process and Reaction Time Outcomes Testing: Date: '+initialExamSessionDate,bold:false}],9.2)
+      resultInline([{text:'Cognitive Thought Process and Reaction Time Outcomes Testing Date: '+initialExamSessionDate,bold:false}],9.2)
       resultBoldText('Sway Medical Cognitive Testing System Explanation: COGNITIVE TESTING: The Sway System assesses cognitive function with tests of visual processing, reaction time and memory.',9.2)
       resultLink('https://www.swaymedical.com/product/cognitive')
       resultBoldText('Peer-Reviewed Validation Research for Accuracy of Sway Medical Cognitive Mobile App:',9.2)
@@ -6101,7 +6107,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       if(!hasDay2EarSelection(r))return
       resultHeading('OBJECTIVE',10.5)
       resultHeading('AUDITORY SCREENING TEST FOR HEARING LOSS Date: '+clean(initialExamSessionDate),10.5)
-      resultText('Description: The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant Hearing Loss; 2) Hearing loss; 3) Good hearing.',10.0,2)
+      resultText('Description: The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant hearing loss; 2) Hearing loss; 3) Good hearing.',10.0,2)
       resultHeading('Auditory Screening Test for Hearing Loss Validation Research:',13)
       resultLink('https://www.shoebox.md/clinical-validation/')
       y+=12
@@ -6116,7 +6122,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       resultHeading('OBJECTIVE',10.5)
       const label=total>1?' PDF '+(index+1):''
       resultHeading('AUDITORY SCREENING TEST FOR HEARING LOSS'+label+' Date: '+clean(initialExamSessionDate),10.5)
-      resultText('Description: The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant Hearing Loss; 2) Hearing loss; 3) Good hearing.',10.0,2)
+      resultText('Description: The patient is assessed using an online auditory screening test that yields one of three result choices: 1) Significant hearing loss; 2) Hearing loss; 3) Good hearing.',10.0,2)
       resultHeading('Auditory Screening Test for Hearing Loss Validation Research:',13)
       resultLink('https://www.shoebox.md/clinical-validation/')
       y+=8
@@ -6316,7 +6322,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       // Exam Report Dates line is omitted for no-follow-up cases.
       if(!noFollowup)dLine('Neurocognitive and Vestibular Exam Report Dates:',examReportDates)
       dLine('Discharge Date:',dischargeDate)
-      dLine('Total Dates of service:',totalDates)
+      dLine('Total Dates of Service:',totalDates)
       y+=4
       // Final Status - short discharge text for no-follow-up, full text otherwise.
       const finalStatusText=noFollowup
@@ -6341,7 +6347,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
     }
     function drawDay2TreatmentPlanOfCare(){
       need(150)
-      resultHeading('PLAN- TREATMENT PLAN OF CARE',11)
+      resultHeading('PLAN – TREATMENT PLAN OF CARE',11)
       const planSize=12
       // No-follow-up: the patient is discharged, so the plan collapses to a single
       // recommendation line.
@@ -6351,8 +6357,8 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       }
       resultRichParagraph([{text:'Cognitive Therapy: ',bold:true,size:12},{text:'Increase stimulation of dysfunctional brain functions particularly reaction time, immediate memory, delayed memory, response inhibition, attention. 3 visits per week for 4 weeks followed by re-evaluation, continuation determined by re-evaluation.'}],{size:planSize,space:2})
       resultRichParagraph([{text:'Neuromuscular Re-education: ',bold:true,size:12},{text:'rehabilitation of vestibular and/or brain-based balance, movement, coordination, kinesthetic sense, posture and proprioception particularly eye movement and balance in order to improve function. Frequency: 3 visits per week for 4 weeks followed by re-evaluation, continuation determined by re-evaluation.'}],{size:planSize,space:2})
-      resultRichParagraph([{text:'Therapeutic Exercise: ',bold:true,size:12},{text:'3 visit per week for 4 weeks. Frequency: 3 visits per week for 4 weeks followed by re- evaluation, continuation determined by re-evaluation.'}],{size:planSize,space:2})
-      resultRichParagraph([{text:'Tx. Effectiveness: ',bold:true,size:12},{text:'Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings. .'}],{size:planSize,space:2})
+      resultRichParagraph([{text:'Therapeutic Exercise: ',bold:true,size:12},{text:'3 visits per week for 4 weeks followed by re-evaluation, continuation determined by re-evaluation.'}],{size:planSize,space:2})
+      resultRichParagraph([{text:'Tx. Effectiveness: ',bold:true,size:12},{text:'Overall effectiveness of ongoing treatment for this complaint will continue to be evaluated by analyzing objective and subjective findings.'}],{size:planSize,space:2})
       resultRichParagraph([{text:'Home/Self Care: ',bold:true,size:12},{text:'The patient was instructed to continue home care recommendations.'}],{size:planSize,space:14})
       resultRichParagraph([{text:'Recommendation: ',bold:true,size:12},{text:'Continue Treatment Plan.'}],{size:planSize,space:8})
     }
@@ -10024,7 +10030,7 @@ function buildCaseDischargeDoc(p){
   // Exam Report Dates line is omitted for no-follow-up cases.
   if(!isPatientAceNoFollowup(p))richPara([{t:'Neurocognitive and Vestibular Exam Report Dates:',b:true},{t:cd.examReportDates||'—'}],12,2)
   richPara([{t:'Discharge Date:',b:true},{t:cd.dischargeDate||'—'}],12,2)
-  richPara([{t:'Total Dates of service:',b:true},{t:cd.totalDates||'—'}],12,8)
+  richPara([{t:'Total Dates of Service:',b:true},{t:cd.totalDates||'—'}],12,8)
   richPara([{t:'Final Status:',b:true},{t:cd.finalStatus}],12,6)
   // Risk Factors line is omitted for no-follow-up cases (matches the inline ACE copy)
   // and when there are none to list.
@@ -12115,7 +12121,7 @@ function saveDay1Ace(btn,forceComplete){
 const HPI_ITEMS=[
   'Change in Swallowing','Change in Appetite','Change in Sense of Smell','Change in Sense of Taste',
   'Stammering Speech','Slurring Speech','Stuttering Speech',
-  'Aphasia - comprehension lag time','Aphasia - a word choice lag time',
+  'Aphasia - comprehension lag time','Aphasia - word choice lag time',
   'Aphasia - phonation lag time',
   'Cried Since Injury Date','Tinnitus (Ringing in Ears)','Hearing Difficulty',
   'Feeling of Fullness or Pressure in Ear','Visual Discomfort','Visual Disturbance',
@@ -12126,7 +12132,7 @@ const HPI_ITEMS=[
 ]
 const RISK_FACTORS=['Direct head impact','Second head impact','Previous TBI / concussion','Personal history of military deployment','History of migraines','Anxiety (pre-existing)','Depression (pre-existing)','Sleep disorder','ADHD','Learning disabilities','Age over 40','Repeated concussions']
 const PMH_ITEMS=[
-  'Strenuous exercise in last 3 hours','Previous Motor Vehicle Collision','Residual Effects of Previous MVC',
+  'Strenuous exercise in the last 3 hours','Previous Motor Vehicle Collision','Residual Effects of Previous MVC',
   'Played Organized Contact Sport on Team','Legally Blind in One or Both Eyes','Wear Corrective Lenses',
   'History of Cerebral Infarct (Stroke)','History of TIA / Vasospasm','History of Headaches (diagnosed)',
   'Migraine Headaches (diagnosed by physician)','History of Seizures','History of Tinnitus',
@@ -12136,7 +12142,7 @@ const PMH_ITEMS=[
   'Brain Surgery','Meningitis','History of Rehab for Alcohol Abuse','History of Rehab for Drug Abuse',
   'Received Speech Therapy','Attended IEP or Special Education Classes',
   'Repeated One or More Grades','Advanced One or More Grades',
-  'Do you have any orthopedic problem or injuries?',
+  'Do you have any orthopedic problems or injuries?',
   /* APPENDED, never inserted. Saved answers are matched to this list by
      position, so putting a new question anywhere but the end would shift every
      answer after it and silently rewrite existing patient records. */
@@ -13552,12 +13558,14 @@ function buildPDF(name,opts){
      than that the question did not apply. So is a count of none: an answer of
      0 leaves the question out too (19 Oct 2026), except o.zero - a score.
      o.sentence: the answer reads as a sentence and ends with a full stop. */
+  // A label that is a question keeps its "?" and takes no colon ("unaided? N/A", not "unaided?: N/A").
+  const labelSep=label=>/\?\s*$/.test(String(label))?String(label).trim()+' ':label+': '
   function kvLine(label,value,o){
     if(isUnanswered(value)) return
     let v=String(value).trim()
     if(v==='0'&&!(o&&o.zero))return
     v=(o&&o.sentence)?reportSentence(v):reportCap(v)
-    const segs=[{t:label+': ',b:true},{t:v}]
+    const segs=[{t:labelSep(label),b:true},{t:v}]
     rec({k:'p',segs:segs})
     const lines=wrapSegs(segs,TW)
     needPage(Math.min(lines.length*14,pageUsable))
@@ -13581,7 +13589,7 @@ function buildPDF(name,opts){
     return segs.length?segs:[{t:text}]
   }
   function kvRich(label,text){
-    const segs=[{t:label+': ',b:true},...parseRich(text||'—')]
+    const segs=[{t:labelSep(label),b:true},...parseRich(text||'—')]
     rec({k:'p',segs:segs})
     const lines=wrapSegs(segs,TW)
     needPage(Math.min(lines.length*14,42))
@@ -13671,12 +13679,12 @@ function buildPDF(name,opts){
   function quadTable(columns){
     const tableX=ML,tableW=TW
     const colW=tableW/columns.length,lineH=13,sz=8,pad=6
-    rec({k:'cols',cols:columns.map(c=>[[{t:c.header,b:true}]].concat(c.rows.map(([label,val])=>[{t:label+': '},{t:naCell(val),b:true}])))})
+    rec({k:'cols',cols:columns.map(c=>[[{t:c.header,b:true}]].concat(c.rows.map(([label,val])=>[{t:labelSep(label)},{t:naCell(val),b:true}])))})
     const colLines=columns.map(c=>{
       const out=[]
       wrapSegs([{t:c.header,b:true}],colW-pad*2,sz).forEach(l=>out.push(l))
       c.rows.forEach(([label,val])=>{
-        wrapSegs([{t:label+': ',b:false},{t:naCell(val),b:true}],colW-pad*2,sz).forEach(l=>out.push(l))
+        wrapSegs([{t:labelSep(label),b:false},{t:naCell(val),b:true}],colW-pad*2,sz).forEach(l=>out.push(l))
       })
       return out
     })
@@ -13719,7 +13727,7 @@ function buildPDF(name,opts){
   // follows a comma, as in Causation (see dischargeIncidentPhrase).
   const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType:'a '+injType
   para([
-    {t:'Today the patient, '+name+', DOB: '+dob+' AGE: '+age},
+    {t:'Today the patient, '+name+', DOB: '+dob+', age '+age},
     {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in '},
     {t:sustainedIn+' on '+doiEv},...jurClause,
     {t:'. The Acute Concussion Evaluation is the United States Centers for Disease Control and Prevention (CDC) standard initial assessment in the diagnosis pathway for acute (72 hours or less post-injury) traumatic brain injury concussion. The ACE contains similar questions to the post-concussion standard instrument questionnaire named The Rivermead Post-Concussion Symptoms Questionnaire, and is therefore used herein to establish indications for further neurocognitive and vestibular examination for both Acute and Post-Acute TBI symptoms. The '},
@@ -13738,7 +13746,7 @@ function buildPDF(name,opts){
   para(['This report documents concussion-associated effects demonstrated by the patient.'])
   H2('Significance of Second Head Impact on Concussion Severity')
   para([{t:'Second Head Impact Statement: ',b:true},{t:'"A second concussion soon after the first one does not have to be very strong for its effects to be permanently disabling."',i:true}])
-  linkLine('https://www.aans.org/en/Patients/Neurosurgical-Conditions-and-Treatments/Concussion')
+  // The AANS link once, under its name (it was also printed under the quote).
   para([{t:'American Association of Neurological Surgeons.',b:true}])
   linkLine('https://www.aans.org/en/Patients/Neurosurgical-Conditions-and-Treatments/Concussion')
 
@@ -13747,7 +13755,7 @@ function buildPDF(name,opts){
   linkLine('https://www.cdc.gov/headsup/basics/concussion_whatis.html')
   kvLine('Injury Incident','All collisions, impacts, injuries and other events that occurred at the scene of the injury just prior to and soon after the injury event will be referred to as the injury incident.')
   kvLine('MVC','MVC is the abbreviation for motor vehicle collision.')
-  kvLine('Note','MVC description refers to a windshield facing driver seated on his/her left hand side of the car.')
+  kvLine('Note','MVC description refers to a windshield-facing driver seated on his/her left-hand side of the car.')
   kvLine('Impact Event','The time period of potentially injurious body movements beginning at moment of impact.')
   kvLine('Coup','the first brain movement during head injury event.')
   kvLine('Contre Coup','the second brain movement during head injury event.')
@@ -13905,10 +13913,11 @@ function buildPDF(name,opts){
   {const mvcN=parseInt(go('totalMVC')),socN=parseInt(go('totalSOC'));kvLine('Total Collisions to Unit 1',(isNaN(mvcN)||isNaN(socN))?(go('totalMVC')+' / '+go('totalSOC')):String(mvcN+socN))}
   H2('HEAD IMPACTS:',true,true)
   kvLine('Head Impacts',[(window.ctgXq?ctgXq('xq_headImpacts'):''),(window.ctgXqText?ctgXqText('xq_headImpactsText'):'')].filter(Boolean).join('. '))
-  kvLine('IHI 1',gv('ihi1'))
-  kvLine('IHI 2',gv('ihi2'))
+  // Direct impacts first, as in the section heading and the story.
   kvLine('DHI 1',gv('dhi1'))
   kvLine('DHI 2',gv('dhi2'))
+  kvLine('IHI 1',gv('ihi1'))
+  kvLine('IHI 2',gv('ihi2'))
   {const dhiN=parseInt(go('totalDHI')),ihiN=parseInt(go('totalIHI'));kvLine('Total Head Impacts',(isNaN(dhiN)||isNaN(ihiN))?(go('totalDHI')+' / '+go('totalIHI')):String(dhiN+ihiN))}
 
   H1('Acute Concussion Evaluation (ACE)')
@@ -14013,7 +14022,7 @@ function buildPDF(name,opts){
   H2('Neuropsychologic and Vestibular Test Indication:')
   para([
     {t:'Acute Concussion Evaluation (ACE) score: ',b:true},{t:aceScore,b:true},
-    {t:' out of a possible 22. According to United States Centers for Disease Control Guidelines based on an Acute Concussion Evaluation (ACE) score greater than or equal to 1, and history and examination findings of concussion-associated signs and symptoms a neurocognitive and vestibular examination is indicated. A neurocognitive and vestibular examination for concussion includes an examination of the vestibular system including brainstem, cerebellum and related cortical pathways, as well as neurocognitive function in order to assess the presence and severity of concussion, and to create a treatment plan. (Note: by definition a concussion is defined as direct or indirect traumatic brain injury without evidence of damage on common imaging studies, including CT scans and MRIs.) Full neurocognitive and vestibular examination may be conducted on today\'s date of service and/or on future dates of service.'}
+    {t:' out of a possible 22. According to the United States Centers for Disease Control Guidelines based on an Acute Concussion Evaluation (ACE) score greater than or equal to 1, and history and examination findings of concussion-associated signs and symptoms, a neurocognitive and vestibular examination is indicated. A neurocognitive and vestibular examination for concussion includes an examination of the vestibular system including brainstem, cerebellum and related cortical pathways, as well as neurocognitive function in order to assess the presence and severity of concussion, and to create a treatment plan. (Note: by definition a concussion is defined as direct or indirect traumatic brain injury without evidence of damage on common imaging studies, including CT scans and MRIs.) Full neurocognitive and vestibular examination may be conducted on today\'s date of service and/or on future dates of service.'}
   ])
   para([{t:'Peer-Reviewed Validation Research for Acute Concussion Evaluation (ACE):',b:true,i:true}])
   linkLine('https://pubmed.ncbi.nlm.nih.gov/18650767/')
@@ -14061,7 +14070,7 @@ function buildPDF(name,opts){
   // when the ACE is rebuilt headlessly for the FCR), falling back to the live form.
   const acePatient=(opts&&opts.patient)||(currentAcePatientId?getPatient(currentAcePatientId):null)
   const noFollowup=(acePatient&&isPatientAceNoFollowup(acePatient))||isAceNoFollowupSelected()
-  H1('PLAN- TREATMENT PLAN OF CARE')
+  H1('PLAN – TREATMENT PLAN OF CARE')
   if(noFollowup){
     // No follow-up: the patient is discharged, so the plan collapses to a
     // single recommendation line - no treatment plan/effectiveness/home care.
@@ -14082,7 +14091,7 @@ function buildPDF(name,opts){
     kvLine('Date of Injury',cd.doi)
     kvLine('Date of Initial DOS',cd.initialDOS)
     kvLine('Discharge Date',cd.dischargeDate)
-    kvLine('Total Dates of service',cd.totalDates)
+    kvLine('Total Dates of Service',cd.totalDates)
     kvLine('Final Status',cd.finalStatus||'Discharged. No concussion.')
     H2('Diagnosis')
     para([{t:(cd.dxLines&&cd.dxLines.length)?cd.dxLines.join(', '):'No diagnosis code selected'}])
@@ -14129,9 +14138,12 @@ function _bMoney(n){
 function _bDateKey(s){const m=String(s||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);return m?new Date(+m[3],+m[1]-1,+m[2]).getTime():Number.MAX_SAFE_INTEGER}
 // The first visit's line (Day 1 / ACE date). Was "Day 2 Exam Complex" until 4 Nov 2026.
 const BILLING_99203_DESC='99203 25 Initial Exam Complex'
+// Wording a saved billing edit may still carry, and what it reads now (4 Nov 2026). Only these
+// exact texts change; a description staff typed themselves stays as typed.
+const BILLING_OLD_DESC={'99203 25 Day 2 Exam Complex':BILLING_99203_DESC,'97112 Neuro Muscular Re-Education':'97112 Neuromuscular Re-Education'}
 function _bTherapyRows(date){return [
   {date,code:'97110',desc:'Therapeutic Exercise',qty:1,charges:135,payments:0,adjustments:0,balance:135},
-  {date,code:'97112',desc:'97112 Neuro Muscular Re-Education',qty:1,charges:135,payments:0,adjustments:0,balance:135},
+  {date,code:'97112',desc:'97112 Neuromuscular Re-Education',qty:1,charges:135,payments:0,adjustments:0,balance:135},
   {date,code:'97129',desc:'97129 Cognitive Therapy, 1st 15 min.',qty:1,charges:150,payments:0,adjustments:0,balance:150},
   {date,code:'97130',desc:'97130 Cognitive Therapy, 2nd 15 min.',qty:1,charges:150,payments:0,adjustments:0,balance:150}
 ]}
@@ -14154,9 +14166,8 @@ function applyBillingEditsToGroups(p,groups){
       const e=edits[r._rowKey]
       if(!e)return
       if(e.code!=null)r.code=String(e.code)
-      // An edit saved before 4 Nov 2026 keeps the old wording of the 99203 line;
-      // only that exact text is shown the new way, anything typed stays as typed.
-      if(e.desc!=null)r.desc=String(e.desc)==='99203 25 Day 2 Exam Complex'?BILLING_99203_DESC:String(e.desc)
+      // An edit saved before 4 Nov 2026 keeps the old wording (see BILLING_OLD_DESC).
+      if(e.desc!=null)r.desc=BILLING_OLD_DESC[String(e.desc)]||String(e.desc)
       if(e.charges!=null&&e.charges!==''){
         const n=parseFloat(String(e.charges).replace(/[^0-9.\-]/g,''))
         if(!isNaN(n)){r.charges=n;r.balance=n}
@@ -14334,9 +14345,9 @@ function buildBillingStatementDoc(data){
     ly+=6
     f('bold',9); doc.text('For all billing questions, please call: '+data.clinic.phone,ML,ly); ly+=15
     f('normal',9)
-    doc.text('Patient Name : '+(data.patient.name||''),ML,ly); ly+=12
-    doc.text('Date Of Birth : '+(data.patient.dob||''),ML,ly); ly+=12
-    doc.text('Date Of Accident: '+(data.patient.doa||''),ML,ly); ly+=12
+    doc.text('Patient Name: '+(data.patient.name||''),ML,ly); ly+=12
+    doc.text('Date of Birth: '+(data.patient.dob||''),ML,ly); ly+=12
+    doc.text('Date of Accident: '+(data.patient.doa||''),ML,ly); ly+=12
     const w3=[110,80,62], RX=PW-MR-(w3[0]+w3[1]+w3[2])
     let by=48, rh=20
     const cells=[['Statement Date',data.statement.date||''],['Account No',data.statement.accountNo||''],['Page',String(pageNum)]]
