@@ -1135,6 +1135,7 @@
     // Uploaded pages that already print their own footer: leave them without one here too.
     var coverFooter = (pdfBytes && pdfBytes.ctgPageCoverFooter) || []
     var sources = (pdfBytes && pdfBytes.ctgPageSources) || []
+    var patches = (pdfBytes && pdfBytes.ctgPagePatches) || []
     var aceRecord = pdfBytes && pdfBytes.ctgAceRecord
     var ace = (aceRecord && window.ctgDay1Docx && window.ctgDay1Docx.parts)
       ? window.ctgDay1Docx.parts(aceRecord, { headerId: 'rIdHA', footerId: 'rIdFA' })
@@ -1218,6 +1219,8 @@
         if (!done) {
           try {
             var tp = await readTextPage(pdf, n)
+            // An uploaded report corrected for old wording: its covered lines read as typed.
+            tp.items = applyPatch(tp.items, patches[n - 1])
             if (tp.items.length) {
               var usp = null, uname = null
               if (L) {
@@ -1386,5 +1389,281 @@
     return zip.generateAsync({ type: 'blob', mimeType: MIME, compression: 'DEFLATE' })
   }
 
-  window.ctgFcrDocx = { build: build }
+
+  /* --------------- old wording on uploaded CTG reports (4 Nov 2026) --------------- */
+  /* An uploaded PDF that is one of the practice's own reports (a page that says
+     "Concussion Therapy Group": an uploaded Day 1, daily note, bill, discharge
+     summary) was written by an older template, so the wording fixes of
+     4 Nov 2026 cannot reach it, and the Final Case Report printed the old wording
+     (Malachi's Day 1). When the FCR is built, these exact old phrases are
+     corrected on those pages: the old words are covered in white and the new
+     ones typed in the same font family, size and weight (fixPdf, app.js
+     compileFCRPages). The covered lines and their new text go to the Word copy
+     too (build: ctgPagePatches), so it never shows old and new together. The
+     uploaded file itself is not changed. Anything not listed stays as uploaded:
+     lines cannot be reordered or removed this way (IHI before DHI, an N/A
+     question, a second AANS link). A name: one to five capitalised words. */
+  var NAME = "[A-Z][\\w.'-]*(?: [A-Z][\\w.'-]*){0,4}"
+  var OLD_WORDING = [
+    // Day 1
+    { re: /([^\s,]),?\s+AGE:\s*/g, to: '$1, age ' },
+    { re: /^AGE:\s*/g, to: 'age ' },
+    { re: /\bPLAN-\s*TREATMENT PLAN OF CARE/g, to: 'PLAN – TREATMENT PLAN OF CARE', underline: true },
+    { re: /\bAccording to United States/g, to: 'According to the United States' },
+    { re: /^United States Centers/g, to: 'the United States Centers', prev: /According to$/ },
+    { re: /\bsigns and symptoms a\b/g, to: 'signs and symptoms, a' },
+    { re: /\bwindshield facing\b/g, to: 'windshield-facing' },
+    { re: /\bleft hand side\b/g, to: 'left-hand side' },
+    { re: /\bAphasia - a word choice lag time/g, to: 'Aphasia - word choice lag time' },
+    { re: /\bStrenuous exercise in last 3 hours/g, to: 'Strenuous exercise in the last 3 hours' },
+    { re: /\borthopedic problem or injuries/g, to: 'orthopedic problems or injuries' },
+    { re: /\?:\s*/g, to: '? ' },
+    // Causation / Medical Necessity (Day 1, daily notes, discharge summary)
+    { re: new RegExp('Based on review of the (' + NAME + ') complaints', 'g'), to: "Based on review of $1's complaints" },
+    { re: /Based on review of the$/g, to: 'Based on review of' },
+    { re: new RegExp('^(' + NAME + ') complaints', 'g'), to: "$1's complaints", prev: /Based on review of$/ },
+    { re: new RegExp('rendered to the patient, (' + NAME + '), has been', 'g'), to: 'rendered to $1 has been' },
+    { re: new RegExp('rendered to the patient, (' + NAME + '),\\s*$', 'g'), to: 'rendered to $1' },
+    { re: /rendered to the patient,\s*$/g, to: 'rendered to' },
+    { re: new RegExp('^(' + NAME + '), has been', 'g'), to: '$1 has been', prev: /rendered to$/ },
+    { re: new RegExp('rendered to the (' + NAME + ') has been', 'g'), to: 'rendered to $1 has been' },
+    { re: /\binjuries sustained in their\b/g, to: 'injuries sustained in the' },
+    { re: /^in their\b/g, to: 'in the', prev: /injuries sustained$/ },
+    // Exams
+    { re: /\bFINAL-EXAMINATION REPORT/g, to: 'FINAL EXAMINATION REPORT' },
+    { re: /\bGeneral Anxiety Disorder Score/g, to: 'Generalized Anxiety Disorder Score' },
+    { re: /\bTesting: Date:/g, to: 'Testing Date:' },
+    { re: /\b3 visit per week for 4 weeks\. Frequency: 3 visits per week/g, to: '3 visits per week' },
+    { re: /\bfindings\. \./g, to: 'findings.' },
+    { re: /\bDay 2 Exam, no comparative data/g, to: 'Initial Exam, no comparative data' },
+    { re: /\bTotal Dates of service/g, to: 'Total Dates of Service' },
+    { re: /1\) Significant Hearing Loss;/g, to: '1) Significant hearing loss;' },
+    // Daily notes
+    { re: /\bis today's (highest|lowest) score of\b/g, to: 'is the $1 score of' },
+    { re: /\bNervous or anxious and Symptoms worsen\b/g, to: 'Nervous or anxious, symptoms worsen' },
+    { re: /\basleep and Symptoms worsen\b/g, to: 'asleep and symptoms worsen' },
+    { re: /^Symptoms worsen with/g, to: 'symptoms worsen with', prev: /(anxious,|asleep and)$/ },
+    { re: /\bworsen with mental activity$/g, to: 'worsen with mental activity.' },
+    { re: /^mental activity$/g, to: 'mental activity.', prev: /worsen with$/ },
+    { re: /\bwith occasional exacerbation$/g, to: 'with occasional exacerbation.' },
+    { re: /\bProlonged Recovery and Chronicity$/g, to: 'Prolonged Recovery and Chronicity:' },
+    { re: /^Chronicity$/g, to: 'Chronicity:', prev: /Prolonged Recovery and$/ },
+    // Bill
+    { re: /\bPatient Name :/g, to: 'Patient Name:' },
+    { re: /\bDate Of Birth :/g, to: 'Date of Birth:' },
+    { re: /\bDate Of Accident:/g, to: 'Date of Accident:' },
+    { re: /\bNeuro Muscular Re-Education/g, to: 'Neuromuscular Re-Education' },
+    { re: /\b99203 25 Day 2 Exam Complex/g, to: '99203 25 Initial Exam Complex' },
+    // Everywhere: a label run into its value ("Symptoms:Second", "Effectiveness:Overall")
+    { re: /([a-z)]):(?=[A-Z])/g, to: '$1: ' },
+    // ...and before a small letter or a number only where a bold label meets its text
+    // ("Re-education:rehabilitation", "Exercise:3 visits"), never inside a word or a time.
+    { re: /([a-z)]):(?=[a-z0-9])/g, to: '$1: ', split: 1 },
+    { re: /\bContinue Treatment Plan\s*$/g, to: 'Continue Treatment Plan.' }
+  ]
+
+  // A page's words in lines, top to bottom, each line left to right (as toLines groups them).
+  function wordingLines(items) {
+    var its = items.filter(function (it) { return it.s && it.s.length }).slice()
+      .sort(function (a, b) { return (b.y - a.y) || (a.x - b.x) })
+    var lines = []
+    its.forEach(function (it) {
+      var cur = lines[lines.length - 1]
+      if (cur && Math.abs(cur.y - it.y) <= Math.max(1.5, Math.min(cur.size, it.size) * 0.75)) { cur.items.push(it); cur.size = Math.max(cur.size, it.size) }
+      else lines.push({ y: it.y, size: it.size, items: [it] })
+    })
+    lines.forEach(function (ln) { ln.items.sort(function (a, b) { return a.x - b.x }) })
+    return lines
+  }
+
+  /* One line: its text, and each piece's text after the corrections. own[] says
+     which piece each character belongs to; a space standing for a gap between
+     two pieces belongs to neither (-1 - the index of the piece after it). */
+  function fixWordingLine(ln, prevText, measure) {
+    var chars = [], own = []
+    ln.items.forEach(function (it, i) {
+      if (i) {
+        var pv = ln.items[i - 1], gap = it.x - (pv.x + pv.w)
+        /* A space at the end of a bold label is often inside the label's width rather
+           than its text ("Note: " reads as "Note:", 28pt wide): that is a real space,
+           even where a viewer's wider bold font squeezes it. Only a space that is not
+           there at all ("Symptoms:Second" in a template from before 2 Nov) is missing. */
+        var hidden = measure ? Math.max(0, pv.w - measure(pv)) : 0
+        if ((gap > ln.size * 0.12 || gap + hidden > ln.size * 0.15) && !/\s$/.test(pv.s) && !/^\s/.test(it.s)) { chars.push(' '); own.push(-1 - i) }
+      }
+      for (var k = 0; k < it.s.length; k++) { chars.push(it.s[k]); own.push(i) }
+    })
+    var text = chars.join(''), underline = false, last = ln.items.length - 1
+    var ownerAt = function (pos) { if (pos >= own.length) return last; var o = own[pos]; return o < 0 ? -1 - o : o }
+    var ownerBefore = function (pos) { for (var q = pos - 1; q >= 0; q--) if (own[q] >= 0) return own[q]; return ownerAt(pos) }
+    OLD_WORDING.forEach(function (rule) {
+      if (rule.prev && !rule.prev.test(prevText || '')) return
+      rule.re.lastIndex = 0
+      var m, guard = 0
+      while ((m = rule.re.exec(text)) && guard++ < 40) {
+        if (rule.split) {   // the character at m.index + split must end one piece and the next start another
+          var at = m.index + rule.split
+          if (!(own[at] >= 0 && own[at + 1] >= 0 && own[at] !== own[at + 1])) { rule.re.lastIndex = m.index + 1; continue }
+        }
+        var old = m[0], rep = rule.to.replace(/\$(\d)/g, function (_, d) { return m[+d] || '' })
+        if (old === rep) { rule.re.lastIndex = m.index + Math.max(1, old.length); continue }
+        // Only the part that differs changes ("07/25/2005 AGE: " keeps its date).
+        var a = 0
+        while (a < old.length && a < rep.length && old[a] === rep[a]) a++
+        var b = 0
+        while (b < old.length - a && b < rep.length - a && old[old.length - 1 - b] === rep[rep.length - 1 - b]) b++
+        var s0 = m.index + a, e0 = m.index + old.length - b, ins = rep.slice(a, rep.length - b)
+        var o = ownerAt(s0), boundary = s0 > 0 && (s0 >= own.length || own[s0] < 0 || own[s0 - 1] !== own[s0])
+        // A comma or full stop that starts the new text stays with the word before it.
+        var lead = boundary ? (ins.match(/^[,.;:]+/) || [''])[0] : ''
+        var newOwn = []
+        for (var c = 0; c < ins.length; c++) newOwn.push(c < lead.length ? ownerBefore(s0) : o)
+        text = text.slice(0, s0) + ins + text.slice(e0)
+        own = own.slice(0, s0).concat(newOwn, own.slice(e0))
+        if (rule.underline) underline = true
+        rule.re.lastIndex = m.index + rep.length
+      }
+    })
+    var strings = ln.items.map(function () { return '' })
+    for (var q = 0; q < text.length; q++) if (own[q] >= 0) strings[own[q]] += text[q]
+    var first = -1
+    for (var i = 0; i < ln.items.length; i++) if (strings[i] !== ln.items[i].s) { first = i; break }
+    return { text: text, changed: first >= 0, strings: strings, first: first, underline: underline }
+  }
+
+  // Cover the line from its first changed piece and type it again; returns the patch for the Word copy.
+  function drawFixedLine(pg, ln, res, right, fontFor) {
+    var L = window.PDFLib, items = ln.items, size = ln.size, f0 = res.first
+    var pieces = []
+    for (var i = f0; i < items.length; i++) {
+      var it = items[i], fnt = fontFor(it.f), s = res.strings[i]
+      if (i > f0) {
+        var pv = items[i - 1]
+        // the gap is the space already (a piece that is only a space stays: it is the gap)
+        if (it.x - (pv.x + pv.w) >= size * 0.15 && /\S/.test(s)) s = s.replace(/^\s+/, '')
+      }
+      fnt.widthOfTextAtSize(s, it.size)   // throws on a character the standard fonts lack: the line stays as uploaded
+      pieces.push({ it: it, s: s, fnt: fnt })
+    }
+    var layout = function (scale) {
+      var cur = 0, out = []
+      pieces.forEach(function (pc, j) {
+        var x
+        if (!j) x = pc.it.x
+        else {
+          var pv = items[f0 + j - 1], gap = pc.it.x - (pv.x + pv.w)
+          // a column keeps its place unless the text before it now reaches it
+          x = gap > size * 0.9 ? Math.max(pc.it.x, cur + size * 0.3) : cur + Math.max(gap, 0)
+        }
+        var w = pc.fnt.widthOfTextAtSize(pc.s, pc.it.size * scale)
+        // A space between a label and its answer stays visible even where a viewer draws the
+        // bold font a little wider than its measure ("head?No", "Symptoms:Second").
+        if (pc.s && !/\S/.test(pc.s)) w = Math.max(w, pc.it.size * scale * 0.33)
+        out.push({ pc: pc, x: x, w: w })
+        cur = x + w
+      })
+      return { out: out, end: cur }
+    }
+    var lastIt = items[items.length - 1], oldEnd = lastIt.x + lastIt.w
+    var limit = Math.max(right, oldEnd), x0 = items[f0].x
+    var lay = layout(1), scale = 1
+    if (lay.end > limit + 0.5 && lay.end > x0) {
+      scale = Math.max(0.85, (limit - x0) / (lay.end - x0))   // a little smaller rather than past the margin
+      lay = layout(scale)
+    }
+    var box = { x0: x0 - 0.6, x1: Math.max(oldEnd, lay.end) + 0.8, y0: ln.y - size * 0.26, y1: ln.y + size * 0.84 }
+    pg.drawRectangle({ x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0, color: L.rgb(1, 1, 1) })
+    var words = []
+    lay.out.forEach(function (o) {
+      if (!o.pc.s) return
+      pg.drawText(o.pc.s, { x: o.x, y: o.pc.it.y, size: o.pc.it.size * scale, font: o.pc.fnt, color: L.rgb(0, 0, 0) })
+      words.push({ s: o.pc.s, x: o.x, y: o.pc.it.y, w: o.w, size: o.pc.it.size * scale, f: o.pc.it.f })
+    })
+    if (res.underline) pg.drawLine({ start: { x: x0, y: ln.y - size * 0.14 }, end: { x: lay.end, y: ln.y - size * 0.14 }, thickness: Math.max(0.5, size * 0.05), color: L.rgb(0, 0, 0) })
+    return { box: box, words: words }
+  }
+
+  // The words on a page with their fonts (readTextPage without its drawings and pictures).
+  async function readWords(pdf, n) {
+    var page = await pdf.getPage(n)
+    await page.getOperatorList()   // loads the page's fonts, for bold
+    var tc = await page.getTextContent()
+    var ids = {}
+    tc.items.forEach(function (it) { if (it.fontName) ids[it.fontName] = 1 })
+    await Promise.all(Object.keys(ids).map(function (id) {
+      return new Promise(function (res) {
+        try { if (page.commonObjs.has(id)) return res(); page.commonObjs.get(id, function () { res() }) } catch (e) { res() }
+      })
+    }))
+    var items = []
+    tc.items.forEach(function (it) {
+      if (it.str === undefined || !it.str.length) return
+      var t = it.transform
+      items.push({ s: it.str, x: t[4], y: t[5], w: it.width, size: Math.hypot(t[2], t[3]) || it.height || 10, f: fontOf(page, tc.styles, it.fontName) })
+    })
+    var rot = page.rotate || 0
+    page.cleanup()
+    return { items: items, rot: rot }
+  }
+
+  /* bytes: an uploaded PDF. Returns { bytes, patches }: the corrected file (the
+     same bytes when nothing needed correcting) and, per page, the covered boxes
+     and the words typed in them. Never throws: on any trouble the file goes in
+     as uploaded. */
+  async function fixOldWording(bytes) {
+    var L = window.PDFLib
+    if (!L || typeof ensurePdfJs !== 'function') return { bytes: bytes, patches: [] }
+    var pdf = null
+    try {
+      var lib = await ensurePdfJs()
+      pdf = await lib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, fontExtraProperties: true }).promise
+      var doc = null, fonts = {}, patches = [], changed = 0
+      // The standard fonts' own widths, to tell a label's hidden space from a missing one.
+      var md = await L.PDFDocument.create(), mfonts = {}
+      var mnames = ['TimesRoman', 'TimesRomanBold', 'Helvetica', 'HelveticaBold']
+      for (var mk = 0; mk < mnames.length; mk++) mfonts[mnames[mk]] = await md.embedFont(L.StandardFonts[mnames[mk]])
+      var measure = function (it) {
+        var f = it.f, fnt = mfonts[(f && f.fam === 'Arial' ? 'Helvetica' : 'TimesRoman') + (f && f.b ? 'Bold' : '')]
+        try { return fnt.widthOfTextAtSize(it.s, it.size) } catch (e) { return it.w }
+      }
+      for (var n = 1; n <= pdf.numPages; n++) {
+        var rd = await readWords(pdf, n)
+        if (rd.rot % 360) continue
+        // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
+        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) continue
+        var lines = wordingLines(rd.items), prev = '', fixes = []
+        lines.forEach(function (ln) { var res = fixWordingLine(ln, prev, measure); prev = res.text; if (res.changed) fixes.push({ ln: ln, res: res }) })
+        if (!fixes.length) continue
+        if (!doc) {
+          doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true })
+          var names = ['TimesRoman', 'TimesRomanBold', 'Helvetica', 'HelveticaBold']
+          for (var k = 0; k < names.length; k++) fonts[names[k]] = await doc.embedFont(L.StandardFonts[names[k]])
+        }
+        var fontFor = function (f) { return fonts[(f && f.fam === 'Arial' ? 'Helvetica' : 'TimesRoman') + (f && f.b ? 'Bold' : '')] }
+        var pg = doc.getPage(n - 1)
+        var right = lines.reduce(function (mx, l) { var e = l.items[l.items.length - 1]; return Math.max(mx, e.x + e.w) }, 0)
+        var patch = { boxes: [], words: [] }
+        fixes.forEach(function (fx) {
+          try { var r = drawFixedLine(pg, fx.ln, fx.res, right, fontFor); patch.boxes.push(r.box); patch.words = patch.words.concat(r.words); changed++ }
+          catch (e) { console.warn('FCR: a line of an uploaded report was left as uploaded', e) }
+        })
+        if (patch.boxes.length) patches[n - 1] = patch
+      }
+      return changed ? { bytes: await doc.save(), patches: patches } : { bytes: bytes, patches: [] }
+    } catch (e) {
+      console.warn('FCR: an uploaded report could not be checked for old wording', e)
+      return { bytes: bytes, patches: [] }
+    } finally { try { if (pdf) pdf.destroy() } catch (e) {} }
+  }
+
+  // The Word copy of a corrected page: the words in the covered boxes are the typed ones.
+  function applyPatch(items, patch) {
+    if (!patch) return items
+    var inBox = function (it) {
+      return patch.boxes.some(function (b) { return it.y >= b.y0 && it.y <= b.y1 && it.x >= b.x0 - 0.5 && it.x <= b.x1 })
+    }
+    return items.filter(function (it) { return !inBox(it) }).concat(patch.words.map(function (w) { return Object.assign({}, w) }))
+  }
+
+  window.ctgFcrDocx = { build: build, fixOldWording: fixOldWording }
 })()

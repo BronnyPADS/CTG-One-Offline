@@ -5739,7 +5739,11 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       ;(parts||[]).forEach(part=>{
         const bold=!!part.bold
         const sz=segSize(part)
-        const text=clean(part.text!==undefined?part.text:part)
+        const rawText=part.text!==undefined?part.text:part
+        /* clean() trims, which took the space off a bold label ("Note: ") and set the
+           words after it against the colon ("Note:Concussion", 4 Nov 2026): keep it. */
+        let text=clean(rawText)
+        if(/\s$/.test(String(rawText))&&text!=='—')text+=' '
         const tokens=text.match(/\S+\s*/g)||['']
         tokens.forEach(tok=>{
           if(!line.length)tok=tok.replace(/^\s+/,'')
@@ -6345,12 +6349,13 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       let cx=DAY2_TABLE_X+doc.getTextWidth('Patient: ')
       setF('normal',12);doc.text(name,cx,y)
       cx+=doc.getTextWidth(name+'   ')
-      setF('bold',12);doc.text('Date of Birth:',cx,y)
-      cx+=doc.getTextWidth('Date of Birth:')
+      // A space after each label, as after "Patient: " ("Age:44" read run together, 4 Nov 2026).
+      setF('bold',12);doc.text('Date of Birth: ',cx,y)
+      cx+=doc.getTextWidth('Date of Birth: ')
       setF('normal',12);doc.text(dobStr,cx,y)
       cx+=doc.getTextWidth(dobStr+'   ')
-      setF('bold',12);doc.text('Age:',cx,y)
-      cx+=doc.getTextWidth('Age:')
+      setF('bold',12);doc.text('Age: ',cx,y)
+      cx+=doc.getTextWidth('Age: ')
       setF('normal',12);doc.text(age,cx,y)
       y+=16
       // Remaining discharge info lines
@@ -6358,7 +6363,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
         need(16)
         setF('bold',12);doc.setTextColor(0,0,0)
         doc.text(label,DAY2_TABLE_X,y)
-        const lw=doc.getTextWidth(label)
+        const lw=doc.getTextWidth(/\s$/.test(label)?label:label+' ')   // the value one space after its label
         const val=clean(value)
         const avail=Math.max(100,DAY2_TABLE_W-lw)
         const valLines=doc.splitTextToSize(val,avail,{fontSize:12,font:'times',fontStyle:'normal'})
@@ -10315,6 +10320,7 @@ async function compileFCR(p,opts){
     bytes.ctgPageKinds=out.kinds
     bytes.ctgPageSources=out.sources
     bytes.ctgAceRecord=out.aceRecord
+    bytes.ctgPagePatches=out.patches
     return bytes
   }finally{window.ctgFcrPaging=null}
 }
@@ -10332,6 +10338,8 @@ async function compileFCRPages(p,merged){
   // Where each page's footer goes (stampFCRPageNumbers); null: an uploaded page.
   const pageNoAt=[]
   let aceRecord=null
+  // Per page: lines of an uploaded report corrected for old wording (fcr-docx.js), for the Word copy.
+  const patches=[]
   async function addBytes(bytes,kind,numAt){
     try{
       const src=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true})
@@ -10395,7 +10403,14 @@ async function compileFCRPages(p,merged){
       if(!bytes){const res=await fetch(url);bytes=new Uint8Array(await res.arrayBuffer())}
       const mime=((String(url).match(/^data:([^;]+)/)||[])[1]||'').toLowerCase()
       const isPdf=mime.indexOf('pdf')>=0||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46)
-      if(isPdf)await addBytes(bytes); else await addImageBytes(bytes,mime||'image/jpeg')
+      if(isPdf){
+        // An uploaded report from an older template gets the current wording (4 Nov 2026).
+        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes):{bytes,patches:[]}
+        const before=kinds.length
+        await addBytes(fx.bytes)
+        const added=kinds.length-before
+        fx.patches.forEach((pt,i)=>{if(pt&&i<added)patches[before+i]=pt})
+      } else await addImageBytes(bytes,mime||'image/jpeg')
     }catch(e){console.error('FCR document include failed',e)}
   }
   // 1. Case Discharge Summary (page 1)
@@ -10499,7 +10514,7 @@ async function compileFCRPages(p,merged){
   //     closed on the last daily note, so it gets a standalone copy here instead.
   if(!fcrFinalExamClosesWithDischarge(p))try{await addJsPdf(buildCaseDischargeDoc(p))}catch(e){console.error('FCR closing case discharge failed',e)}
   if(merged.getPageCount()===0)throw new Error('No reports or documents are available to compile yet.')
-  return {kinds,sources,pageNoAt,aceRecord}
+  return {kinds,sources,pageNoAt,aceRecord,patches}
 }
 function _withFCR(pid,cb,opts){
   const p=getPatient(pid)
