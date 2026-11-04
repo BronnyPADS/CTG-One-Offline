@@ -2998,7 +2998,10 @@ function day2ProgressStatusForCategory(examCategory, extracted){
   const cat=normalizeExamCategoryForSelect(examCategory||'', '')
   if(cat==='Re-Examination'||cat==='Final Examination')return 'Improvement Demonstrated.'
   const raw=String(extracted||'').trim()
-  return raw&&raw!=='—'?raw:'Day 2 Exam, no comparative data.'
+  // "Initial Exam", as the report heading and the bill say (was "Day 2 Exam" until 4 Nov 2026,
+  // so a report that still carries the old wording is shown the new way).
+  if(/^Day 2 Exam, no comparative data\.?$/i.test(raw))return 'Initial Exam, no comparative data.'
+  return raw&&raw!=='—'?raw:'Initial Exam, no comparative data.'
 }
 function day2EscapeRegExp(v){return String(v).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
 function day2MatchResult(text,regex,def){const m=String(text||'').match(regex);return m?day2PdfSafe(m[1]):(def===undefined?'—':def)}
