@@ -441,6 +441,7 @@
         if (key === 'notificationSettings' && typeof window.ctgNotificationRealtime === 'function') window.ctgNotificationRealtime();
         if (key === 'patientRequests' && typeof window.ctgPrivacyRequestsRealtime === 'function') window.ctgPrivacyRequestsRealtime();
         if (key === 'disclosureLog' && typeof window.ctgDisclosureLogRealtime === 'function') window.ctgDisclosureLogRealtime();
+        if (key === 'day1Choices' && typeof window.ctgDay1ChoicesRealtime === 'function') window.ctgDay1ChoicesRealtime();
       }
       if (msg.type === 'data:chart' && typeof window.ctgPatientChartRealtime === 'function') window.ctgPatientChartRealtime();
       /* The Command Center wall reacts to anything that changes a room: a

@@ -46,7 +46,7 @@
     'sdiv:Social History', 'id:jobDuties', 'id:xq_socialHabits', 'id:diet', 'id:exercise',
     'sdiv:Family History', 'id:xq_familyHistory',
     'sdiv:Summary', 'id:totalMVC', 'id:totalSOC',
-    'sdiv:Head Impacts', 'id:xq_headImpacts', 'id:xq_headImpactsText', 'id:dhi1', 'id:dhi2', 'id:ihi1', 'id:ihi2', 'id:totalDHI', 'id:totalIHI'
+    'sdiv:Head Impacts', 'id:dhi1', 'id:dhi2', 'id:dhi3', 'id:totalDHI', 'id:ihi1', 'id:ihi2', 'id:ihi3', 'id:totalIHI'
   ]
 
   var ACE = [

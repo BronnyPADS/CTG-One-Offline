@@ -327,6 +327,13 @@
      nothing. */
   function openPicker(chipEl, c, onChange, onRemove, opts) {
     var allowAdd = !!(opts && opts.allowAdd)
+    /* opts.memoryKey: the list's name in the remembered choices (ctgChoiceMemory,
+       app.js). Choices other staff added show in the list; Add remembers a new
+       one for every patient, and x on a remembered one forgets it. */
+    var mem = (opts && opts.memoryKey && window.ctgChoiceMemory) ? opts.memoryKey : null
+    if (mem) window.ctgChoiceMemory.get(mem).forEach(function (o) {
+      if (!c.o.some(function (x) { return x.toLowerCase() === o.toLowerCase() })) c.o.push(o)
+    })
     closePop()
     var ctx = ctxFromForm()
     var refreshChip = function () {}, commit = onChange
@@ -347,7 +354,7 @@
           var v = inp.value.trim()
           if (!v) return
           var hit = c.o.filter(function (o) { return o.toLowerCase() === v.toLowerCase() })[0]
-          if (!hit) { c.o.push(v); hit = v }
+          if (!hit) { c.o.push(v); hit = v; if (mem) window.ctgChoiceMemory.add(mem, v) }
           if (c.s.indexOf(hit) === -1) c.s.push(hit)
           refreshChip(chipEl); commit(); draw()
           var again = pop && pop.querySelector('.moi-pop-add input'); if (again) again.focus()
@@ -361,6 +368,11 @@
         row.appendChild(inp); row.appendChild(add)
         if (!hasYesNo) row.appendChild(all)
         pop.appendChild(row)
+        if (mem) {
+          var note = document.createElement('div'); note.className = 'moi-pop-none'
+          note.textContent = 'Added choices are kept for every patient. Do not type names or patient details.'
+          pop.appendChild(note)
+        }
       }
       var list = document.createElement('div'); list.className = 'moi-pop-list'
       if (!c.o.length) {
@@ -382,6 +394,7 @@
           del.addEventListener('click', function (e) {
             e.preventDefault()
             c.o.splice(i, 1); c.s = c.s.filter(function (x) { return x !== o })
+            if (mem) window.ctgChoiceMemory.remove(mem, o)
             refreshChip(chipEl); commit(); draw()
           })
           lab.appendChild(del)

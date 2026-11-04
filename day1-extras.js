@@ -28,16 +28,7 @@
       'difficulty sleeping', 'difficulty swallowing', 'Diverticulosis', 'dizzy spells'],
     xq_socialHabits: ['normal', 'aloof', 'uncooperative', 'angry', 'disruptive', 'unsociable', 'argumentative', 'shy',
       'diabetic diet', 'Tobacco', 'Does not use alcohol, cannabis or illicit drugs'],
-    xq_familyHistory: ['Non-contributory.', 'Cancer', 'Diabetes', 'Autism', 'Learning disabilities'],
-    xq_headImpacts: [
-      'head and body jolted left and head struck the head restraint, then patient\'s head and body jolted to the right',
-      'head and body jolted right and head struck the head restraint, then patient\'s head and body jolted to the left',
-      'head and body jolted back and head struck the head restraint, then patient\'s head and body jolted forward',
-      'head and body jolted forward, then patient\'s head and body jolted backward hitting head restraint',
-      'head and body jolted back and head struck the head restraint, then patient\'s head and body jolted forward hitting steering wheel',
-      'head went forward and hit the windshield',
-      'Top of head struck ceiling. Then head jolted forward.',
-      'Jaw sprain']
+    xq_familyHistory: ['Non-contributory.', 'Cancer', 'Diabetes', 'Autism', 'Learning disabilities']
   }
 
   // Where each question goes. "after" is a field id whose .fg the new one follows;
@@ -50,10 +41,12 @@
     { id: 'xq_priorLoc', label: 'Loss of Consciousness (previous concussions)', into: 'pmhExtra' },
     { id: 'xq_otherMedHx', label: 'Other Significant Medical History', into: 'pmhExtra', full: true },
     { id: 'xq_socialHabits', label: 'Social Habits', after: 'jobDuties' },
-    { id: 'xq_familyHistory', label: 'Family History', into: 'familyHx', full: true },
-    { id: 'xq_headImpacts', label: 'Head Impacts', into: 'headImpacts', full: true }
+    { id: 'xq_familyHistory', label: 'Family History', into: 'familyHx', full: true }
   ]
-  var PLAIN_IDS = ['xq_headImpactsText', 'dhi2', 'ihi2', 'ace_loc_dur']
+  /* The Head Impacts dropdown and its free-text box were removed 4 Nov 2026: the
+     DHI and IHI descriptions are the head impacts (staff). Saved answers in
+     those two fields are no longer shown or printed. */
+  var PLAIN_IDS = ['dhi2', 'dhi3', 'ihi2', 'ihi3', 'ace_loc_dur']
   // Risk Factors for Protracted Recovery questions that take an optional comment.
   var RPR_IDS = ['rpr_priorConc', 'rpr_concNum', 'rpr_concDur', 'rpr_reinjury', 'rpr_priorHA', 'rpr_haTx', 'rpr_migraine',
     'rpr_learningDis', 'rpr_adhd', 'rpr_otherDevYN', 'rpr_anxiety', 'rpr_depression', 'rpr_sleepDisorder', 'rpr_otherPsychYN']
@@ -151,7 +144,7 @@
     var open = function () {
       if (ta.disabled || !window.ctgPicker) return
       var m = model(q.id)
-      window.ctgPicker.open(chip, m, function () { write(q.id, m) }, null, { allowAdd: !!q.add })
+      window.ctgPicker.open(chip, m, function () { write(q.id, m) }, null, { allowAdd: !!q.add, memoryKey: 'xq:' + q.id })
     }
     chip.addEventListener('click', open)
     chip.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })
@@ -198,37 +191,20 @@
       render(q.id)
     })
 
-    // Head Impacts free text, right after its dropdown.
-    var hi = nodes.xq_headImpacts && nodes.xq_headImpacts.chip.closest('.fg')
-    if (hi) {
-      var tfg = fgFor('Head Impacts — additional detail (free text)', true)
-      var inp = document.createElement('input'); inp.type = 'text'; inp.id = 'xq_headImpactsText'
-      inp.placeholder = 'e.g. head and body jolted left, head struck head restraint.'
-      tfg.appendChild(inp)
-      hi.parentNode.insertBefore(tfg, hi.nextSibling)
-    }
-
-    // DHI 2 with the same choices as DHI 1.
-    var dhi1 = document.getElementById('dhi1')
-    if (dhi1) {
-      var dfg = fgFor('DHI 2 — Second Direct Head Impact Description')
-      var sel = document.createElement('select'); sel.id = 'dhi2'
-      Array.prototype.forEach.call(dhi1.options, function (o) { var n = document.createElement('option'); n.value = o.value; n.textContent = o.textContent; sel.appendChild(n) })
-      sel.value = ''
-      dfg.appendChild(sel)
-      insertAfterField('dhi1', dfg)
-    }
-
-    // IHI 2 with the same choices as IHI 1 (12 Oct 2026), mirroring DHI 2.
-    var ihi1 = document.getElementById('ihi1')
-    if (ihi1) {
-      var ifg = fgFor('IHI 2 — Second Indirect Head Impact Description')
-      var isel = document.createElement('select'); isel.id = 'ihi2'
-      Array.prototype.forEach.call(ihi1.options, function (o) { var n = document.createElement('option'); n.value = o.value; n.textContent = o.textContent; isel.appendChild(n) })
-      isel.value = ''
-      ifg.appendChild(isel)
-      insertAfterField('ihi1', ifg)
-    }
+    /* DHI 2 and 3 with the same choices as DHI 1; IHI 2 (12 Oct 2026) and 3
+       (4 Nov 2026) with IHI 1's. Each goes after the one before it. */
+    ;[['dhi', 'Direct'], ['ihi', 'Indirect']].forEach(function (k) {
+      var first = document.getElementById(k[0] + '1')
+      if (!first) return
+      ;[[2, 'Second'], [3, 'Third']].forEach(function (n) {
+        var fg = fgFor(k[0].toUpperCase() + ' ' + n[0] + ' — ' + n[1] + ' ' + k[1] + ' Head Impact Description')
+        var sel = document.createElement('select'); sel.id = k[0] + n[0]
+        Array.prototype.forEach.call(first.options, function (o) { var op = document.createElement('option'); op.value = o.value; op.textContent = o.textContent; sel.appendChild(op) })
+        sel.value = ''
+        fg.appendChild(sel)
+        insertAfterField(k[0] + (n[0] - 1), fg)
+      })
+    })
 
     // ACE: Loss of Consciousness duration (free text).
     var lfg = fgFor('Loss of Consciousness Duration')
@@ -318,9 +294,10 @@
   })
   wrapRo('moi', function (fs) {
     var inp = fs.inputs || {}, sel = fs.selects || {}
-    return roItem('Head Impacts', [savedPick(fs, 'xq_headImpacts'), inp.xq_headImpactsText].filter(Boolean).join('. '), true)
-      + roItem('DHI 2 — Second Direct Head Impact Description', sel.dhi2, true)
+    return roItem('DHI 2 — Second Direct Head Impact Description', sel.dhi2, true)
+      + roItem('DHI 3 — Third Direct Head Impact Description', sel.dhi3, true)
       + roItem('IHI 2 — Second Indirect Head Impact Description', sel.ihi2, true)
+      + roItem('IHI 3 — Third Indirect Head Impact Description', sel.ihi3, true)
   })
 
   /* Existing Day 1 fields shown as yellow pick lists. The original select /
@@ -345,8 +322,10 @@
     // Head impact descriptions (13 Oct 2026): pick one or more, or Type Here + Add.
     { field: 'dhi1', key: 'xq_dhi1', opts: null },
     { field: 'dhi2', key: 'xq_dhi2', opts: null },
+    { field: 'dhi3', key: 'xq_dhi3', opts: null },
     { field: 'ihi1', key: 'xq_ihi1', opts: null },
-    { field: 'ihi2', key: 'xq_ihi2', opts: null }
+    { field: 'ihi2', key: 'xq_ihi2', opts: null },
+    { field: 'ihi3', key: 'xq_ihi3', opts: null }
   ]
   function ownOptions(el) {
     return Array.prototype.filter.call(el.options || [], function (o) { return o.value !== '' })
@@ -402,7 +381,7 @@
           syncField(c, m)
           ta.dispatchEvent(new Event('input', { bubbles: true }))
           renderConverted(c)
-        })
+        }, null, { memoryKey: 'xq:' + spec.key })
       }
       chip.addEventListener('click', open)
       chip.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } })

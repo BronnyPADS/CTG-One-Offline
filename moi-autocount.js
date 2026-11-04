@@ -78,8 +78,8 @@
     var counts = {}
     counts[MVC] = highestTag(text, 'MVC')
     counts[SOC] = highestTag(text, 'SOC')
-    counts[DHI] = filled(['dhi1', 'dhi2'])
-    counts[IHI] = filled(['ihi1', 'ihi2'])
+    counts[DHI] = filled(['dhi1', 'dhi2', 'dhi3'])
+    counts[IHI] = filled(['ihi1', 'ihi2', 'ihi3'])
     // First pass after the record opens: record the baseline, don't touch the
     // saved values - so re-opening a record never rewrites its counts.
     if (!baselined) { lastCount = counts; baselined = true; return }
@@ -108,7 +108,7 @@
         el.addEventListener('change', onTotalChange)
       }
     })
-    ;['dhi1', 'dhi2', 'ihi1', 'ihi2'].forEach(function (id) {
+    ;['dhi1', 'dhi2', 'dhi3', 'ihi1', 'ihi2', 'ihi3'].forEach(function (id) {
       var el = document.getElementById(id)
       if (el && !el.dataset.acSrc) { el.dataset.acSrc = '1'; el.addEventListener('change', recompute); el.addEventListener('input', recompute) }
     })

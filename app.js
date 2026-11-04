@@ -22,6 +22,7 @@ function showPage(name){
   else if(name==='patientExamEdit')mountDay2Editor('patientExamEdit')
   if(name==='patientAce'||name==='day1'){
     startAceAutosave()
+    ctgChoiceMemory.load()   // choices other staff added since
     // The list is laid out now, so the Language box can match the button groups.
     if(typeof window.ctgSyncLanguageWidth==='function'){
       requestAnimationFrame(function(){requestAnimationFrame(window.ctgSyncLanguageWidth)})
@@ -2557,7 +2558,7 @@ function dnFmtDateShort(val) {
   return m[1]+'-'+m[2]+'-'+m[3].slice(2)
 }
 
-const DN_SYMPTOMS_TEXT = `Headache, Neck pain, Dizziness, Balance problems, Sensitivity to noise, Feeling like “in a fog”, Difficulty concentrating, Fatigue or low energy, Drowsiness, Irritability, Nervous or anxious, Symptoms worsen with physical activity, Pressure in head, Nausea, Blurred vision, Sensitivity to light, Feeling slowed down, Don’t feel right, Difficulty remembering, Confusion, More emotional, Sadness, Trouble falling asleep and Symptoms worsen with mental activity.`
+const DN_SYMPTOMS_TEXT = `Headache, Neck pain, Dizziness, Balance problems, Sensitivity to noise, Feeling like “in a fog”, Difficulty concentrating, Fatigue or low energy, Drowsiness, Irritability, Nervous or anxious, symptoms worsen with physical activity, Pressure in head, Nausea, Blurred vision, Sensitivity to light, Feeling slowed down, Don’t feel right, Difficulty remembering, Confusion, More emotional, Sadness, Trouble falling asleep and symptoms worsen with mental activity.`
 function injuryIsPlural(injType) {
   const t = (injType || '').toLowerCase()
   if (/\b(multiple|double|triple|quadruple|several|two|three|four)\b/.test(t)) return true
@@ -5858,7 +5859,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       return {
         date:parseDateAny(t),
         total:v('Total Symptoms'),physical:v('Physical'),cognitive:v('Cognitive'),emotional:v('Emotional'),sleep:v('Sleep-Arousal'),
-        phqScore:score('PHQ-9 Depression Score'),gadScore:score('GAD-7 General Anxiety Disorder Score'),
+        phqScore:score('PHQ-9 Depression Score'),gadScore:(s=>s!=='—'?s:score('GAD-7 General Anxiety Disorder Score'))(score('GAD-7 Generalized Anxiety Disorder Score')),
         phqProgressStatus:valueAfterLabel(phqSec,'Progress Status','—'),
         gadProgressStatus:valueAfterLabel(gadSec,'Progress Status','—'),
         mbess:{avg:v('Baseline Average',mbess),range:v('Range',mbess),percentile:v('Percentile',mbess),rank:v('Rank',mbess),baselineCount:v('Baseline Count',mbess)},
@@ -10991,6 +10992,10 @@ function collectAceFormState(){
   ;['riskFactorsList','assessRiskList','earlySignsList','referralTypeList','immedExperienceList'].forEach(id=>{
     state.checks[id]=[...document.querySelectorAll('#'+id+' label.checked')].map(chkTxt)
   })
+  // Every added choice, ticked or not: an unticked one was lost when the Day 1 reopened.
+  state.customs={}
+  // Not the remembered ones: those come back from the shared list, and x there forgets them everywhere.
+  RISK_WRITEIN_LISTS.forEach(id=>{const mem=ctgChoiceMemory.get('list:'+id).map(t=>t.toLowerCase());state.customs[id]=[...document.querySelectorAll('#'+id+' label[data-custom]')].map(chkTxt).filter(t=>!mem.includes(t.toLowerCase()))})
   state.icdCodes=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>el.querySelector('.icd-code')?.textContent.trim()).filter(Boolean)
   // Code AND description: two rows share R42. (Dizziness, Vertigo), and by code alone reopening ticked both.
   state.icdItems=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>(el.querySelector('.icd-code')?.textContent.trim()||'')+'|'+(el.querySelector('.icd-desc')?.textContent.trim()||''))
@@ -11082,6 +11087,7 @@ function applyAceFormState(state){
     })
   })
   removeCustomRiskLabels()
+  Object.entries(state.customs||{}).forEach(([id,arr])=>{if(RISK_WRITEIN_LISTS.includes(id))(arr||[]).forEach(t=>addCustomRiskLabel(id,t,false))})
   Object.entries(state.checks||{}).forEach(([id,labels])=>{
     document.querySelectorAll('#'+id+' label').forEach(label=>applyStyledLabelCheck(label,false))
     ;(labels||[]).forEach(txt=>{
@@ -11090,6 +11096,7 @@ function applyAceFormState(state){
       if(label)applyStyledLabelCheck(label,true)
     })
   })
+  riskApplyRemembered()   // choices staff added on other patients, unticked
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>el.classList.remove('checked'))
   // By code and description when the save has them (see collectAceFormState); older saves by code.
   const byItem=Array.isArray(state.icdItems)
@@ -12479,6 +12486,49 @@ function buildRiskCheckboxes(containerId,items){
    read-only view exactly like the built-in choices. */
 // Every check-all-that-apply list takes added choices (Early Signs, Referral Types and
 // Immediate Experience joined 13 Oct 2026).
+/* Choices staff add to a Day 1 list ("Type Here / Add", "+ Additional") are
+   remembered for every patient and every staff member: the shared document
+   day1Choices, keyed by list (staff, 4 Nov 2026). Removing one with x forgets
+   it for everyone. It holds only the wording of the choices. */
+const ctgChoiceMemory=(function(){
+  let lists={},loadedAt=0
+  const listeners=[]
+  const norm=t=>String(t==null?'':t).replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,120)
+  const same=(a,b)=>String(a).toLowerCase()===String(b).toLowerCase()
+  const emit=()=>listeners.forEach(f=>{try{f()}catch(e){}})
+  const take=r=>{lists=(r&&r.data&&r.data.lists&&typeof r.data.lists==='object')?r.data.lists:{};loadedAt=Date.now();return r&&r.version||0}
+  function load(force){
+    if(typeof window.ctgApiFetch!=='function')return Promise.resolve()
+    if(!force&&Date.now()-loadedAt<30000)return Promise.resolve()
+    return window.ctgApiFetch('/api/shared/doc/day1Choices').then(r=>{take(r);emit()}).catch(()=>{})
+  }
+  // Changes the newest server copy, so two people adding at once both keep theirs.
+  function change(fn,retried){
+    if(typeof window.ctgApiFetch!=='function')return
+    window.ctgApiFetch('/api/shared/doc/day1Choices').then(r=>{
+      const version=take(r)
+      if(!fn(lists)){emit();return}
+      return window.ctgApiFetch('/api/shared/doc/day1Choices',{method:'PUT',body:JSON.stringify({data:{lists},version})}).then(()=>emit())
+    }).catch(e=>{
+      if(e&&e.status===409&&!retried)change(fn,true)
+      // Otherwise (offline, or no Day 1 page): the choice still counts on this patient.
+    })
+  }
+  const get=key=>(lists[key]||[]).slice()
+  function add(key,text){
+    const t=norm(text);if(!key||!t||get(key).some(x=>same(x,t)))return
+    lists[key]=get(key).concat([t]);emit()   // shows at once; the server copy follows
+    change(Ls=>{const a=Ls[key]||[];if(a.some(x=>same(x,t))||a.length>=300)return false;Ls[key]=a.concat([t]);return true})
+  }
+  function remove(key,text){
+    const t=norm(text);if(!key||!t||!get(key).some(x=>same(x,t)))return
+    lists[key]=get(key).filter(x=>!same(x,t));emit()
+    change(Ls=>{const a=Ls[key]||[],n=a.filter(x=>!same(x,t));if(n.length===a.length)return false;if(n.length)Ls[key]=n;else delete Ls[key];return true})
+  }
+  return {load,get,add,remove,onChange:f=>listeners.push(f)}
+})()
+window.ctgChoiceMemory=ctgChoiceMemory
+window.ctgDay1ChoicesRealtime=()=>ctgChoiceMemory.load(true)
 const RISK_WRITEIN_LISTS=['riskFactorsList','assessRiskList','earlySignsList','referralTypeList','immedExperienceList']
 function addCustomRiskLabel(containerId,text,checkIt){
   const c=document.getElementById(containerId)
@@ -12495,6 +12545,11 @@ function addCustomRiskLabel(containerId,text,checkIt){
 function removeCustomRiskLabels(){
   RISK_WRITEIN_LISTS.forEach(id=>document.querySelectorAll('#'+id+' label[data-custom]').forEach(el=>el.remove()))
 }
+// Remembered choices are boxes in their list on every Day 1, unticked until staff tick them.
+function riskApplyRemembered(){
+  RISK_WRITEIN_LISTS.forEach(id=>ctgChoiceMemory.get('list:'+id).forEach(t=>addCustomRiskLabel(id,t,false)))
+}
+ctgChoiceMemory.onChange(riskApplyRemembered)
 function buildRiskAdditional(containerId){
   const c=document.getElementById(containerId)
   if(!c)return
@@ -12517,7 +12572,7 @@ function buildRiskAdditional(containerId){
       m.s.forEach(t=>{const b=[...c.querySelectorAll('label:not([data-custom])')].find(el=>chkTxt(el).toLowerCase()===t.toLowerCase());if(b)applyStyledLabelCheck(b,true)})
       // The pick list lives outside the form, so tell the form's autosave.
       c.dispatchEvent(new Event('change',{bubbles:true}))
-    })
+    },null,{memoryKey:'list:'+containerId})
   }
   tile.addEventListener('click',open)
   tile.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open()}})
@@ -13923,12 +13978,15 @@ function buildPDF(name,opts){
   kvLine('Total SOCs',go('totalSOC'))
   {const mvcN=parseInt(go('totalMVC')),socN=parseInt(go('totalSOC'));kvLine('Total Collisions to Unit 1',(isNaN(mvcN)||isNaN(socN))?(go('totalMVC')+' / '+go('totalSOC')):String(mvcN+socN))}
   H2('HEAD IMPACTS:',true,true)
-  kvLine('Head Impacts',[(window.ctgXq?ctgXq('xq_headImpacts'):''),(window.ctgXqText?ctgXqText('xq_headImpactsText'):'')].filter(Boolean).join('. '))
   // Direct impacts first, as in the section heading and the story.
+  // The DHI and IHI descriptions are the answers under HEAD IMPACTS (the separate
+  // Head Impacts field was removed, staff 4 Nov 2026).
   kvLine('DHI 1',gv('dhi1'))
   kvLine('DHI 2',gv('dhi2'))
+  kvLine('DHI 3',gv('dhi3'))
   kvLine('IHI 1',gv('ihi1'))
   kvLine('IHI 2',gv('ihi2'))
+  kvLine('IHI 3',gv('ihi3'))
   {const dhiN=parseInt(go('totalDHI')),ihiN=parseInt(go('totalIHI'));kvLine('Total Head Impacts',(isNaN(dhiN)||isNaN(ihiN))?(go('totalDHI')+' / '+go('totalIHI')):String(dhiN+ihiN))}
 
   H1('Acute Concussion Evaluation (ACE)')
@@ -14622,6 +14680,7 @@ function clearAll(){
   scope.querySelectorAll('.yn-btn.active,.sym-btn.active,.icd-item.checked').forEach(el=>el.classList.remove('active','checked'))
   scope.querySelectorAll('.sym-score-item.scored').forEach(el=>el.classList.remove('scored'))
   removeCustomRiskLabels()
+  riskApplyRemembered()
   scope.querySelectorAll('#riskFactorsList label.checked,#assessRiskList label.checked,#earlySignsList label.checked,#referralTypeList label.checked,#immedExperienceList label.checked').forEach(el=>{
     el.classList.remove('checked');el.style.background='';el.style.borderColor=''
     const chk=el.querySelector('.rchk');if(chk){chk.style.background='';chk.style.borderColor='';chk.style.color=''}
