@@ -6389,7 +6389,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       // Final Status - short discharge text for no-follow-up, full text otherwise.
       const finalStatusText=noFollowup
         ?'Discharged. No Concussion.'
-        :'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. Patient is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'
+        :dischargeFinalStatusText(name)
       resultRichParagraph([{text:'Final Status:   ',bold:true,size:12},{text:finalStatusText}],{size:12,space:8})
       // Risk Factors line is omitted for no-follow-up cases and when none were ticked.
       if(!noFollowup&&risks.length)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:reportSentence(risks.join(', '))}],{size:12,space:6})
@@ -10020,6 +10020,19 @@ function examIncidentPhrase(p,formType){
   const t=fromForm?formType:((p&&p.ace&&!p.ace.formState&&p.ace.injuryType)||'—')
   return dischargeIncidentPhrase(t,fromForm?(p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected):'')
 }
+/* The discharge summary's Final Status names the patient: "Modelere Francois
+   is now discharged from active care", not "Patient is now ..." (staff, 5 Nov
+   2026). No name on the chart: "The patient". */
+function dischargeStatusName(name){
+  const n=String(name||'').trim()
+  return n&&n!=='\u2014'&&!/^Unnamed Patient$/i.test(n)?n:'The patient'
+}
+function dischargeFinalStatusText(name){
+  return 'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. '+dischargeStatusName(name)+' is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'
+}
+function dischargeNameInStatus(text,name){
+  return String(text||'').replace(/\bPatient is now discharged from active care\b/g,dischargeStatusName(name)+' is now discharged from active care')
+}
 function dischargeIncidentPhrase(type,picked,plural){
   const t=String(type||'').trim()
   const word=plural?'injury incidents':'injury incident'
@@ -10051,7 +10064,7 @@ function getCaseDischargeData(p){
     examReportDates:cd.examReportDates||examDates.filter(Boolean).join(', ')||'',
     dischargeDate,
     totalDates:totalDates||'',
-    finalStatus:cd.finalStatus||(isPatientAceNoFollowup(p)?'Discharged. No concussion.':'Maximum static medical improvement attained. Functional goals and ADL goals have been achieved. Patient is now discharged from active care. Advised patient to return if symptoms recur and advised to continue home care recommendations.'),
+    finalStatus:cd.finalStatus?dischargeNameInStatus(cd.finalStatus,name):(isPatientAceNoFollowup(p)?'Discharged. No concussion.':dischargeFinalStatusText(name)),
     riskFactors:riskFactorsOrBlank(cd.riskFactors||(p?.ace?.riskFactors||'')||aceRiskFactorsText(p)),
     injuryType:injuryType,
     incidentPhrase:dischargeIncidentPhrase(injuryType,cd.injuryType?'':p?.ace?.formState?.itSelected),
@@ -10416,7 +10429,7 @@ async function compileFCRPages(p,merged){
       const isPdf=mime.indexOf('pdf')>=0||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46)
       if(isPdf){
         // An uploaded report from an older template gets the current wording (4 Nov 2026).
-        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes):{bytes,patches:[]}
+        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p))}):{bytes,patches:[]}
         const before=kinds.length
         await addBytes(fx.bytes)
         const added=kinds.length-before

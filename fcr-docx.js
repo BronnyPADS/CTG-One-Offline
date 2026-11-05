@@ -1479,7 +1479,7 @@
   /* One line: its text, and each piece's text after the corrections. own[] says
      which piece each character belongs to; a space standing for a gap between
      two pieces belongs to neither (-1 - the index of the piece after it). */
-  function fixWordingLine(ln, prevText, measure) {
+  function fixWordingLine(ln, prevText, measure, rules, nextText) {
     var chars = [], own = []
     ln.items.forEach(function (it, i) {
       if (i) {
@@ -1496,8 +1496,9 @@
     var text = chars.join(''), underline = false, last = ln.items.length - 1
     var ownerAt = function (pos) { if (pos >= own.length) return last; var o = own[pos]; return o < 0 ? -1 - o : o }
     var ownerBefore = function (pos) { for (var q = pos - 1; q >= 0; q--) if (own[q] >= 0) return own[q]; return ownerAt(pos) }
-    OLD_WORDING.forEach(function (rule) {
+    ;(rules || OLD_WORDING).forEach(function (rule) {
       if (rule.prev && !rule.prev.test(prevText || '')) return
+      if (rule.next && !rule.next.test(nextText || '')) return
       rule.re.lastIndex = 0
       var m, guard = 0
       while ((m = rule.re.exec(text)) && guard++ < 40) {
@@ -1591,6 +1592,8 @@
         lay = layout(scale)
         // Still into the next column: leave the line as uploaded rather than type over it.
         if (next && lay.end > limit + 0.5) throw new Error('the corrected text does not fit its column')
+        // ...or past the page's right edge: a longer name in a full line (5 Nov 2026).
+        if (!next && lay.end > limit + size * 0.5) throw new Error('the corrected text does not fit the line')
       }
       plans.push({ x0: x0, oldEnd: oldEnd, lay: lay, scale: scale })
     })
@@ -1637,7 +1640,20 @@
      same bytes when nothing needed correcting) and, per page, the covered boxes
      and the words typed in them. Never throws: on any trouble the file goes in
      as uploaded. */
-  async function fixOldWording(bytes) {
+  /* Corrections that need the patient: the discharge summary's "Patient is
+     now discharged from active care" names them (5 Nov 2026), also where
+     "Patient" ends one line and "is now discharged" starts the next. */
+  function patientRules(name) {
+    var n = String(name || '').trim()
+    if (!n || /^the patient$/i.test(n)) return []
+    var to = n.replace(/\$/g, '$$$$')
+    return [
+      { re: /\bPatient(?= is now discharged\b)/g, to: to },
+      { re: /\bPatient$/g, to: to, next: /^is now discharged\b/ }
+    ]
+  }
+  async function fixOldWording(bytes, opts) {
+    var rules = OLD_WORDING.concat(patientRules(opts && opts.name))
     var L = window.PDFLib
     if (!L || typeof ensurePdfJs !== 'function') return { bytes: bytes, patches: [] }
     var pdf = null
@@ -1659,7 +1675,12 @@
         // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
         if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) continue
         var lines = wordingLines(rd.items), prev = '', fixes = []
-        lines.forEach(function (ln) { var res = fixWordingLine(ln, prev, measure); prev = res.text; if (res.changed) fixes.push({ ln: ln, res: res }) })
+        var lineText = function (l) { return l ? l.items.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim() : '' }
+        lines.forEach(function (ln, li) {
+          var res = fixWordingLine(ln, prev, measure, rules, lineText(lines[li + 1]))
+          prev = res.text
+          if (res.changed) fixes.push({ ln: ln, res: res })
+        })
         if (!fixes.length) continue
         if (!doc) {
           doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true })
