@@ -2665,7 +2665,8 @@ function downloadAllDailyNotesPdfForPatient(id,onDoc,notesOverride){
       function cellLbl(lbl,val,cx,cy){sf('bold',12);doc.text(lbl,cx,cy);const vx=cx+lblW(lbl);sf('normal',12);doc.text(val,vx+doc.getTextWidth(' '),cy)}
       cellLbl('Name:',safe(patientName),x+5,top+15);cellLbl('DOB:',safe(dob),x+colMid+5,top+15)
       cellLbl('DOI:',safe(doi),x+5,top+rowH+15);cellLbl('Session Date:',safe(sessionDate),x+colMid+5,top+rowH+15)
-      const provY=top+rowH*2+13;sf('bold',10);doc.text('Provider:',x,provY);const provLblW=lblW('Provider:');sf('normal',10);doc.text(safe(providerRaw),x+provLblW+doc.getTextWidth(' '),provY);y=provY+10
+      // 12pt, as the box above it and the Day 1's Provider line (was 10pt; staff, 5 Nov 2026).
+      const provY=top+rowH*2+13;sf('bold',12);doc.text('Provider:',x,provY);const provLblW=lblW('Provider:');sf('normal',12);doc.text(safe(providerRaw),x+provLblW+doc.getTextWidth(' '),provY);y=provY+13
     }
     function newPage(){doc.addPage();drawPageHeader();y=95}
     function need(h){if(y+h>PH-50)newPage()}
@@ -2782,10 +2783,11 @@ function downloadDailyNotesPdf() {
       cellLbl('DOI:', safe(doi), x+5, top+rowH+15)
       cellLbl('Session Date:', safe(sessionDate), x+colMid+5, top+rowH+15)
       const provY = top+rowH*2+13
-      sf('bold',10); doc.text('Provider:', x, provY)
+      // 12pt, as the box above it and the Day 1's Provider line (was 10pt; staff, 5 Nov 2026).
+      sf('bold',12); doc.text('Provider:', x, provY)
       const provLblW = lblW('Provider:')
-      sf('normal',10); doc.text(safe(providerRaw), x+provLblW+doc.getTextWidth(' '), provY)
-      y = provY + 10
+      sf('normal',12); doc.text(safe(providerRaw), x+provLblW+doc.getTextWidth(' '), provY)
+      y = provY + 13
     }
 
     function newPage() {
