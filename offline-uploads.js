@@ -588,7 +588,7 @@
     var res = [
       /\bName:\s*(.{1,80}?)\s+DOB:\s*([0-9\/-]{8,10})/i,
       /PATIENT NAME DATE OF BIRTH AGE DATE OF SERVICE\s+(.{1,80}?)\s+(\d{1,2}\/\d{1,2}\/\d{4})/,
-      /Today the pati\w*,\s*(.{1,80}?)\s*,\s*(?:(?:Male|Female|Other)\s*,\s*)?DOB:\s*([0-9\/-]{8,10})/i,
+      /Today the pati\w*,\s*(.{1,80}?)\s*,\s*(?:(?:Male|Female|Non-binary|Other)\s*,\s*)?DOB:\s*([0-9\/-]{8,10})/i,
       /\bPatient:\s*(.{1,80}?)\s+Acct #:.{0,80}?DOB:\s*(\d{1,2}\/\d{1,2}\/\d{4})/
     ]
     res = billing ? bill.concat(res) : res.concat(bill)
@@ -597,7 +597,7 @@
       if (m && /[A-Za-z]/.test(m[1])) return { patientName: m[1].trim(), dob: m[2] }
     }
     // Name only: "Today the patient, Johannser Bencosme, male, age 37".
-    var n = /Today the pati\w*,\s*(.{1,80}?)\s*,\s*(?:Male|Female|Other)\b/i.exec(t)
+    var n = /Today the pati\w*,\s*(.{1,80}?)\s*,\s*(?:Male|Female|Non-binary|Other)\b/i.exec(t)
     // The Superbill prints the name on a line of its own; its date of birth is labelled.
     var b = /Date of birth:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i.exec(t)
     var out = {}

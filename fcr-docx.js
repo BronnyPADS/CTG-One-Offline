@@ -1720,17 +1720,19 @@
   /* Corrections that need the patient: the discharge summary's "Patient is
      now discharged from active care" names them (5 Nov 2026), also where
      "Patient" ends one line and "is now discharged" starts the next. */
-  function patientRules(name) {
-    var n = String(name || '').trim()
-    if (!n || /^the patient$/i.test(n)) return []
-    var to = n.replace(/\$/g, '$$$$')
-    return [
-      { re: /\bPatient(?= is now discharged\b)/g, to: to },
-      { re: /\bPatient$/g, to: to, next: /^is now discharged\b/ }
-    ]
+  function patientRules(name, gender) {
+    var n = String(name || '').trim(), g = String(gender || '').trim(), out = []
+    if (n && !/^the patient$/i.test(n)) {
+      var to = n.replace(/\$/g, '$$$$')
+      out.push({ re: /\bPatient(?= is now discharged\b)/g, to: to }, { re: /\bPatient$/g, to: to, next: /^is now discharged\b/ })
+    }
+    // The Day 1's first sentence gives the gender after the name (5 Nov 2026), from Registration.
+    // A report that has one already ("Landan Logan, Male, DOB:") does not match.
+    if (/^(male|female|non-binary)$/i.test(g)) out.push({ re: /(Today the pati\w*, [^,]{1,80}), DOB:/g, to: '$1, ' + g + ', DOB:' })
+    return out
   }
   async function fixOldWording(bytes, opts) {
-    var rules = OLD_WORDING.concat(patientRules(opts && opts.name))
+    var rules = OLD_WORDING.concat(patientRules(opts && opts.name, opts && opts.gender))
     var L = window.PDFLib
     if (!L || typeof ensurePdfJs !== 'function') return { bytes: bytes, patches: [] }
     var pdf = null

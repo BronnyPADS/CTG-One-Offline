@@ -10443,7 +10443,7 @@ async function compileFCRPages(p,merged){
       const isPdf=mime.indexOf('pdf')>=0||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46)
       if(isPdf){
         // An uploaded report from an older template gets the current wording (4 Nov 2026).
-        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p))}):{bytes,patches:[]}
+        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p)),gender:p&&p.demographics&&p.demographics.gender}):{bytes,patches:[]}
         const before=kinds.length
         await addBytes(fx.bytes)
         const added=kinds.length-before
@@ -13697,7 +13697,9 @@ function buildPDF(name,opts){
     lines.forEach(line=>{
       needPage(14)
       let cx=ML
-      line.forEach(seg=>{f(segStyle(seg),12);tx(seg.t,cx,y);cx+=doc.getTextWidth(seg.t)})
+      // By the width as drawn: getTextWidth counts kerning the drawn text does not have, so a bold word after a
+      // long plain run started early and ate the space before it ("Francois,Female", 5 Nov 2026).
+      line.forEach(seg=>{f(segStyle(seg),12);tx(seg.t,cx,y);cx+=doc.getStringUnitWidth(seg.t,{kerning:{}})*12})
       y+=14
     })
     y+=6
@@ -13890,13 +13892,20 @@ function buildPDF(name,opts){
 
   H1('INITIAL DATE OF SERVICE',dos)
   H1('ACUTE CONCUSSION EVALUATION (ACE)')
-  // Plain text, no bold (staff, 2 Nov 2026). A typed-in injury description
-  // follows a comma, as in Causation (see dischargeIncidentPhrase).
-  const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType:'a '+injType
+  /* As the practice's earlier reports have it (staff, 5 Nov 2026): the gender after
+     the name, none recorded none printed; the gender, the age and the injury type
+     in bold, the rest plain (it was all plain from 2 Nov). A typed-in injury
+     description follows a comma, as in Causation (see dischargeIncidentPhrase). */
+  const introGender=gv('ptGender')
+  const sustainedIn=injType==='—'?[{t:'an injury incident'}]:injuryTypeIsWriteIn(injType,itSelected)?[{t:'an injury incident, '},{t:injType,b:true}]:[{t:'a '},{t:injType,b:true}]
   para([
-    {t:'Today the patient, '+name+', DOB: '+dob+', age '+age},
+    {t:'Today the patient, '+name},
+    ...(introGender!=='—'?[{t:', '},{t:introGender,b:true}]:[]),
+    {t:', DOB: '+dob+', age '},
+    {t:age,b:age!=='—'},
     {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in '},
-    {t:sustainedIn+' on '+doiEv},...jurClause,
+    ...sustainedIn,
+    {t:' on '+doiEv},...jurClause,
     {t:'. The Acute Concussion Evaluation is the United States Centers for Disease Control and Prevention (CDC) standard initial assessment in the diagnosis pathway for acute (72 hours or less post-injury) traumatic brain injury concussion. The ACE contains similar questions to the post-concussion standard instrument questionnaire named The Rivermead Post-Concussion Symptoms Questionnaire, and is therefore used herein to establish indications for further neurocognitive and vestibular examination for both Acute and Post-Acute TBI symptoms. The '},
     {t:reporterVal},
     {t:' has signed a consent document. The findings of this summary report are based on observation and responses to written and verbal questioning of the patient.'}

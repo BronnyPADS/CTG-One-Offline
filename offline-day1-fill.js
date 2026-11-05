@@ -502,8 +502,11 @@
     }).sort(function (a, b) { return b.textContent.length - a.textContent.length })[0]
     if (jo) n += setSelect('jurisdiction', jo.textContent)
     if (!byId('ptGender').value) {
+      // Said in the first sentence ("Today the patient, Name, Female, DOB:"), else by the Causation's his / her.
+      var said = /Today the pati\w*,[^,]{1,80},\s*(Male|Female|Non-binary)\s*,/i.exec(norm(parsed.text))
       var pr = /causal connection between (his|her) injuries/i.exec(parsed.text)
-      if (pr) n += setSelect('ptGender', pr[1].toLowerCase() === 'his' ? 'Male' : 'Female')
+      if (said) n += setSelect('ptGender', said[1])
+      else if (pr) n += setSelect('ptGender', pr[1].toLowerCase() === 'his' ? 'Male' : 'Female')
     }
     var rep = first('Reporter')
     if (rep && !setSelect('reporter', rep)) { n += setSelect('reporter', 'Other') + setText('reporterOther', rep) } else if (rep) n++
