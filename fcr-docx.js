@@ -1562,18 +1562,18 @@
     var plans = []
     cols.forEach(function (c, k) {
       var f0 = -1
-      for (var i = c.from; i <= c.to; i++) if (res.strings[i] !== items[i].s) { f0 = i; break }
+      for (var i = c.from; i <= c.to; i++) if (res.strings[i] !== items[i].s || (res.plain && res.plain[i])) { f0 = i; break }
       if (f0 < 0) return
       var pieces = []
       for (var j = f0; j <= c.to; j++) {
-        var it = items[j], fnt = fontFor(it.f), s = res.strings[j]
+        var it = items[j], f = res.plain && res.plain[j] ? Object.assign({}, it.f, { b: false }) : it.f, fnt = fontFor(f), s = res.strings[j]
         if (j > f0) {
           var pv = items[j - 1]
           // the gap is the space already (a piece that is only a space stays: it is the gap)
           if (it.x - (pv.x + pv.w) >= size * 0.15 && /\S/.test(s)) s = s.replace(/^\s+/, '')
         }
         fnt.widthOfTextAtSize(s, it.size)   // throws on a character the standard fonts lack: the line stays as uploaded
-        pieces.push({ it: it, s: s, fnt: fnt, gap: j > f0 ? Math.max(it.x - (pv.x + pv.w), 0) : 0 })
+        pieces.push({ it: it, f: f, s: s, fnt: fnt, gap: j > f0 ? Math.max(it.x - (pv.x + pv.w), 0) : 0 })
       }
       // The column's own text ends at its last piece with text, not at the gap after it (the table's line is there).
       var oldEnd = items[f0].x
@@ -1614,7 +1614,7 @@
       pl.lay.out.forEach(function (o) {
         if (!o.pc.s || blank(o.pc.s)) return
         pg.drawText(o.pc.s, { x: o.x, y: o.pc.it.y, size: o.pc.it.size * pl.scale, font: o.pc.fnt, color: L.rgb(0, 0, 0) })
-        words.push({ s: o.pc.s, x: o.x, y: o.pc.it.y, w: o.w, size: o.pc.it.size * pl.scale, f: o.pc.it.f })
+        words.push({ s: o.pc.s, x: o.x, y: o.pc.it.y, w: o.w, size: o.pc.it.size * pl.scale, f: o.pc.f })
       })
       if (res.underline) pg.drawLine({ start: { x: pl.x0, y: ln.y - size * 0.14 }, end: { x: pl.lay.end, y: ln.y - size * 0.14 }, thickness: Math.max(0.5, size * 0.05), color: L.rgb(0, 0, 0) })
     })
@@ -1752,6 +1752,59 @@
     return edits
   }
 
+  /* The Day 1's sentences print plain now (the injury story since 16 Oct, the first
+     paragraph, Causation and Medical Necessity since 2 Nov 2026), but a report saved
+     before then keeps its bold words in the file. In the FCR those words lose the
+     bold and nothing else changes: headings, labels ("Note:") and answers stay.
+     carry: { part, text, count } a part still open at the end of the last page.
+     Returns, per line in a part, the piece the part starts from. */
+  var PLAIN_PARTS = [
+    { start: /Today the pati\w*,/, end: /questioning of the pati\w*\.?$/, max: 16 },
+    { start: /^MECHANISM OF INJURY\b/, section: true, max: 40 },
+    { start: /Based on review of\b/, end: /occurred on\b.*\.$/, max: 8 },
+    { start: /The care and treatment rendered to\b/, end: /occurred on\b.*\.$/, max: 8 }
+  ]
+  var PLAIN_STOP = /^(HISTORY OF PRESENT ILLNESS|Chief Complaint|Causation|Medical Necessity|Reasonableness|Prognosis)\b/i
+  var PLAIN_SKIP = /^(Name|DOB|DOI|Session Date|Provider)\s*:/
+  /* A Day 1 from before the letterhead (9 Oct 2026) does not name the practice in
+     its text, so its own first sentence says what it is. */
+  function opensDay1(raw) {
+    return /Today the pati\w*,.{0,160}\badministered the Acute Concussion Evaluation/.test(raw.join(' ').replace(/\s+/g, ' '))
+  }
+  function plainLines(lines, raw, carry) {
+    var out = {}
+    lines.forEach(function (ln, li) {
+      var t = raw[li].trim()
+      if (!t || PAGE_CHROME.test(t) || PLAIN_SKIP.test(t)) return
+      var words = ln.items.filter(function (it) { return /\S/.test(it.s) })
+      var heading = !/[a-z]/.test(t) && words.every(function (it) { return it.f && it.f.b })
+      if (carry.part && (heading || PLAIN_STOP.test(t) || carry.count >= carry.part.max)) carry.part = null
+      var from = 0
+      if (!carry.part) {
+        var part = null
+        PLAIN_PARTS.forEach(function (pt) { if (!part && pt.start.test(t)) part = pt })
+        if (!part) return
+        carry.part = part; carry.text = ''; carry.count = 0
+        if (part.section) return   // the section's heading stays bold
+        // A label before the sentence on the same line stays bold ("Causation: Based on review of").
+        var acc = ''
+        for (var i = 0; i < ln.items.length; i++) { acc += ln.items[i].s; if (part.start.test(acc)) { from = i; break } }
+      }
+      carry.count++
+      carry.text = (carry.text + ' ' + t).trim()
+      out[li] = from
+      if (carry.part.end && carry.part.end.test(carry.text)) carry.part = null
+    })
+    return out
+  }
+  // Which pieces of a line lose their bold; null when none do, so a plain report is left alone.
+  function boldPieces(ln, res, from) {
+    var flags = null
+    // By the corrected text: "age" can land in what was a bold space.
+    ln.items.forEach(function (it, i) { if (i >= from && it.f && it.f.b && /\S/.test(res.strings[i])) (flags = flags || {})[i] = true })
+    return flags
+  }
+
   /* Corrections that need the patient: the discharge summary's "Patient is
      now discharged from active care" names them (5 Nov 2026), also where
      "Patient" ends one line and "is now discharged" starts the next. */
@@ -1783,24 +1836,30 @@
         var f = it.f, fnt = mfonts[(f && f.fam === 'Arial' ? 'Helvetica' : 'TimesRoman') + (f && f.b ? 'Bold' : '')]
         try { return fnt.widthOfTextAtSize(it.s, it.size) } catch (e) { return it.w }
       }
-      var r42Carry = { open: false, comma: false }, fsCarry = { open: false }
+      var r42Carry = { open: false, comma: false }, fsCarry = { open: false }, plainCarry = { part: null }, day1File = false
       for (var n = 1; n <= pdf.numPages; n++) {
         var rd = await readWords(pdf, n)
-        if (rd.rot % 360) { r42Carry.open = false; fsCarry.open = false; continue }
-        // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
-        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) { r42Carry.open = false; fsCarry.open = false; continue }
+        if (rd.rot % 360) { r42Carry.open = false; fsCarry.open = false; plainCarry.part = null; continue }
         var lines = wordingLines(rd.items), prev = '', fixes = []
         var lineText = function (l) { return l ? l.items.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim() : '' }
         var rawLines = lines.map(function (ln) { return fixWordingLine(ln, '', measure, []).text })
-        var r42 = r42Edits(rawLines, r42Carry)
-        if (opts && opts.noFinalStatus) {
+        // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
+        // A Day 1 from before the letterhead only loses its bold: its wording is as it was.
+        var own = rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })
+        if (!day1File && opensDay1(rawLines)) day1File = true
+        if (!own) { r42Carry.open = false; fsCarry.open = false }
+        if (!own && !day1File) { plainCarry.part = null; continue }
+        var r42 = own ? r42Edits(rawLines, r42Carry) : {}
+        if (own && opts && opts.noFinalStatus) {
           var fse = finalStatusEdits(rawLines, fsCarry)
           Object.keys(fse).forEach(function (k) { r42[k] = (r42[k] || []).concat(fse[k]) })
         }
+        var plain = plainLines(lines, rawLines, plainCarry)
         lines.forEach(function (ln, li) {
-          var res = fixWordingLine(ln, prev, measure, rules, lineText(lines[li + 1]), r42[li])
+          var res = fixWordingLine(ln, prev, measure, own ? rules : [], lineText(lines[li + 1]), r42[li])
           prev = res.text
-          if (res.changed) fixes.push({ ln: ln, res: res })
+          if (plain[li] !== undefined) res.plain = boldPieces(ln, res, plain[li])
+          if (res.changed || res.plain) fixes.push({ ln: ln, res: res })
         })
         if (!fixes.length) continue
         if (!doc) {
@@ -1825,6 +1884,42 @@
     } finally { try { if (pdf) pdf.destroy() } catch (e) {} }
   }
 
+  /* An uploaded PDF without the Day 1 inside it, for a patient whose Day 1 is the
+     saved form: the FCR prints that one after the test results, and this would be
+     a second copy (5 Nov 2026). A Day 1 runs from its first sentence to its
+     "Recommendation:" line, and any other report in the same file stays. One with
+     no such ending is not cut. Returns { bytes, removed, left }. Never throws: on
+     any trouble the file stays whole. */
+  async function withoutDay1(bytes) {
+    var whole = { bytes: bytes, removed: 0, left: 0 }, L = window.PDFLib, pdf = null
+    if (!L || typeof ensurePdfJs !== 'function') return whole
+    try {
+      var lib = await ensurePdfJs()
+      pdf = await lib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise
+      var cut = [], from = -1
+      for (var n = 1; n <= pdf.numPages; n++) {
+        var tc = await (await pdf.getPage(n)).getTextContent()
+        var raw = wordingLines(tc.items.filter(function (it) { return it.str }).map(function (it) {
+          return { s: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[2], it.transform[3]) || it.height || 10 }
+        })).map(function (ln) { return fixWordingLine(ln, '', null, []).text })
+        if (from < 0 && opensDay1(raw)) from = n
+        if (from > 0 && raw.some(function (t) { return /^\s*Recommendation\s*:/.test(t) })) {
+          for (var k = from; k <= n; k++) cut.push(k - 1)
+          from = -1
+        }
+      }
+      if (!cut.length) return whole
+      var count = pdf.numPages
+      var doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true })
+      cut.slice().reverse().forEach(function (i) { doc.removePage(i) })
+      if (cut.length === count) return { bytes: bytes, removed: cut.length, left: 0 }
+      return { bytes: await doc.save(), removed: cut.length, left: count - cut.length }
+    } catch (e) {
+      console.warn('FCR: an uploaded report could not be checked for a Day 1', e)
+      return whole
+    } finally { try { if (pdf) pdf.destroy() } catch (e) {} }
+  }
+
   // The Word copy of a corrected page: the words in the covered boxes are the typed ones.
   function applyPatch(items, patch) {
     if (!patch) return items
@@ -1834,5 +1929,5 @@
     return items.filter(function (it) { return !inBox(it) }).concat(patch.words.map(function (w) { return Object.assign({}, w) }))
   }
 
-  window.ctgFcrDocx = { build: build, fixOldWording: fixOldWording }
+  window.ctgFcrDocx = { build: build, fixOldWording: fixOldWording, withoutDay1: withoutDay1 }
 })()

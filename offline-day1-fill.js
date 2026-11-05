@@ -771,18 +771,21 @@
     var out = origSave.apply(this, arguments)
     var p = pid && getPatient(pid)
     if (from && p && p.ace && !p.ace.uploadedFile) {
-      p.ace.filledFromFile = { docId: from.docId, name: from.name, at: new Date().toISOString() }
+      // On the patient: every save and autosave builds p.ace afresh, which lost it from there.
+      p.day1FilledFromFile = { docId: from.docId, name: from.name, at: new Date().toISOString() }
       delete pending[pid]
       unmark()
       if (typeof persistPatients === 'function') persistPatients()
     }
     return out
   }
-  // The Final Case Report prints the Day 1 made from the file, not the file as well.
+  // The Final Case Report prints the Day 1 saved on the form, not the file as well.
+  // The file stays in Documents. A file with no form behind it is the Day 1 (see day1Upload).
   window.ctgOfflineFilledDay1Uploads = function (p) {
-    var f = p && p.ace && p.ace.filledFromFile
-    var ups = (p && p.documents && Array.isArray(p.documents.uploads)) ? p.documents.uploads : []
-    return f ? ups.filter(function (d) { return d.id === f.docId }) : []
+    if (!p || !p.ace || typeof aceFormFilledIn !== 'function' || !aceFormFilledIn(p)) return []
+    var f = p.day1FilledFromFile || p.ace.filledFromFile
+    var ups = (p.documents && Array.isArray(p.documents.uploads)) ? p.documents.uploads : []
+    return ups.filter(function (d) { return (f && d.id === f.docId) || d.documentType === 'Day 1 File' })
   }
   // Leaving the Day 1 page drops the marks.
   var origShow = window.showPage

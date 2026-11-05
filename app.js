@@ -9968,6 +9968,15 @@ function fcrComputeAge(dob,ref){
   return (a>=0&&a<130)?String(a):''
 }
 // Detect "No follow-up" from a patient's saved ACE record (the live DOM helper
+/* The Day 1 form holds a real Day 1, not just a field or two the autosave kept:
+   only then does it stand in for an uploaded copy in the FCR. */
+function aceFormFilledIn(p){
+  const fs=p&&p.ace&&p.ace.formState
+  if(!fs)return false
+  if(p.aceComplete)return true
+  const answered=o=>Object.values(o||{}).filter(v=>v&&String(v).trim()).length
+  return answered(fs.selects)+answered(fs.yn)>=10
+}
 // isAceNoFollowupSelected can't be used here - the FCR builds the case discharge
 // before the ACE form is populated).
 function isPatientAceNoFollowup(p){
@@ -10439,7 +10448,10 @@ async function compileFCRPages(p,merged){
       page.drawImage(img,{x:(pw-w)/2,y:(ph-h)/2,width:w,height:h})
     }catch(e){console.error('FCR image embed failed',e)}
   }
-  async function addDataUrl(url){
+  /* day1: this patient's Day 1 is the saved form, so the Day 1 pages of the file
+     stay out. 'whole': the file was used as that Day 1, so it stays out even when
+     its pages cannot be told apart, keeping only other reports found in it. */
+  async function addDataUrl(url,day1){
     if(!url)return
     try{
       let bytes
@@ -10447,6 +10459,13 @@ async function compileFCRPages(p,merged){
       if(!bytes){const res=await fetch(url);bytes=new Uint8Array(await res.arrayBuffer())}
       const mime=((String(url).match(/^data:([^;]+)/)||[])[1]||'').toLowerCase()
       const isPdf=mime.indexOf('pdf')>=0||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46)
+      if(day1==='whole'&&!isPdf)return
+      if(isPdf&&day1&&window.ctgFcrDocx&&window.ctgFcrDocx.withoutDay1){
+        const cut=await window.ctgFcrDocx.withoutDay1(bytes)
+        if(cut.removed&&!cut.left)return
+        if(cut.removed)bytes=cut.bytes
+        else if(day1==='whole')return
+      }
       if(isPdf){
         // An uploaded report from an older template gets the current wording (4 Nov 2026).
         const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p)),gender:p&&p.demographics&&p.demographics.gender,noFinalStatus:dischargeHidesFinalStatus(p)}):{bytes,patches:[]}
@@ -10495,18 +10514,20 @@ async function compileFCRPages(p,merged){
   // 4. Billing Statement (offline copy: an uploaded billing file stands in for it)
   const offlineBillingFile=window.ctgOfflineBillingUpload?window.ctgOfflineBillingUpload(p):null
   if(window.ctgOfflineNoteUploads)window.ctgOfflineNoteUploads(p).forEach(d=>emittedUploads.add(d))
-  if(window.ctgOfflineFilledDay1Uploads)window.ctgOfflineFilledDay1Uploads(p).forEach(d=>emittedUploads.add(d))
   const offlineDay1File=window.ctgOfflineDay1Upload?window.ctgOfflineDay1Upload(p):null
   if(offlineDay1File)emittedUploads.add(offlineDay1File)
   if(offlineBillingFile){emittedUploads.add(offlineBillingFile);await addDataUrl(await resolveUploadDataUrl(p,offlineBillingFile))}
   else try{await addJsPdf(buildBillingStatementDoc(getBillingStatementData(p)))}catch(e){console.error('FCR billing failed',e)}
   // 4b. Remaining uploaded documents (after billing, before test PDFs),
   //     in the fixed category order.
-  for(const d of uploadsByType(['Referral Form','Police Report','Discharge Report','Other Report']))await addDataUrl(await resolveUploadDataUrl(p,d))
+  //     A Day 1 saved on the form prints at step 6, so an uploaded copy does not print here too.
+  const formDay1=aceFormFilledIn(p)
+  if(window.ctgOfflineFilledDay1Uploads)for(const d of window.ctgOfflineFilledDay1Uploads(p)){emittedUploads.add(d);await addDataUrl(await resolveUploadDataUrl(p,d),'whole')}
+  for(const d of uploadsByType(['Referral Form','Police Report','Discharge Report','Other Report']))await addDataUrl(await resolveUploadDataUrl(p,d),formDay1)
   for(const d of uploadDocs){
     if(emittedUploads.has(d))continue
     emittedUploads.add(d)
-    await addDataUrl(await resolveUploadDataUrl(p,d))
+    await addDataUrl(await resolveUploadDataUrl(p,d),formDay1)
   }
   // 5. Uploaded test result PDFs / images (Shoe Box all, Reflex all, latest Sway)
   const fcrTestFiles=collectFCRTestUploadFiles(p)
