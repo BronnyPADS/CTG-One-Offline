@@ -224,6 +224,19 @@
     })
     return out
   }
+  /* A cell's own lines. The FCR's Word copy sets them cell by cell and none on the table,
+     so its bill came through with no lines, and with no lines the FCR's Word copy read
+     the bill as plain text, its columns run together (5 Nov 2026). */
+  function cellEdges(tcPr) {
+    var tb = wKid(tcPr, 'tcBorders'), out = null
+    if (!tb) return null
+    ;[['top', 'top'], ['left', 'start'], ['bottom', 'bottom'], ['right', 'end']].forEach(function (s) {
+      var e = wKid(tb, s[0]) || wKid(tb, s[1])
+      if (!e || /^(nil|none)$/i.test(wAttr(e) || 'nil')) return
+      ;(out = out || {})[s[0]] = { w: Math.max(0.25, (+wAttr(e, 'sz') || 4) / 8), color: /^[0-9a-f]{6}$/i.test(wAttr(e, 'color') || '') ? wAttr(e, 'color') : '000000' }
+    })
+    return out
+  }
   function wordTable(S, tbl) {
     var pr = wKid(tbl, 'tblPr')
     var grid = wKids(wKid(tbl, 'tblGrid'), 'gridCol').map(function (g) { return twip(wAttr(g, 'w'), 0) })
@@ -238,7 +251,7 @@
         minH: h ? twip(wAttr(h), 0) : 0,
         cells: wKids(tr, 'tc').map(function (tc) {
           var tcPr = wKid(tc, 'tcPr'), span = wKid(tcPr, 'gridSpan'), va = wKid(tcPr, 'vAlign'), vm = wKid(tcPr, 'vMerge')
-          return { span: span ? (+wAttr(span) || 1) : 1, valign: va ? wAttr(va) : 'top', cont: !!vm && wAttr(vm) !== 'restart', blocks: wordBlocks(S, tc) }
+          return { span: span ? (+wAttr(span) || 1) : 1, valign: va ? wAttr(va) : 'top', cont: !!vm && wAttr(vm) !== 'restart', edges: cellEdges(tcPr), blocks: wordBlocks(S, tc) }
         })
       }
     })
@@ -398,7 +411,7 @@
         ci += c.span
         var inner = Math.max(10, w - t.mar.l - t.mar.r)
         var paras = c.cont ? [] : flatParas(c.blocks).map(function (b) { return layoutPara(b, inner, sub) })
-        return { x: x, w: w, inner: inner, paras: paras, h: paras.reduce(function (a, L) { return a + L.h }, 0) + 2, valign: c.valign }
+        return { x: x, w: w, inner: inner, paras: paras, h: paras.reduce(function (a, L) { return a + L.h }, 0) + 2, valign: c.valign, edges: c.edges }
       })
       return { cells: cells, h: Math.max(r.minH, Math.max.apply(null, cells.map(function (c) { return c.h }).concat([10]))) }
     }
@@ -408,7 +421,16 @@
         if (c.valign === 'center') cy = top + (R.h - inner) / 2
         else if (c.valign === 'bottom') cy = top + R.h - inner - 1
         c.paras.forEach(function (L) { cy = drawPara(L, x0 + c.x + t.mar.l, c.inner, cy) })
-        if (t.border) {
+        if (c.edges) {
+          var x1 = x0 + c.x, x2 = x1 + c.w, y1 = top, y2 = top + R.h
+          ;[['top', x1, y1, x2, y1], ['left', x1, y1, x1, y2], ['bottom', x1, y2, x2, y2], ['right', x2, y1, x2, y2]].forEach(function (s) {
+            var e = c.edges[s[0]]
+            if (!e) return
+            var ec = rgb(e.color)
+            doc.setDrawColor(ec[0], ec[1], ec[2]); doc.setLineWidth(e.w)
+            doc.line(s[1], s[2], s[3], s[4])
+          })
+        } else if (t.border) {
           var bc = rgb(t.border.color)
           doc.setDrawColor(bc[0], bc[1], bc[2]); doc.setLineWidth(t.border.w)
           doc.rect(x0 + c.x, top, c.w, R.h)

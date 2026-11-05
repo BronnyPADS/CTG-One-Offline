@@ -1769,7 +1769,7 @@
   /* A Day 1 from before the letterhead (9 Oct 2026) does not name the practice in
      its text, so its own first sentence says what it is. */
   function opensDay1(raw) {
-    return /Today the pati\w*,.{0,160}\badministered the Acute Concussion Evaluation/.test(raw.join(' ').replace(/\s+/g, ' '))
+    return /Todaythepati\w*,.{0,160}administeredtheAcuteConcussionEvaluation/.test(raw.join('').replace(/\s+/g, ''))
   }
   function plainLines(lines, raw, carry) {
     var out = {}
@@ -1884,39 +1884,25 @@
     } finally { try { if (pdf) pdf.destroy() } catch (e) {} }
   }
 
-  /* An uploaded PDF without the Day 1 inside it, for a patient whose Day 1 is the
-     saved form: the FCR prints that one after the test results, and this would be
-     a second copy (5 Nov 2026). A Day 1 runs from its first sentence to its
-     "Recommendation:" line, and any other report in the same file stays. One with
-     no such ending is not cut. Returns { bytes, removed, left }. Never throws: on
-     any trouble the file stays whole. */
-  async function withoutDay1(bytes) {
-    var whole = { bytes: bytes, removed: 0, left: 0 }, L = window.PDFLib, pdf = null
-    if (!L || typeof ensurePdfJs !== 'function') return whole
+  /* Is there a Day 1 in this uploaded PDF? For a patient whose Day 1 is the saved form,
+     such a file stays out of the FCR (5 Nov 2026). Only a Day 1 prints this heading in
+     capitals, and of 417 real PDFs every Day 1 did, also the copies with the first
+     sentence blacked out. Never throws: on any trouble, no. */
+  async function hasDay1(bytes) {
+    var pdf = null
+    if (typeof ensurePdfJs !== 'function') return false
     try {
       var lib = await ensurePdfJs()
       pdf = await lib.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false }).promise
-      var cut = [], from = -1
       for (var n = 1; n <= pdf.numPages; n++) {
         var tc = await (await pdf.getPage(n)).getTextContent()
-        var raw = wordingLines(tc.items.filter(function (it) { return it.str }).map(function (it) {
-          return { s: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[2], it.transform[3]) || it.height || 10 }
-        })).map(function (ln) { return fixWordingLine(ln, '', null, []).text })
-        if (from < 0 && opensDay1(raw)) from = n
-        if (from > 0 && raw.some(function (t) { return /^\s*Recommendation\s*:/.test(t) })) {
-          for (var k = from; k <= n; k++) cut.push(k - 1)
-          from = -1
-        }
+        var words = tc.items.map(function (it) { return it.str || '' })
+        if (/ACUTECONCUSSIONEVALUATION/.test(words.join('').replace(/\s+/g, '')) || opensDay1(words)) return true
       }
-      if (!cut.length) return whole
-      var count = pdf.numPages
-      var doc = await L.PDFDocument.load(bytes, { ignoreEncryption: true })
-      cut.slice().reverse().forEach(function (i) { doc.removePage(i) })
-      if (cut.length === count) return { bytes: bytes, removed: cut.length, left: 0 }
-      return { bytes: await doc.save(), removed: cut.length, left: count - cut.length }
+      return false
     } catch (e) {
       console.warn('FCR: an uploaded report could not be checked for a Day 1', e)
-      return whole
+      return false
     } finally { try { if (pdf) pdf.destroy() } catch (e) {} }
   }
 
@@ -1929,5 +1915,5 @@
     return items.filter(function (it) { return !inBox(it) }).concat(patch.words.map(function (w) { return Object.assign({}, w) }))
   }
 
-  window.ctgFcrDocx = { build: build, fixOldWording: fixOldWording, withoutDay1: withoutDay1 }
+  window.ctgFcrDocx = { build: build, fixOldWording: fixOldWording, hasDay1: hasDay1 }
 })()
