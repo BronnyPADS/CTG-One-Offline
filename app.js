@@ -6252,9 +6252,9 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
     }
     function day2SavedDiagnosisLines(){
       const ace=p&&p.ace?p.ace:null
-      if(ace&&Array.isArray(ace.diagnosisCodes)&&ace.diagnosisCodes.length)return ace.diagnosisCodes.map(clean)
+      if(ace&&Array.isArray(ace.diagnosisCodes)&&ace.diagnosisCodes.length)return icdCurrentLines(ace.diagnosisCodes).map(clean)
       const st=day2AceFormState()
-      const codes=Array.isArray(st.icdCodes)?st.icdCodes:[]
+      const codes=Array.isArray(st.icdCodes)?[...new Set(st.icdCodes.map(icdCurrentKey))]:[]
       return codes.length?codes.map(clean):[]
     }
     function day2SavedAssessmentRisks(){
@@ -6982,6 +6982,20 @@ function policyLimitsListHtml(p){
 /* Overview card: the ICD-10 codes ticked on this patient's ACE. Codes are
    stored as "(F07.81) Post-concussional syndrome" strings by the ACE form, so
    they're split back into code + description for display. */
+/* Dizziness and Vertigo were two lines sharing the code "R42." until 5 Nov
+   2026; they are one now, "(R42) Dizziness / Vertigo" (staff). A Day 1 saved
+   before keeps the old words in its record (a signed one must not change), so
+   every place that shows or prints its diagnoses reads them through here. */
+const ICD_MERGED={'R42.|Dizziness':'R42|Dizziness / Vertigo','R42.|Vertigo, not otherwise specified':'R42|Dizziness / Vertigo','R42.':'R42'}
+function icdCurrentKey(key){return ICD_MERGED[key]||key}
+function icdCurrentLines(list){
+  const out=[]
+  ;(Array.isArray(list)?list:[]).forEach(s=>{
+    const t=String(s==null?'':s).replace(/^(\s*)\(R42\.?\)\s*(Dizziness(\s*\/\s*Vertigo)?|Vertigo, not otherwise specified)[,\s]*$/i,'$1(R42) Dizziness / Vertigo')
+    if(!out.includes(t))out.push(t)
+  })
+  return out
+}
 function parseDiagnosisCode(s){
   const m=String(s||'').match(/^\s*\((.+?)\)\s*(.*)$/)
   return m?{code:m[1],desc:m[2]}:{code:'',desc:String(s||'')}
@@ -6996,7 +7010,7 @@ function dxTileHtml(d){
 }
 function diagnosisSectionHtml(p){
   const ace=p.ace||{}
-  const codes=Array.isArray(ace.diagnosisCodes)?ace.diagnosisCodes.filter(Boolean):[]
+  const codes=icdCurrentLines(ace.diagnosisCodes).filter(Boolean)
   const parsed=codes.map(parseDiagnosisCode)
   const canOpen=patientTabAllowed('ace')
   const body=parsed.length
@@ -8516,7 +8530,7 @@ function patientDetailExamDate(exam){
 }
 function patientDetailSavedText(exam){return exam?.savedDisplay||plainOrDash(exam?.savedAt)}
 function patientDetailPrimaryDx(ace){
-  if((ace?.diagnosisCodes||[]).length)return ace.diagnosisCodes[0]
+  if((ace?.diagnosisCodes||[]).length)return icdCurrentLines(ace.diagnosisCodes)[0]
   return ace?.diagnosis||ace?.diagnosisText||''
 }
 function patientDetailMetaItem(icon,label,value){
@@ -9109,7 +9123,7 @@ function roRenderSecAce(p,fs){
     +day1RoExtra('ace',fs,p)
 }
 function roRenderSecDx(p){
-  const codes=(p.ace&&p.ace.diagnosisCodes)||[]
+  const codes=icdCurrentLines((p.ace&&p.ace.diagnosisCodes)||[])
   return codes.length
     ?codes.map(c=>roItem('ICD / Diagnosis',c,true)).join('')
     :roItem('ICD / Diagnosis','',true)
@@ -10068,7 +10082,7 @@ function getCaseDischargeData(p){
     riskFactors:riskFactorsOrBlank(cd.riskFactors||(p?.ace?.riskFactors||'')||aceRiskFactorsText(p)),
     injuryType:injuryType,
     incidentPhrase:dischargeIncidentPhrase(injuryType,cd.injuryType?'':p?.ace?.formState?.itSelected),
-    dxLines:Array.isArray(p?.ace?.diagnosisCodes)?p.ace.diagnosisCodes:[]
+    dxLines:icdCurrentLines(p?.ace?.diagnosisCodes)
   }
 }
 function buildCaseDischargeDoc(p){
@@ -10928,7 +10942,7 @@ function openSectionModal(id,section){
     <div class="fg full"><label class="plain-check"><input type="checkbox" id="modalAdminDischarged" ${p.adminDischarged?'checked':''}> Admin Discharged</label></div>
     <div class="fg full"><label class="plain-check"><input type="checkbox" id="modalPendingAce" ${p.pendingAce?'checked':''}> Pending for Day 1</label></div>
   </div>`
-  if(section==='diagnosis')body=`<div class="g2">${modalInput('Day 1 Score','modalAceScore',a.aceScore)}${modalInput('Date of Service','modalAceDOS',a.dateOfService)}<div class="fg full"><label>Diagnosis Codes / Details</label><textarea id="modalDxCodes" data-cs="${__cs}min-height:150px">${escHtml((a.diagnosisCodes||[]).join('\n'))}</textarea></div><div class="fg full"><label>Positive ACE Symptoms</label><textarea id="modalPositiveSymptoms" data-cs="${__cs}min-height:120px">${escHtml((a.positiveSymptoms||[]).join('\n'))}</textarea></div></div>`
+  if(section==='diagnosis')body=`<div class="g2">${modalInput('Day 1 Score','modalAceScore',a.aceScore)}${modalInput('Date of Service','modalAceDOS',a.dateOfService)}<div class="fg full"><label>Diagnosis Codes / Details</label><textarea id="modalDxCodes" data-cs="${__cs}min-height:150px">${escHtml(icdCurrentLines(a.diagnosisCodes).join('\n'))}</textarea></div><div class="fg full"><label>Positive ACE Symptoms</label><textarea id="modalPositiveSymptoms" data-cs="${__cs}min-height:120px">${escHtml((a.positiveSymptoms||[]).join('\n'))}</textarea></div></div>`
   if(section==='billing')body=`<div class="g2">${modalInput('Statement Date','modalStatementDate',b.statementDate)}${modalInput('Account No.','modalAccountNo',b.accountNo)}</div>`
   if(section==='notes')body=`<div class="fg"><label>Patient Notes</label><textarea id="modalPatientNotes" data-cs="${__cs}min-height:180px">${escHtml(n.text||'')}</textarea></div>`
   document.getElementById('modalBody').innerHTML=body
@@ -11079,7 +11093,7 @@ function collectAceFormState(){
   // Not the remembered ones: those come back from the shared list, and x there forgets them everywhere.
   RISK_WRITEIN_LISTS.forEach(id=>{const mem=ctgChoiceMemory.get('list:'+id).map(t=>t.toLowerCase());state.customs[id]=[...document.querySelectorAll('#'+id+' label[data-custom]')].map(chkTxt).filter(t=>!mem.includes(t.toLowerCase()))})
   state.icdCodes=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>el.querySelector('.icd-code')?.textContent.trim()).filter(Boolean)
-  // Code AND description: two rows share R42. (Dizziness, Vertigo), and by code alone reopening ticked both.
+  // Code AND description: once two rows shared R42. (Dizziness, Vertigo), and by code alone reopening ticked both.
   state.icdItems=[...document.querySelectorAll('#icdGrid .icd-item.checked')].map(el=>(el.querySelector('.icd-code')?.textContent.trim()||'')+'|'+(el.querySelector('.icd-desc')?.textContent.trim()||''))
   // The injury-type picker's actual selection, 'No Vehicle Involved' against
   // the generic 'Others' write-in, has to be saved explicitly. Both collapse to
@@ -11182,7 +11196,7 @@ function applyAceFormState(state){
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>el.classList.remove('checked'))
   // By code and description when the save has them (see collectAceFormState); older saves by code.
   const byItem=Array.isArray(state.icdItems)
-  const selected=new Set(byItem?state.icdItems:(state.icdCodes||[]))
+  const selected=new Set((byItem?state.icdItems:(state.icdCodes||[])).map(icdCurrentKey))
   document.querySelectorAll('#icdGrid .icd-item').forEach(el=>{
     const code=el.querySelector('.icd-code')?.textContent.trim()
     const key=byItem?code+'|'+(el.querySelector('.icd-desc')?.textContent.trim()||''):code
@@ -12337,8 +12351,8 @@ const ICD_CODES=[
   ['R47.82','Stuttering and fluency disorder conditions classified elsewhere'],
   ['I69.920','Hx. of aphasia following cerebral infarction (stroke)'],
   ['I69.398','Hx of other sequelae of cerebral infarction (stroke)'],
-  ['R42.','Dizziness'],
-  ['R42.','Vertigo, not otherwise specified'],
+  // One line since 5 Nov 2026 (staff): it was two, "R42. Dizziness" and "R42. Vertigo, not otherwise specified".
+  ['R42','Dizziness / Vertigo'],
   ['H55.00','Nystagmus and other abnormal eye movements, unspecified'],
   ['H81.20','Vestibular neuronitis, unspecified ear'],
   ['H93.19','Tinnitus, unspecified ear'],

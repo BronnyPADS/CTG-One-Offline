@@ -266,7 +266,7 @@
   function pchrtAcePatient() { return (typeof getPatient === 'function') ? getPatient(pchrtPatientId) : null; }
   function pchrtAceDiagnosisRows() {
     const p = pchrtAcePatient();
-    const codes = (p && p.ace && Array.isArray(p.ace.diagnosisCodes)) ? p.ace.diagnosisCodes : [];
+    const codes = (p && p.ace && Array.isArray(p.ace.diagnosisCodes)) ? icdCurrentLines(p.ace.diagnosisCodes) : [];
     const date = (p && p.ace && (p.ace.dateOfService || p.ace.savedAt)) || '';
     return codes.map(code => ({
       source: 'ace', id: 'ace_' + code, encounterDate: date, icd: code, name: pchrtIcdDesc(code) || code,

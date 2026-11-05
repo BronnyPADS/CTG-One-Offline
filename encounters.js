@@ -89,7 +89,7 @@
   // nothing's been entered directly on Billing yet - keeps this column from
   // reading blank for every encounter of a patient who's actually had an ACE.
   function encAceIcdCodes(p) {
-    const codes = (p && p.ace && Array.isArray(p.ace.diagnosisCodes)) ? p.ace.diagnosisCodes : [];
+    const codes = (p && p.ace && Array.isArray(p.ace.diagnosisCodes)) ? icdCurrentLines(p.ace.diagnosisCodes) : [];
     return codes.join(', ');
   }
 

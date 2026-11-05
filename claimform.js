@@ -294,11 +294,11 @@ function cfChartFacts(p) {
   var intake = (p && p.intake) || {}
   var pip = intake.pip || {}
   var consent = intake.consent || {}
-  var codes = Array.isArray(ace.diagnosisCodes) ? ace.diagnosisCodes : []
+  var codes = Array.isArray(ace.diagnosisCodes) ? icdCurrentLines(ace.diagnosisCodes) : []
   return {
     acctNo: cfChartAcctNo(p),
     doi: ai.doi || ace.dateOfInjury || d.doi || '',
-    dx: codes.map(cfNoDot).filter(Boolean).slice(0, 12),
+    dx: codes.map(cfNoDot).filter(function (c, i, all) { return c && all.indexOf(c) === i }).slice(0, 12),   // a code once
     provider: String(ai.completedBy || d.provider || '').trim(),
     carrier: String(pip.autoInsuranceCompany || '').trim(),
     policy: String(pip.policyNumber || '').trim(),

@@ -1479,7 +1479,7 @@
   /* One line: its text, and each piece's text after the corrections. own[] says
      which piece each character belongs to; a space standing for a gap between
      two pieces belongs to neither (-1 - the index of the piece after it). */
-  function fixWordingLine(ln, prevText, measure, rules, nextText) {
+  function fixWordingLine(ln, prevText, measure, rules, nextText, edits) {
     var chars = [], own = []
     ln.items.forEach(function (it, i) {
       if (i) {
@@ -1496,6 +1496,14 @@
     var text = chars.join(''), underline = false, last = ln.items.length - 1
     var ownerAt = function (pos) { if (pos >= own.length) return last; var o = own[pos]; return o < 0 ? -1 - o : o }
     var ownerBefore = function (pos) { for (var q = pos - 1; q >= 0; q--) if (own[q] >= 0) return own[q]; return ownerAt(pos) }
+    // Changes worked out across lines (r42Edits), by place in this line's text: last first, so the places stay
+    // true, and at one place what is taken out goes before what is added.
+    ;(edits || []).slice().sort(function (x, y) { return (y.at - x.at) || (y.len - x.len) }).forEach(function (ed) {
+      var ins = ed.to || '', who = ed.keepBefore ? ownerBefore(ed.at) : ownerAt(ed.at), add = []
+      for (var c = 0; c < ins.length; c++) add.push(who)
+      text = text.slice(0, ed.at) + ins + text.slice(ed.at + ed.len)
+      own = own.slice(0, ed.at).concat(add, own.slice(ed.at + ed.len))
+    })
     ;(rules || OLD_WORDING).forEach(function (rule) {
       if (rule.prev && !rule.prev.test(prevText || '')) return
       if (rule.next && !rule.next.test(nextText || '')) return
@@ -1640,6 +1648,75 @@
      same bytes when nothing needed correcting) and, per page, the covered boxes
      and the words typed in them. Never throws: on any trouble the file goes in
      as uploaded. */
+  /* Dizziness and Vertigo became one diagnosis line, "(R42) Dizziness / Vertigo"
+     (5 Nov 2026). An older report can print both old lines, side by side as the
+     list has them: the first becomes the new line and the second goes, so no
+     code is printed twice. It may be its own line, or part of a list that wraps
+     ("(R42.) Dizziness, (R42.) Vertigo, not" / "otherwise specified, (H93.19)"),
+     or the first may end a page and the second start the next. A line left with
+     nothing is covered: an uploaded page cannot close the gap.
+     raw: the page's lines. carry: what the last page ended with. Returns
+     { line number: [{ at, len, to, keepBefore }] }. */
+  var R42_LINE = /\(R42\.?\)\s+(Dizziness(?!\s*\/\s*Vertigo)|Vertigo,\s+not\s+otherwise\s+specified)/g
+  // The letterhead and footer, which come between the end of one page and the start of the next.
+  var PAGE_CHROME = /^(CONCUSSION THERAPY GROUP|2411 Crofton|Crofton, MD|Phone:|Fax:|Concussion Therapy Group \/|(Page\s+)?\d+\s*(of|\|)\s*\d+)/i
+  function r42Edits(raw, carry) {
+    var text = raw.join('\n'), starts = [], pos = 0, edits = {}
+    raw.forEach(function (l) { starts.push(pos); pos += l.length + 1 })
+    var lineAt = function (p) { var i = starts.length - 1; while (i > 0 && starts[i] > p) i--; return i }
+    var put = function (li, e) { (edits[li] = edits[li] || []).push(e) }
+    // Take [a, b) out of the text, line by line; a line it starts leaves no space at its front.
+    var cut = function (a, b) {
+      for (var li = lineAt(a); li < raw.length && starts[li] < b; li++) {
+        var from = Math.max(a, starts[li]), to = Math.min(b, starts[li] + raw[li].length)
+        if (from === starts[li]) while (to < starts[li] + raw[li].length && /\s/.test(raw[li][to - starts[li]])) to++
+        if (to > from) put(li, { at: from - starts[li], len: to - from, to: '' })
+      }
+    }
+    // The kept one: "(R42.)" loses its period, the words become the one line's.
+    var keep = function (m) {
+      var s = m.index, li = lineAt(s), code = /^\(R42\.?\)/.exec(m[0])[0]
+      if (code.length === 6) put(li, { at: s + 4 - starts[li], len: 1, to: '' })
+      var d = s + m[0].indexOf(m[1]), e = s + m[0].length, dl = lineAt(d)
+      if (/^Dizziness/.test(m[1])) { put(dl, { at: e - starts[dl], len: 0, to: ' / Vertigo', keepBefore: true }); return }
+      // "Vertigo, not otherwise specified", which may wrap: its first part is replaced, the rest goes.
+      var firstEnd = Math.min(e, starts[dl] + raw[dl].length)
+      // Wrapped: a comma after it comes back with the words, not left to start the next line.
+      var moved = firstEnd < e && text[e] === ','
+      put(dl, { at: d - starts[dl], len: firstEnd - d, to: 'Dizziness / Vertigo' + (moved ? ',' : '') })
+      if (firstEnd < e) cut(firstEnd + 1, e + (moved ? 1 : 0))
+    }
+    var ms = [], m
+    R42_LINE.lastIndex = 0
+    while ((m = R42_LINE.exec(text))) ms.push({ index: m.index, 0: m[0], 1: m[1], end: m.index + m[0].length })
+    var next = { open: false, comma: false }
+    for (var i = 0; i < ms.length; i++) {
+      var cur = ms[i], after = text.slice(cur.end)
+      // The second of a pair across a page: only the letterhead before it on this page.
+      if (i === 0 && carry && carry.open && text.slice(0, cur.index).split('\n').every(function (l) { return !l.trim() || PAGE_CHROME.test(l.trim()) })) {
+        cut(cur.index, cur.end + (carry.comma && after[0] === ',' ? 1 : 0))
+        next.open = false
+        continue
+      }
+      keep(cur)
+      var nx = ms[i + 1], between = nx ? text.slice(cur.end, nx.index) : null
+      if (nx && /^,?\s*$/.test(between)) {
+        var c1 = between[0] === ',', c2 = text[nx.end] === ','
+        // "A, B, C" keeps "A," and " C"; "A, B" at the end of the list takes the first comma too.
+        if (c1 && c2) cut(cur.end + 1, nx.end + 1)
+        else cut(cur.end, nx.end)
+        i++
+        nx = null
+        after = text.slice(ms[i].end + (c2 ? 1 : 0))
+      }
+      // Does this page end on it? Then the next page may start with the second of the pair.
+      var rest = after.replace(/^,/, '').split('\n')
+      next = { open: !ms[i + 1] && rest.every(function (l) { return !l.trim() || PAGE_CHROME.test(l.trim()) }), comma: after[0] === ',' }
+    }
+    if (carry) { carry.open = next.open; carry.comma = next.comma }
+    return edits
+  }
+
   /* Corrections that need the patient: the discharge summary's "Patient is
      now discharged from active care" names them (5 Nov 2026), also where
      "Patient" ends one line and "is now discharged" starts the next. */
@@ -1669,15 +1746,17 @@
         var f = it.f, fnt = mfonts[(f && f.fam === 'Arial' ? 'Helvetica' : 'TimesRoman') + (f && f.b ? 'Bold' : '')]
         try { return fnt.widthOfTextAtSize(it.s, it.size) } catch (e) { return it.w }
       }
+      var r42Carry = { open: false, comma: false }
       for (var n = 1; n <= pdf.numPages; n++) {
         var rd = await readWords(pdf, n)
-        if (rd.rot % 360) continue
+        if (rd.rot % 360) { r42Carry.open = false; continue }
         // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
-        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) continue
+        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) { r42Carry.open = false; continue }
         var lines = wordingLines(rd.items), prev = '', fixes = []
         var lineText = function (l) { return l ? l.items.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim() : '' }
+        var r42 = r42Edits(lines.map(function (ln) { return fixWordingLine(ln, '', measure, []).text }), r42Carry)
         lines.forEach(function (ln, li) {
-          var res = fixWordingLine(ln, prev, measure, rules, lineText(lines[li + 1]))
+          var res = fixWordingLine(ln, prev, measure, rules, lineText(lines[li + 1]), r42[li])
           prev = res.text
           if (res.changed) fixes.push({ ln: ln, res: res })
         })

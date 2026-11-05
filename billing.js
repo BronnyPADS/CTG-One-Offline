@@ -215,7 +215,7 @@ function renderArSummary() {
 
   // Diagnosis (ICD-10) - same list the Patient List detail page and Patient
   // Chart's Diagnosis tab read from this patient's ACE record.
-  const aceCodes = (p.ace && Array.isArray(p.ace.diagnosisCodes)) ? p.ace.diagnosisCodes : []
+  const aceCodes = (p.ace && Array.isArray(p.ace.diagnosisCodes)) ? icdCurrentLines(p.ace.diagnosisCodes) : []
   if (aceCodes.length) {
     h += '<div class="card"><div class="card-body" data-cs="'+__cs+'display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px">'
     h += '<strong data-cs="'+__cs+'font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">Diagnosis (ICD-10)</strong>'
