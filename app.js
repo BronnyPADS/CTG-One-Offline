@@ -6392,7 +6392,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       const finalStatusText=noFollowup
         ?'Discharged. No Concussion.'
         :dischargeFinalStatusText(name)
-      resultRichParagraph([{text:'Final Status:   ',bold:true,size:12},{text:finalStatusText}],{size:12,space:8})
+      if(!dischargeHidesFinalStatus(p))resultRichParagraph([{text:'Final Status:   ',bold:true,size:12},{text:finalStatusText}],{size:12,space:8})
       // Risk Factors line is omitted for no-follow-up cases and when none were ticked.
       if(!noFollowup&&risks.length)resultRichParagraph([{text:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms: ',bold:true,size:12},{text:reportSentence(risks.join(', '))}],{size:12,space:6})
       // Diagnosis
@@ -10039,6 +10039,10 @@ function examIncidentPhrase(p,formType){
 /* The discharge summary's Final Status names the patient: "Modelere Francois
    is now discharged from active care", not "Patient is now ..." (staff, 5 Nov
    2026). No name on the chart: "The patient". */
+/* An Admin Discharged patient's Case Discharge Summary has no Final Status line
+   (staff, 5 Nov 2026). A regular discharge keeps its, and so does a Day 1 with no
+   follow-up ("Discharged. No concussion."), Admin Discharged or not. */
+function dischargeHidesFinalStatus(p){return !!(p&&p.adminDischarged)&&!isPatientAceNoFollowup(p)}
 function dischargeStatusName(name){
   const n=String(name||'').trim()
   return n&&n!=='\u2014'&&!/^Unnamed Patient$/i.test(n)?n:'The patient'
@@ -10080,7 +10084,7 @@ function getCaseDischargeData(p){
     examReportDates:cd.examReportDates||examDates.filter(Boolean).join(', ')||'',
     dischargeDate,
     totalDates:totalDates||'',
-    finalStatus:cd.finalStatus?dischargeNameInStatus(cd.finalStatus,name):(isPatientAceNoFollowup(p)?'Discharged. No concussion.':dischargeFinalStatusText(name)),
+    finalStatus:dischargeHidesFinalStatus(p)?'':cd.finalStatus?dischargeNameInStatus(cd.finalStatus,name):(isPatientAceNoFollowup(p)?'Discharged. No concussion.':dischargeFinalStatusText(name)),
     riskFactors:riskFactorsOrBlank(cd.riskFactors||(p?.ace?.riskFactors||'')||aceRiskFactorsText(p)),
     injuryType:injuryType,
     incidentPhrase:dischargeIncidentPhrase(injuryType,cd.injuryType?'':p?.ace?.formState?.itSelected),
@@ -10129,7 +10133,7 @@ function buildCaseDischargeDoc(p){
   if(!isPatientAceNoFollowup(p))richPara([{t:'Neurocognitive and Vestibular Exam Report Dates:',b:true},{t:cd.examReportDates||'—'}],12,2)
   richPara([{t:'Discharge Date:',b:true},{t:cd.dischargeDate||'—'}],12,2)
   richPara([{t:'Total Dates of Service:',b:true},{t:cd.totalDates||'—'}],12,8)
-  richPara([{t:'Final Status:',b:true},{t:cd.finalStatus}],12,6)
+  if(cd.finalStatus)richPara([{t:'Final Status:',b:true},{t:cd.finalStatus}],12,6)
   // Risk Factors line is omitted for no-follow-up cases (matches the inline ACE copy)
   // and when there are none to list.
   if(!isPatientAceNoFollowup(p)&&cd.riskFactors)richPara([{t:'Risk Factors Associated with Increased Risk for Increased Severity, Prolonged Recovery and Chronic Episodes of Neuroinflammation and Neuroinflammatory Symptoms:',b:true},{t:reportSentence(cd.riskFactors)}],12,8)
@@ -10445,7 +10449,7 @@ async function compileFCRPages(p,merged){
       const isPdf=mime.indexOf('pdf')>=0||(bytes[0]===0x25&&bytes[1]===0x50&&bytes[2]===0x44&&bytes[3]===0x46)
       if(isPdf){
         // An uploaded report from an older template gets the current wording (4 Nov 2026).
-        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p)),gender:p&&p.demographics&&p.demographics.gender}):{bytes,patches:[]}
+        const fx=window.ctgFcrDocx&&window.ctgFcrDocx.fixOldWording?await window.ctgFcrDocx.fixOldWording(bytes,{name:dischargeStatusName(naturalPatientName(p)),gender:p&&p.demographics&&p.demographics.gender,noFinalStatus:dischargeHidesFinalStatus(p)}):{bytes,patches:[]}
         const before=kinds.length
         await addBytes(fx.bytes)
         const added=kinds.length-before

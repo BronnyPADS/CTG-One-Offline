@@ -1717,6 +1717,41 @@
     return edits
   }
 
+  /* An Admin Discharged patient's FCR has no Final Status (5 Nov 2026), on an
+     uploaded report's summary too: its lines are covered, which leaves a gap. It
+     runs from "Final Status:" to the end of the long wording or the next part of
+     the summary, on to the next page if it has to. "Discharged. No concussion."
+     stays. carry: { open } the last page ended inside one. */
+  function finalStatusEdits(raw, carry) {
+    var edits = {}, NEXT = /^(Risk Factors\b|Diagnosis\b|Causation\b|Medical Necessity\b|Reasonableness\b|CASE DISCHARGE SUMMARY\b)/
+    var run = function (from) {   // the lines of the status from here; { lines, ended }
+      var lines = [], seen = 0
+      for (var k = from; k < raw.length; k++) {
+        var t = raw[k].trim()
+        if (!t || PAGE_CHROME.test(t)) continue
+        if (NEXT.test(t)) return { lines: lines, ended: true }
+        if (++seen > 6) return { lines: lines.slice(0, 1), ended: true }   // not a status as we know it: its first line only
+        lines.push(k)
+        if (/recommendations\.?$/i.test(t)) return { lines: lines, ended: true }
+      }
+      return { lines: lines, ended: false }
+    }
+    var take = function (r) { r.lines.forEach(function (k) { edits[k] = [{ at: 0, len: raw[k].length, to: '' }] }); carry.open = !r.ended }
+    var start = 0
+    if (carry.open) {
+      var first = run(0)
+      take(first)
+      start = first.lines.length ? first.lines[first.lines.length - 1] + 1 : 0
+    }
+    for (var li = start; li < raw.length; li++) {
+      if (!/^\s*Final Status\s*:/.test(raw[li]) || /no concussion/i.test(raw[li])) continue
+      var r = run(li)
+      take(r)
+      if (r.lines.length) li = r.lines[r.lines.length - 1]
+    }
+    return edits
+  }
+
   /* Corrections that need the patient: the discharge summary's "Patient is
      now discharged from active care" names them (5 Nov 2026), also where
      "Patient" ends one line and "is now discharged" starts the next. */
@@ -1748,15 +1783,20 @@
         var f = it.f, fnt = mfonts[(f && f.fam === 'Arial' ? 'Helvetica' : 'TimesRoman') + (f && f.b ? 'Bold' : '')]
         try { return fnt.widthOfTextAtSize(it.s, it.size) } catch (e) { return it.w }
       }
-      var r42Carry = { open: false, comma: false }
+      var r42Carry = { open: false, comma: false }, fsCarry = { open: false }
       for (var n = 1; n <= pdf.numPages; n++) {
         var rd = await readWords(pdf, n)
-        if (rd.rot % 360) { r42Carry.open = false; continue }
+        if (rd.rot % 360) { r42Carry.open = false; fsCarry.open = false; continue }
         // Only the practice's own reports: Sway, ShoeBox, scans and signed forms stay as they are.
-        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) { r42Carry.open = false; continue }
+        if (!rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })) { r42Carry.open = false; fsCarry.open = false; continue }
         var lines = wordingLines(rd.items), prev = '', fixes = []
         var lineText = function (l) { return l ? l.items.map(function (it) { return it.s }).join(' ').replace(/\s+/g, ' ').trim() : '' }
-        var r42 = r42Edits(lines.map(function (ln) { return fixWordingLine(ln, '', measure, []).text }), r42Carry)
+        var rawLines = lines.map(function (ln) { return fixWordingLine(ln, '', measure, []).text })
+        var r42 = r42Edits(rawLines, r42Carry)
+        if (opts && opts.noFinalStatus) {
+          var fse = finalStatusEdits(rawLines, fsCarry)
+          Object.keys(fse).forEach(function (k) { r42[k] = (r42[k] || []).concat(fse[k]) })
+        }
         lines.forEach(function (ln, li) {
           var res = fixWordingLine(ln, prev, measure, rules, lineText(lines[li + 1]), r42[li])
           prev = res.text
