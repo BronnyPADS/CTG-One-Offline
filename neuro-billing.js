@@ -15,6 +15,7 @@
    Saved on the patient as p.neuroBilling:
      { lines: [{ from, to, pos, emg, cpt, mod, dxPtr, charge, units, npi }],
        accountNo, acceptAssignment ('yes' | 'no' | ''), signature, signDate,
+       physicianName, physicianCred (the Day 1 list), physicianCredOther (typed for Other),
        payments: [{ id, date, amount, method, ref, note, by, at }],
        updatedAt, updatedBy } */
 (function () {
@@ -57,8 +58,16 @@
     return (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   function nbBill(p) { return (p && p.neuroBilling) || null; }
+  var NB_CREDENTIALS = ['DC', 'MD', 'RN', 'NP', 'PhD', 'ATC', 'Other'];   // the Day 1 form's list
+  // "Jane Doe, MD"; for Other, the credential typed in.
+  function nbPhysician(b) {
+    var name = String((b && b.physicianName) || '').trim();
+    var cred = b && b.physicianCred === 'Other' ? String(b.physicianCredOther || '').trim() : String((b && b.physicianCred) || '');
+    return [name, cred].filter(Boolean).join(', ');
+  }
   function nbBlank(p) {
-    return { lines: [], accountNo: (p.demographics || {}).mrn || '', acceptAssignment: '', signature: '', signDate: '', payments: [] };
+    return { lines: [], accountNo: (p.demographics || {}).mrn || '', acceptAssignment: '', signature: '', signDate: '',
+      physicianName: '', physicianCred: '', physicianCredOther: '', payments: [] };
   }
   function nbTotals(b) {
     var billed = 0, paid = 0;
@@ -138,7 +147,12 @@
   var nbLastSel = null, nbLastFilter = null;   // what was last painted (a change eases in)
 
   function nbDraftFor(p) {
-    if (!nbDrafts[p.id]) nbDrafts[p.id] = JSON.parse(JSON.stringify(nbBill(p) || nbBlank(p)));
+    if (!nbDrafts[p.id]) {
+      var d = JSON.parse(JSON.stringify(nbBill(p) || nbBlank(p)));
+      // A bill saved before the physician fields (5 Nov 2026) has them blank.
+      ['physicianName', 'physicianCred', 'physicianCredOther'].forEach(function (k) { if (d[k] == null) d[k] = ''; });
+      nbDrafts[p.id] = d;
+    }
     return nbDrafts[p.id];
   }
   /* The form's totals: the lines being edited, against the payments as saved -
@@ -150,7 +164,10 @@
     var d = nbDrafts[p.id];
     if (!d) return false;
     var base = nbBill(p) || nbBlank(p);
-    var pick = function (b) { return JSON.stringify({ l: b.lines, a: b.accountNo, s: b.acceptAssignment, g: b.signature, d: b.signDate }); };
+    var pick = function (b) {
+      return JSON.stringify({ l: b.lines, a: b.accountNo, s: b.acceptAssignment, g: b.signature, d: b.signDate,
+        n: b.physicianName || '', c: b.physicianCred || '', o: b.physicianCredOther || '' });
+    };
     return pick(d) !== pick(base);
   }
 
@@ -293,6 +310,12 @@
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
         + '<div class="rf-f"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
           + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
+        + '<div class="rf-f"><label for="nbf_physicianName">Physician Name</label><input id="nbf_physicianName" type="text" value="' + esc(b.physicianName || '') + '" placeholder="e.g. Jane Doe" data-oninput="nbField(\'physicianName\',this.value)"></div>'
+        + '<div class="rf-f"><label for="nbf_physicianCred">Credentials</label><select id="nbf_physicianCred" data-onchange="nbField(\'physicianCred\',this.value)">'
+          + '<option value="">\u2014 Select \u2014</option>'
+          + NB_CREDENTIALS.map(function (c) { return '<option' + (b.physicianCred === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
+          + '<input id="nbf_physicianCredOther" class="nb-cred-other" type="text" maxlength="40" placeholder="Type the credential, e.g. DO" aria-label="Other credential" value="' + esc(b.physicianCredOther || '') + '"'
+          + (b.physicianCred === 'Other' ? '' : ' hidden') + ' data-oninput="nbField(\'physicianCredOther\',this.value)"></div>'
         + '<div class="rf-f"><label for="nbf_signature">Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)"></div>'
         + '<div class="rf-f"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
         + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
@@ -333,8 +356,13 @@
     nbRefreshTotals();
   }
   function nbField(key, value) {
-    var p = nbCurrent(); if (!p || ['accountNo', 'acceptAssignment', 'signature', 'signDate'].indexOf(key) === -1) return;
+    var p = nbCurrent(); if (!p || ['accountNo', 'acceptAssignment', 'signature', 'signDate', 'physicianName', 'physicianCred', 'physicianCredOther'].indexOf(key) === -1) return;
     nbDraftFor(p)[key] = String(value);
+    // Other: the credential is typed in a box under the list.
+    if (key === 'physicianCred') {
+      var other = document.getElementById('nbf_physicianCredOther');
+      if (other) { other.hidden = value !== 'Other'; if (value === 'Other') other.focus(); }
+    }
     nbRefreshTotals();
   }
   function nbClearAssign() {
@@ -368,6 +396,7 @@
     var b = JSON.parse(JSON.stringify(d));
     b.lines.forEach(function (l) { if (!l.to) l.to = l.from; l.charge = nbMoney(l.charge).toFixed(2); });
     b.payments = ((nbBill(p) || {}).payments || []).slice();   // payments are kept by the Payments page
+    if (b.physicianCred !== 'Other') b.physicianCredOther = '';   // typed only for Other (as the server keeps it)
     nbSave(p, b);
     delete nbDrafts[p.id];
     showToast('Neurologist bill saved.', 'ok');
@@ -502,10 +531,12 @@
     y += 36;
 
     heading('Billing');
-    if (y + 74 > PH - BOTTOM) { newPage(); heading('Billing'); }
+    if (y + 91 > PH - BOTTOM) { newPage(); heading('Billing'); }
     var top = y + 4, rx = ML + CW * 0.6, rw = CW * 0.4, ky = top + 12;
     [['Patient Account No.', b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
+      // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
+      ['Physician', nbPhysician(b)],
       ['Signature of Physician or Supplier', b.signature],
       ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
       var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';

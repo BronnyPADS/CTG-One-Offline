@@ -799,7 +799,14 @@
       clearAceBillingLock(p)
       saved(p)
       showToast('Day 1 file uploaded ✓')
-    } catch (e) { console.error(e); showToast('Could not upload the Day 1 file: ' + e.message, 'err') }
+    } catch (e) { console.error(e); showToast('Could not upload the Day 1 file: ' + e.message, 'err'); return }
+    // A PDF (or a Word file, kept as a PDF) can be read into the form (offline-day1-fill.js).
+    if (window.ctgOfflineDay1Fill && /pdf/i.test(f.type || '')) {
+      var fill = await ctgConfirm('Fill in the Day 1 form from this file now? The portal reads the file and puts its answers in the form for you to check. '
+        + 'Nothing changes until you click Save; until then the file stays the Day 1 record. You can also do this later with Fill Day 1 Form from File.',
+        { title: 'Fill Day 1 Form from File', okLabel: 'Fill Form' })
+      if (fill) await window.ctgOfflineDay1Fill(pid)
+    }
   }
 
   // Back to the form saved before the file, or to no Day 1 at all.
@@ -856,6 +863,10 @@
     var p = getPatient(pid)
     if (!p) return
     var prev = p.ace && p.ace.previousForm
+    /* No saved form to go back to: the form is filled in from the file
+       (offline-day1-fill.js, 5 Nov 2026), so staff check the answers instead of
+       typing them all again. */
+    if (!prev && window.ctgOfflineDay1Fill) return fillFromFile(pid)
     var ok = await ctgConfirm(prev
       ? 'Use the Day 1 form saved before the file? It becomes the Day 1 record again. The uploaded file stays in Documents and in the Final Case Report.'
       : 'Fill in the Day 1 form instead? The uploaded file stays the Day 1 record until the form is saved; then the form takes its place. The file stays in Documents and in the Final Case Report.',
@@ -864,6 +875,29 @@
     if (prev) { restoreDay1(p); saved(p) }
     origStartAce(pid)
   }
+  // A photo of a Day 1 has no text to read: its form is filled in by hand, as before.
+  function day1Readable(p) {
+    var doc = day1Upload(p)
+    return !!(doc && window.ctgOfflineDay1Fill && !/^image\//i.test(doc.type || '') && !/\.(png|jpe?g|gif|webp|heic)$/i.test(doc.name || ''))
+  }
+  async function fillFromFile(pid) {
+    var p = getPatient(pid)
+    if (!p) return
+    if (!day1Readable(p)) {
+      var go = await ctgConfirm('Fill in the Day 1 form instead? This file is a picture, so its answers cannot be read into the form; type them in. '
+        + 'The uploaded file stays the Day 1 record until the form is saved; then the form takes its place. The file stays in Documents and in the Final Case Report.',
+        { title: 'Fill Day 1 Form', okLabel: 'Open Day 1 Form' })
+      if (go) origStartAce(pid)
+      return
+    }
+    var ok = await ctgConfirm('Fill in the Day 1 form from the uploaded file? The portal reads the file and puts its answers in the form, marked in blue. '
+      + 'Check them, fill in anything still empty, then click Save. Until you Save, the uploaded file stays the Day 1 record. '
+      + 'After Save the form is the Day 1 record: the Final Case Report prints the Day 1 from it, and the file stays in Documents.',
+      { title: 'Fill Day 1 Form from File', okLabel: 'Fill Form' })
+    if (ok) await window.ctgOfflineDay1Fill(pid)
+  }
+  // The form itself, without the checks above (offline-day1-fill.js opens it to fill it).
+  window.ctgOfflineOpenAceForm = function (pid) { return origStartAce(pid) }
   var origAutosaveTick = window.aceAutosaveTick
   window.aceAutosaveTick = function () {
     var id = typeof getActiveAcePatientId === 'function' ? getActiveAcePatientId() : null
@@ -910,10 +944,13 @@
       + '<div class="ctgo-actions">'
       + btn('view', p.id, 'View File', 'btn-primary', ' data-doc="' + esc(doc.id) + '"', 'eye')
       + btn('day1-upload', p.id, 'Replace', 'btn-ghost', '', 'swap')
-      + btn('day1-form', p.id, p.ace.previousForm ? 'Use Saved Form' : 'Fill Day 1 Form', 'btn-ghost', '', 'pen')
+      + (p.ace.previousForm ? btn('day1-form', p.id, 'Use Saved Form', 'btn-ghost', '', 'pen') : '')
+      + (day1Readable(p) ? btn('day1-fill', p.id, 'Fill Day 1 Form from File', 'btn-ghost', '', 'pen')
+        : btn('day1-fill', p.id, 'Fill Day 1 Form', 'btn-ghost', '', 'pen'))
       + '<span class="ctgo-spacer"></span>' + btn('day1-remove', p.id, 'Remove', 'btn-ghost ctgo-danger', '', 'trash')
       + '</div></div>'
       + infoNote('This file is the patient\'s Day 1 record. It goes into the Final Case Report, and Day 1 is billed on the date of service above.'
+        + (day1Readable(p) ? ' Fill Day 1 Form from File puts its answers into the Day 1 form for you to check and save; the saved form then takes its place.' : '')
         + (p.ace.previousForm ? ' The Day 1 form saved before it is kept; removing the file brings it back.' : ''))
       + '</div></div>'
   }
@@ -1488,7 +1525,7 @@
   /* ------------------------------- clicks ------------------------------ */
   // Capture phase, so a button inside a clickable row does not also open the row.
   var ACTIONS = {
-    'day1-upload': uploadDay1, 'day1-remove': removeDay1, 'day1-form': fillDay1Form,
+    'day1-upload': uploadDay1, 'day1-remove': removeDay1, 'day1-form': fillDay1Form, 'day1-fill': fillFromFile,
     'bill-upload': uploadBilling, 'bill-total': changeBillingTotal, 'bill-remove': removeBilling,
     'note-upload': uploadNote, 'note-replace': uploadNote, 'note-remove': removeNote,
     'note-form-upload': noteFormUpload,

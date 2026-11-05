@@ -10462,6 +10462,7 @@ async function compileFCRPages(p,merged){
   // 4. Billing Statement (offline copy: an uploaded billing file stands in for it)
   const offlineBillingFile=window.ctgOfflineBillingUpload?window.ctgOfflineBillingUpload(p):null
   if(window.ctgOfflineNoteUploads)window.ctgOfflineNoteUploads(p).forEach(d=>emittedUploads.add(d))
+  if(window.ctgOfflineFilledDay1Uploads)window.ctgOfflineFilledDay1Uploads(p).forEach(d=>emittedUploads.add(d))
   const offlineDay1File=window.ctgOfflineDay1Upload?window.ctgOfflineDay1Upload(p):null
   if(offlineDay1File)emittedUploads.add(offlineDay1File)
   if(offlineBillingFile){emittedUploads.add(offlineBillingFile);await addDataUrl(await resolveUploadDataUrl(p,offlineBillingFile))}
@@ -13498,7 +13499,8 @@ function collectAll(containerId,items){
 function buildPDF(name,opts){
   const doi=gv('doi'),dos=gv('dos'),dob=gv('ptDOB'),age=gv('ptAge')
   const injType=gv('injuryType'),doiEv=gv('doi'),jur=gv('jurisdiction')
-  const jurClause=(jur&&jur!=='—')?[{t:' in '+jur}]:[]
+  // "Washington D.C." ends with its own full stop: none added after it (5 Nov 2026).
+  const jurClause=(jur&&jur!=='—')?[{t:' in '+jur.replace(/\.+$/,'')}]:[]
   const aceScore=document.getElementById('scoreTotalBig').textContent
   let reporterVal=go('reporter')
   if(document.getElementById('reporter').value&&document.getElementById('reporter').value!=='Patient'&&gv('reporterOther')!=='—'&&gv('reporterOther').trim())reporterVal+=' — '+gv('reporterOther')
@@ -13768,6 +13770,9 @@ function buildPDF(name,opts){
     const lines=wrap(fullText,TW-16)
     const h=lines.length*12+10
     needPage(Math.min(h+8,pageUsable))
+    // A new page's letterhead leaves the font at 11pt: drawn at that size the
+    // 9pt lines ran past the box and were cut off at the page edge (5 Nov 2026).
+    f('normal',9)
     col(190,0,0);lc(190,0,0);doc.setLineWidth(0.75)
     doc.rect(ML,y,TW,h)
     let yy=y+12
@@ -13844,6 +13849,7 @@ function buildPDF(name,opts){
     f('normal',9);col(0,0,0);lc(0,0,0);doc.setLineWidth(0.75)
     const lines=wrap(text,TW-20)
     needPage(Math.min(lines.length*12+2,pageUsable))
+    f('normal',9);col(0,0,0);lc(0,0,0);doc.setLineWidth(0.75)   // as for the red-flag box: a new page's letterhead changes the font
     if(checked){fc(0,0,0);doc.rect(ML+2,y-7,7,7,'FD')}
     else doc.rect(ML+2,y-7,7,7,'S')
     lines.forEach(l=>{tx(l,ML+16,y);y+=12})
