@@ -2588,6 +2588,10 @@ function dnBoilerplate(name, doi) {
     const saved = p.ace.formState
     const injType = (saved.selects && saved.selects.injuryType) || (saved.inputs && saved.inputs.injuryType) || ''
     if (injType) incident = dischargeIncidentPhrase(injType, saved.itSelected, injuryIsPlural(injType))
+  } else if (p && p.ace && p.ace.injuryType) {
+    // A Day 1 uploaded as a file (offline version): the type read from the file's
+    // own Causation sentence, as the discharge summary uses (Malachi, 5 Nov 2026).
+    incident = dischargeIncidentPhrase(p.ace.injuryType, '', injuryIsPlural(p.ace.injuryType))
   }
   const pron = patientPronoun(p)
   return {
@@ -6277,7 +6281,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       if(!ace&&!day2AceInput('ptName',''))return
       const name=day2SavedPatientName()
       const doi=clean((ace&&ace.dateOfInjury)||day2AceInput('doi')||(p&&p.demographics?p.demographics.doi:'')||'—')
-      const incident=dischargeIncidentPhrase(clean(day2AceSelect('injuryType','—')||'—'),p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected)
+      const incident=examIncidentPhrase(p,clean(day2AceSelect('injuryType','—')||'—'))
       const pn=day2LocalPron(day2AceSelect('ptGender',p&&p.demographics?p.demographics.gender:''))
       const risks=day2SavedAssessmentRisks()
       const dxLines=day2SavedDiagnosisLines()
@@ -6306,7 +6310,7 @@ function buildInitialExamPDF(btn,patientId,reExamIndex,forceData,opts){
       const ace=p&&p.ace?p.ace:null
       const name=day2SavedPatientName()
       const doi=clean((ace&&ace.dateOfInjury)||day2AceInput('doi')||(p&&p.demographics?p.demographics.doi:'')||'—')
-      const incident=dischargeIncidentPhrase(clean(day2AceSelect('injuryType','—')||'—'),p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected)
+      const incident=examIncidentPhrase(p,clean(day2AceSelect('injuryType','—')||'—'))
       const pn=day2LocalPron(day2AceSelect('ptGender',p&&p.demographics?p.demographics.gender:''))
       const risks=day2SavedAssessmentRisks()
       const dxLines=day2SavedDiagnosisLines()
@@ -10009,6 +10013,13 @@ function injuryTypeIsWriteIn(type,picked){
    none. The description used to go in brackets, which staff took for
    something they had typed; then between two commas, and staff asked for the
    one after it to go (2 Nov 2026). */
+/* The exams' incident wording: the Day 1 form's injury type, else (a Day 1
+   uploaded as a file) the type read from that file. */
+function examIncidentPhrase(p,formType){
+  const fromForm=formType&&formType!=='—'
+  const t=fromForm?formType:((p&&p.ace&&!p.ace.formState&&p.ace.injuryType)||'—')
+  return dischargeIncidentPhrase(t,fromForm?(p&&p.ace&&p.ace.formState&&p.ace.formState.itSelected):'')
+}
 function dischargeIncidentPhrase(type,picked,plural){
   const t=String(type||'').trim()
   const word=plural?'injury incidents':'injury incident'
