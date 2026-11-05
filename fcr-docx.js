@@ -1531,56 +1531,83 @@
     return { text: text, changed: first >= 0, strings: strings, first: first, underline: underline }
   }
 
-  // Cover the line from its first changed piece and type it again; returns the patch for the Word copy.
+  /* Cover what changed and type it again; returns the patch for the Word copy.
+     A line is cut into columns first: a table row ("10/02/2026  97112  97112
+     Neuro Muscular Re-Education  1  $135.00 ...") is one line, and pdf.js reads
+     each gap between its columns as a piece that is only a space, as wide as the
+     gap. Only a column with a change is covered and typed again, from its first
+     changed piece; the columns after it, and the table's lines between them,
+     stay as uploaded. Typing the whole rest of the row once put a bill's
+     Quantity, Charges and Balance straight after the description and covered
+     the row's lines (5 Nov 2026). */
   function drawFixedLine(pg, ln, res, right, fontFor) {
-    var L = window.PDFLib, items = ln.items, size = ln.size, f0 = res.first
-    var pieces = []
-    for (var i = f0; i < items.length; i++) {
-      var it = items[i], fnt = fontFor(it.f), s = res.strings[i]
-      if (i > f0) {
-        var pv = items[i - 1]
-        // the gap is the space already (a piece that is only a space stays: it is the gap)
-        if (it.x - (pv.x + pv.w) >= size * 0.15 && /\S/.test(s)) s = s.replace(/^\s+/, '')
-      }
-      fnt.widthOfTextAtSize(s, it.size)   // throws on a character the standard fonts lack: the line stays as uploaded
-      pieces.push({ it: it, s: s, fnt: fnt })
-    }
-    var layout = function (scale) {
-      var cur = 0, out = []
-      pieces.forEach(function (pc, j) {
-        var x
-        if (!j) x = pc.it.x
-        else {
-          var pv = items[f0 + j - 1], gap = pc.it.x - (pv.x + pv.w)
-          // a column keeps its place unless the text before it now reaches it
-          x = gap > size * 0.9 ? Math.max(pc.it.x, cur + size * 0.3) : cur + Math.max(gap, 0)
-        }
-        var w = pc.fnt.widthOfTextAtSize(pc.s, pc.it.size * scale)
-        // A space between a label and its answer stays visible even where a viewer draws the
-        // bold font a little wider than its measure ("head?No", "Symptoms:Second").
-        if (pc.s && !/\S/.test(pc.s)) w = Math.max(w, pc.it.size * scale * 0.33)
-        out.push({ pc: pc, x: x, w: w })
-        cur = x + w
-      })
-      return { out: out, end: cur }
-    }
-    var lastIt = items[items.length - 1], oldEnd = lastIt.x + lastIt.w
-    var limit = Math.max(right, oldEnd), x0 = items[f0].x
-    var lay = layout(1), scale = 1
-    if (lay.end > limit + 0.5 && lay.end > x0) {
-      scale = Math.max(0.85, (limit - x0) / (lay.end - x0))   // a little smaller rather than past the margin
-      lay = layout(scale)
-    }
-    var box = { x0: x0 - 0.6, x1: Math.max(oldEnd, lay.end) + 0.8, y0: ln.y - size * 0.26, y1: ln.y + size * 0.84 }
-    pg.drawRectangle({ x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0, color: L.rgb(1, 1, 1) })
-    var words = []
-    lay.out.forEach(function (o) {
-      if (!o.pc.s) return
-      pg.drawText(o.pc.s, { x: o.x, y: o.pc.it.y, size: o.pc.it.size * scale, font: o.pc.fnt, color: L.rgb(0, 0, 0) })
-      words.push({ s: o.pc.s, x: o.x, y: o.pc.it.y, w: o.w, size: o.pc.it.size * scale, f: o.pc.it.f })
+    var L = window.PDFLib, items = ln.items, size = ln.size
+    var blank = function (s) { return !/\S/.test(s) }
+    // Columns: a new one starts where the text is more than about a character from the text before it.
+    var cols = [], col = null, lastText = null
+    items.forEach(function (it, i) {
+      var gap = lastText ? it.x - (lastText.x + lastText.w) : 0
+      if (!col || (!blank(it.s) && gap > size * 0.9)) { col = { from: i, to: i }; cols.push(col) } else col.to = i
+      if (!blank(it.s)) lastText = it
     })
-    if (res.underline) pg.drawLine({ start: { x: x0, y: ln.y - size * 0.14 }, end: { x: lay.end, y: ln.y - size * 0.14 }, thickness: Math.max(0.5, size * 0.05), color: L.rgb(0, 0, 0) })
-    return { box: box, words: words }
+    var plans = []
+    cols.forEach(function (c, k) {
+      var f0 = -1
+      for (var i = c.from; i <= c.to; i++) if (res.strings[i] !== items[i].s) { f0 = i; break }
+      if (f0 < 0) return
+      var pieces = []
+      for (var j = f0; j <= c.to; j++) {
+        var it = items[j], fnt = fontFor(it.f), s = res.strings[j]
+        if (j > f0) {
+          var pv = items[j - 1]
+          // the gap is the space already (a piece that is only a space stays: it is the gap)
+          if (it.x - (pv.x + pv.w) >= size * 0.15 && /\S/.test(s)) s = s.replace(/^\s+/, '')
+        }
+        fnt.widthOfTextAtSize(s, it.size)   // throws on a character the standard fonts lack: the line stays as uploaded
+        pieces.push({ it: it, s: s, fnt: fnt, gap: j > f0 ? Math.max(it.x - (pv.x + pv.w), 0) : 0 })
+      }
+      // The column's own text ends at its last piece with text, not at the gap after it (the table's line is there).
+      var oldEnd = items[f0].x
+      for (var q = f0; q <= c.to; q++) if (!blank(items[q].s)) oldEnd = Math.max(oldEnd, items[q].x + items[q].w)
+      var next = cols[k + 1], x0 = items[f0].x
+      // The new text may not reach the next column; the last column may reach the page's right edge.
+      var limit = next ? items[next.from].x - size * 0.3 : Math.max(right, oldEnd)
+      var layout = function (scale) {
+        var cur = x0, out = []
+        pieces.forEach(function (pc, j) {
+          var x = j ? cur + pc.gap : x0
+          var w = blank(pc.s) ? 0 : pc.fnt.widthOfTextAtSize(pc.s, pc.it.size * scale)
+          // A space between a label and its answer stays visible even where a viewer draws the
+          // bold font a little wider than its measure ("head?No", "Symptoms:Second").
+          if (pc.s && blank(pc.s) && pc.gap < size * 0.9) w = Math.max(pc.fnt.widthOfTextAtSize(pc.s, pc.it.size * scale), pc.it.size * scale * 0.33)
+          out.push({ pc: pc, x: x, w: w })
+          cur = x + w
+        })
+        return { out: out, end: cur }
+      }
+      var lay = layout(1), scale = 1
+      if (lay.end > limit + 0.5 && lay.end > x0) {
+        scale = Math.max(0.85, (limit - x0) / (lay.end - x0))   // a little smaller rather than past the margin
+        lay = layout(scale)
+        // Still into the next column: leave the line as uploaded rather than type over it.
+        if (next && lay.end > limit + 0.5) throw new Error('the corrected text does not fit its column')
+      }
+      plans.push({ x0: x0, oldEnd: oldEnd, lay: lay, scale: scale })
+    })
+    // Everything is worked out before anything is drawn, so a line is corrected whole or not at all.
+    var boxes = [], words = []
+    plans.forEach(function (pl) {
+      var box = { x0: pl.x0 - 0.6, x1: Math.max(pl.oldEnd, pl.lay.end) + 0.8, y0: ln.y - size * 0.26, y1: ln.y + size * 0.84 }
+      pg.drawRectangle({ x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0, color: L.rgb(1, 1, 1) })
+      boxes.push(box)
+      pl.lay.out.forEach(function (o) {
+        if (!o.pc.s || blank(o.pc.s)) return
+        pg.drawText(o.pc.s, { x: o.x, y: o.pc.it.y, size: o.pc.it.size * pl.scale, font: o.pc.fnt, color: L.rgb(0, 0, 0) })
+        words.push({ s: o.pc.s, x: o.x, y: o.pc.it.y, w: o.w, size: o.pc.it.size * pl.scale, f: o.pc.it.f })
+      })
+      if (res.underline) pg.drawLine({ start: { x: pl.x0, y: ln.y - size * 0.14 }, end: { x: pl.lay.end, y: ln.y - size * 0.14 }, thickness: Math.max(0.5, size * 0.05), color: L.rgb(0, 0, 0) })
+    })
+    return { boxes: boxes, words: words }
   }
 
   // The words on a page with their fonts (readTextPage without its drawings and pictures).
@@ -1644,7 +1671,7 @@
         var right = lines.reduce(function (mx, l) { var e = l.items[l.items.length - 1]; return Math.max(mx, e.x + e.w) }, 0)
         var patch = { boxes: [], words: [] }
         fixes.forEach(function (fx) {
-          try { var r = drawFixedLine(pg, fx.ln, fx.res, right, fontFor); patch.boxes.push(r.box); patch.words = patch.words.concat(r.words); changed++ }
+          try { var r = drawFixedLine(pg, fx.ln, fx.res, right, fontFor); patch.boxes = patch.boxes.concat(r.boxes); patch.words = patch.words.concat(r.words); if (r.boxes.length) changed++ }
           catch (e) { console.warn('FCR: a line of an uploaded report was left as uploaded', e) }
         })
         if (patch.boxes.length) patches[n - 1] = patch

@@ -16,6 +16,7 @@
      { lines: [{ from, to, pos, emg, cpt, mod, dxPtr, charge, units, npi }],
        accountNo, acceptAssignment ('yes' | 'no' | ''), signature, signDate,
        physicianName, physicianCred (the Day 1 list), physicianCredOther (typed for Other),
+       signatureImage (a PNG data URL of the signature, printed in place of the typed one),
        payments: [{ id, date, amount, method, ref, note, by, at }],
        updatedAt, updatedBy } */
 (function () {
@@ -59,6 +60,11 @@
   }
   function nbBill(p) { return (p && p.neuroBilling) || null; }
   var NB_CREDENTIALS = ['DC', 'MD', 'RN', 'NP', 'PhD', 'ATC', 'Other'];   // the Day 1 form's list
+  /* An uploaded signature: always a PNG redrawn here (nbSigPrepare), so only
+     the picture is kept, never the file it came in. The server holds it to the
+     same shape and size. */
+  var NB_SIG_MAX = 300000;
+  function nbSigOk(v) { return typeof v === 'string' && v.length <= NB_SIG_MAX && /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(v); }
   // "Jane Doe, MD"; for Other, the credential typed in.
   function nbPhysician(b) {
     var name = String((b && b.physicianName) || '').trim();
@@ -67,7 +73,7 @@
   }
   function nbBlank(p) {
     return { lines: [], accountNo: (p.demographics || {}).mrn || '', acceptAssignment: '', signature: '', signDate: '',
-      physicianName: '', physicianCred: '', physicianCredOther: '', payments: [] };
+      physicianName: '', physicianCred: '', physicianCredOther: '', signatureImage: '', payments: [] };
   }
   function nbTotals(b) {
     var billed = 0, paid = 0;
@@ -150,7 +156,7 @@
     if (!nbDrafts[p.id]) {
       var d = JSON.parse(JSON.stringify(nbBill(p) || nbBlank(p)));
       // A bill saved before the physician fields (5 Nov 2026) has them blank.
-      ['physicianName', 'physicianCred', 'physicianCredOther'].forEach(function (k) { if (d[k] == null) d[k] = ''; });
+      ['physicianName', 'physicianCred', 'physicianCredOther', 'signatureImage'].forEach(function (k) { if (d[k] == null) d[k] = ''; });
       nbDrafts[p.id] = d;
     }
     return nbDrafts[p.id];
@@ -166,7 +172,7 @@
     var base = nbBill(p) || nbBlank(p);
     var pick = function (b) {
       return JSON.stringify({ l: b.lines, a: b.accountNo, s: b.acceptAssignment, g: b.signature, d: b.signDate,
-        n: b.physicianName || '', c: b.physicianCred || '', o: b.physicianCredOther || '' });
+        n: b.physicianName || '', c: b.physicianCred || '', o: b.physicianCredOther || '', i: b.signatureImage || '' });
     };
     return pick(d) !== pick(base);
   }
@@ -316,7 +322,16 @@
           + NB_CREDENTIALS.map(function (c) { return '<option' + (b.physicianCred === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
           + '<input id="nbf_physicianCredOther" class="nb-cred-other" type="text" maxlength="40" placeholder="Type the credential, e.g. DO" aria-label="Other credential" value="' + esc(b.physicianCredOther || '') + '"'
           + (b.physicianCred === 'Other' ? '' : ' hidden') + ' data-oninput="nbField(\'physicianCredOther\',this.value)"></div>'
-        + '<div class="rf-f"><label for="nbf_signature">Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)"></div>'
+        + '<div class="rf-f"><label for="nbf_signature">Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
+          // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
+          + '<div class="nb-sig">'
+            + (nbSigOk(b.signatureImage) ? '<img class="nb-sig-img" alt="Uploaded signature" src="' + esc(b.signatureImage) + '">' : '')
+            + '<label class="rf-btn rf-btn-quiet nb-sig-btn">' + nbIcon('file') + (nbSigOk(b.signatureImage) ? 'Replace picture' : 'Upload signature')
+              + '<input type="file" class="nb-sig-file" accept="image/png,image/jpeg" aria-label="Upload a picture of the signature (PNG or JPG)" data-onchange="nbSigUpload(this)"></label>'
+            + (nbSigOk(b.signatureImage) ? '<button type="button" class="nb-clear" data-onclick="nbSigRemove()">Remove</button>' : '')
+          + '</div>'
+          + '<div class="nr-hint">' + nbIcon('info') + (nbSigOk(b.signatureImage) ? 'This picture prints on the bill as the signature.' : 'PNG or JPG. It prints on the bill as the signature.') + '</div>'
+        + '</div>'
         + '<div class="rf-f"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
         + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
@@ -368,6 +383,75 @@
   function nbClearAssign() {
     var p = nbCurrent(); if (!p) return;
     nbDraftFor(p).acceptAssignment = '';
+    renderNeuroBilling();
+  }
+
+  /* A picture of the signature. It is redrawn as a PNG: cut to the signature
+     itself (the empty paper around it left out) and no bigger than 600 x 200,
+     so it prints at a sensible size and stays small on the bill. */
+  function nbSigPrepare(src) {
+    return new Promise(function (resolve, reject) {
+      var im = new Image();
+      im.onerror = function () { reject(new Error('That file could not be read as a picture.')); };
+      im.onload = function () {
+        var w = im.naturalWidth, h = im.naturalHeight;
+        if (!w || !h) { reject(new Error('That picture is empty.')); return; }
+        // Read at up to 1600 px to find where the ink is.
+        var s0 = Math.min(1, 1600 / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * s0)); c.height = Math.max(1, Math.round(h * s0));
+        var x = c.getContext('2d');
+        x.drawImage(im, 0, 0, c.width, c.height);
+        var d = x.getImageData(0, 0, c.width, c.height).data;
+        var L = c.width, T = c.height, R = -1, B = -1;
+        for (var yy = 0; yy < c.height; yy++) {
+          for (var xx = 0; xx < c.width; xx++) {
+            var i = (yy * c.width + xx) * 4;
+            // Ink: not see-through and darker than the paper.
+            if (d[i + 3] > 40 && (d[i] < 200 || d[i + 1] < 200 || d[i + 2] < 200)) {
+              if (xx < L) L = xx; if (xx > R) R = xx; if (yy < T) T = yy; if (yy > B) B = yy;
+            }
+          }
+        }
+        if (R < 0) { reject(new Error('No signature could be seen in that picture.')); return; }
+        var pad = 6;
+        L = Math.max(0, L - pad); T = Math.max(0, T - pad); R = Math.min(c.width - 1, R + pad); B = Math.min(c.height - 1, B + pad);
+        var cw = R - L + 1, ch = B - T + 1;
+        var tries = [1, 0.7, 0.5], out = '';
+        for (var k = 0; k < tries.length; k++) {
+          var s = Math.min(1, 600 / cw, 200 / ch) * tries[k];
+          var o = document.createElement('canvas');
+          o.width = Math.max(1, Math.round(cw * s)); o.height = Math.max(1, Math.round(ch * s));
+          o.getContext('2d').drawImage(c, L, T, cw, ch, 0, 0, o.width, o.height);
+          out = o.toDataURL('image/png');
+          if (nbSigOk(out)) { resolve(out); return; }
+        }
+        reject(new Error('That picture is too detailed to keep. Please use a plain scan or photo of the signature on white paper.'));
+      };
+      im.src = src;
+    });
+  }
+  function nbSigUpload(input) {
+    var p = nbCurrent(), file = input && input.files && input.files[0];
+    if (input) input.value = '';   // the same file can be chosen again
+    if (!p || !file) return;
+    if (!/^image\/(png|jpeg)$/i.test(file.type || '')) { showToast('Please choose a PNG or JPG picture of the signature.', 'err'); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast('That picture is over 10 MB. Please choose a smaller one.', 'err'); return; }
+    var reader = new FileReader();
+    reader.onerror = function () { showToast('That file could not be read.', 'err'); };
+    reader.onload = function () {
+      nbSigPrepare(String(reader.result)).then(function (url) {
+        if (nbCurrent() !== p) return;   // another patient was opened meanwhile
+        nbDraftFor(p).signatureImage = url;
+        renderNeuroBilling();
+        showToast('Signature picture added. Click Save Bill to keep it.', 'ok');
+      }, function (e) { showToast(e.message, 'err'); });
+    };
+    reader.readAsDataURL(file);
+  }
+  function nbSigRemove() {
+    var p = nbCurrent(); if (!p) return;
+    nbDraftFor(p).signatureImage = '';
     renderNeuroBilling();
   }
   // A new line starts from the one above (same dates, place, NPI), as most bills repeat them.
@@ -531,18 +615,34 @@
     y += 36;
 
     heading('Billing');
-    if (y + 91 > PH - BOTTOM) { newPage(); heading('Billing'); }
+    // An uploaded signature picture (5 Nov 2026) prints on its line, up to 34pt tall, in place of the typed one.
+    var sig = null;
+    if (nbSigOk(b.signatureImage)) {
+      try {
+        var ip = doc.getImageProperties(b.signatureImage);
+        f('bold', 9);
+        var room = CW * 0.56 - doc.getTextWidth('Signature of Physician or Supplier: ') - 4;
+        var s = Math.min(34 / ip.height, room / ip.width);
+        if (s > 0 && isFinite(s)) sig = { w: ip.width * s, h: ip.height * s };
+      } catch (e) { sig = null; }
+    }
+    if (y + 91 + (sig ? sig.h : 0) > PH - BOTTOM) { newPage(); heading('Billing'); }
     var top = y + 4, rx = ML + CW * 0.6, rw = CW * 0.4, ky = top + 12;
     [['Patient Account No.', b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
       ['Physician', nbPhysician(b)],
-      ['Signature of Physician or Supplier', b.signature],
+      ['Signature of Physician or Supplier', b.signature, sig],
       ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
       var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';
+      var pic = x[2];
+      if (pic) ky += Math.max(0, pic.h - 10);   // room above the line for the picture
       f('bold', 9); doc.text(label, ML, ky);
-      var w = doc.getTextWidth(label);
-      f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w)[0] || '', ML + w, ky);
+      var w = doc.getTextWidth(label), drawn = false;
+      if (pic) {
+        try { doc.addImage(b.signatureImage, 'PNG', ML + w + 2, ky - pic.h + 4, pic.w, pic.h); drawn = true; } catch (e) { drawn = false; }
+      }
+      if (!drawn) { f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w)[0] || '', ML + w, ky); }
       ky += 17;
     });
     [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)], ['Balance Owed', nbFmt(t.balance)]].forEach(function (s, i, all) {
@@ -833,6 +933,8 @@
   window.nbLine = nbLine;
   window.nbField = nbField;
   window.nbClearAssign = nbClearAssign;
+  window.nbSigUpload = nbSigUpload;
+  window.nbSigRemove = nbSigRemove;
   window.nbAddLine = nbAddLine;
   window.nbRemoveLine = nbRemoveLine;
   window.nbSaveBill = nbSaveBill;

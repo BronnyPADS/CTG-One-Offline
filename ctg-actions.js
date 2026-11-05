@@ -124,7 +124,7 @@
     'mtgToggleDock', 'mtgToggleLiveTranscript', 'mtgToggleMore', 'mtgToggleMute', 'mtgTogglePanel',
     'mtgToggleRecord', 'mtgToggleShare', 'mtgToggleSubtitles', 'mtgToggleTouch', 'mtgToggleVideo', 'mtgTranscribe',
     'nbAddLine', 'nbClearAssign', 'nbDownloadPdf', 'nbField', 'nbGoPay', 'nbItemKey', 'nbLine', 'nbOpenReferral',
-    'nbRefresh', 'nbRemoveLine', 'nbSaveBill', 'nbSearch', 'nbSelect', 'nbSetFilter', 'nfCheckToken',
+    'nbRefresh', 'nbRemoveLine', 'nbSaveBill', 'nbSearch', 'nbSelect', 'nbSetFilter', 'nbSigRemove', 'nbSigUpload', 'nfCheckToken',
     'nfLoadStatus', 'nfProbe', 'nfProbeFake', 'nfProbeKey', 'nfToggleRaw', 'notesFormEditLink', 'notesFormLoad',
     'notifSetActive', 'notifSetMedium', 'npBackdrop', 'npClosePay', 'npDeletePay', 'npOpenPay', 'npSavePay',
     'npSearch', 'npSetTab', 'npToggle', 'nrField', 'nrItemKey', 'nrOpenChart', 'nrRefresh', 'nrSave', 'nrSearch',
