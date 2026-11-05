@@ -13892,20 +13892,16 @@ function buildPDF(name,opts){
 
   H1('INITIAL DATE OF SERVICE',dos)
   H1('ACUTE CONCUSSION EVALUATION (ACE)')
-  /* As the practice's earlier reports have it (staff, 5 Nov 2026): the gender after
-     the name, none recorded none printed; the gender, the age and the injury type
-     in bold, the rest plain (it was all plain from 2 Nov). A typed-in injury
-     description follows a comma, as in Causation (see dischargeIncidentPhrase). */
+  /* Plain text, no bold (staff, 2 Nov 2026, and again 5 Nov). The gender follows
+     the name, as the practice's earlier reports have it (5 Nov 2026); none recorded,
+     none printed. A typed-in injury description follows a comma, as in Causation
+     (see dischargeIncidentPhrase). */
   const introGender=gv('ptGender')
-  const sustainedIn=injType==='—'?[{t:'an injury incident'}]:injuryTypeIsWriteIn(injType,itSelected)?[{t:'an injury incident, '},{t:injType,b:true}]:[{t:'a '},{t:injType,b:true}]
+  const sustainedIn=injType==='—'?'an injury incident':injuryTypeIsWriteIn(injType,itSelected)?'an injury incident, '+injType:'a '+injType
   para([
-    {t:'Today the patient, '+name},
-    ...(introGender!=='—'?[{t:', '},{t:introGender,b:true}]:[]),
-    {t:', DOB: '+dob+', age '},
-    {t:age,b:age!=='—'},
+    {t:'Today the patient, '+name+(introGender!=='—'?', '+introGender:'')+', DOB: '+dob+', age '+age},
     {t:', was administered the Acute Concussion Evaluation (ACE) screening questionnaire as part of an initial assessment for possible injuries sustained in '},
-    ...sustainedIn,
-    {t:' on '+doiEv},...jurClause,
+    {t:sustainedIn+' on '+doiEv},...jurClause,
     {t:'. The Acute Concussion Evaluation is the United States Centers for Disease Control and Prevention (CDC) standard initial assessment in the diagnosis pathway for acute (72 hours or less post-injury) traumatic brain injury concussion. The ACE contains similar questions to the post-concussion standard instrument questionnaire named The Rivermead Post-Concussion Symptoms Questionnaire, and is therefore used herein to establish indications for further neurocognitive and vestibular examination for both Acute and Post-Acute TBI symptoms. The '},
     {t:reporterVal},
     {t:' has signed a consent document. The findings of this summary report are based on observation and responses to written and verbal questioning of the patient.'}
