@@ -4928,6 +4928,8 @@ html[data-theme="dark"] .ac-role-group-n{background:var(--s2)}
 .ac-account-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
 .ac-account-left .ac-role-badge{margin-top:0;flex:0 0 auto}
 .ac-role-badge.inactive{background:var(--rl);color:var(--red);border-color:rgba(3,4,94,.22)}
+/* Locked out after too many wrong tries (6 Nov 2026) */
+.ac-role-badge.locked{background:#FEF3C7;color:#92400E;border-color:rgba(146,64,14,.3);margin-left:5px}
 .ac-account-caret,.ac-page-caret{width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px;font-weight:800;line-height:1;transition:transform .15s ease;flex:0 0 auto}
 .ac-account-card[open]>.ac-account-summary .ac-account-caret,.ac-page-perm[open]>.ac-page-summary .ac-page-caret{transform:rotate(90deg);color:var(--accent)}
 .ac-account-labels{display:flex;flex-direction:column;gap:0;min-width:0}.ac-account-labels .ac-user-name{font-size:13px;line-height:1.15}.ac-account-labels .ac-user-meta{font-size:10.5px;line-height:1.2}

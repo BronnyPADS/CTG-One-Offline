@@ -709,6 +709,13 @@
       return temp;
     },
 
+    // Unlock an account locked out after too many wrong tries (the server only: the
+    // offline version has no lockout).
+    async unlockAccount(id) {
+      if (REMOTE) { await apiFetch('/api/accounts/' + id + '/unlock', { method: 'POST' }); return; }
+      throw new Error('There is no lockout in the offline version.');
+    },
+
     // Deactivate / reactivate an account. A deactivated account cannot log in.
     async setActive(id, active) {
       if (REMOTE) { var d = await apiFetch('/api/accounts/' + id + '/active', { method: 'PATCH', body: JSON.stringify({ active: !!active }) }); return d.account; }
@@ -1618,6 +1625,7 @@
       update_pages: 'Changed permissions',
       activate: 'Activated',
       deactivate: 'Deactivated',
+      unlock: 'Unlocked (after too many attempts)',
       reset_password: 'Reset password',
       view: 'Viewed',
       export: 'Exported (download)',
@@ -2049,6 +2057,7 @@
     edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
     key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M17 6l3 3M14.5 8.5l2.5 2.5"/></svg>',
     power: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>',
+    unlock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1.2"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>'
   };
 
@@ -2057,6 +2066,10 @@
     var lastAdmin = isAdmin && adminCount <= 1;
     var isSelf = CURRENT && CURRENT.id === u.id;
     var inactive = u.active === false;
+    // Locked out after too many wrong tries: it lifts by itself at this time, or an Admin unlocks it.
+    var lockedAt = u.lockedUntil ? new Date(u.lockedUntil) : null;
+    var locked = !!(lockedAt && lockedAt.getTime() > Date.now());
+    var lockedText = locked ? 'Locked until ' + lockedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
     var display = u.displayName || u.username;
     var meta = '@' + (u.username || '') + (u.role === 'lawyer' && u.lawFirm ? ' · ' + u.lawFirm : '');
     var accountOpen = !!acOpenAccounts[u.id];
@@ -2071,8 +2084,10 @@
       + '</span>'
       + '<span class="ac-role-badge' + (isAdmin ? ' admin' : '') + '">' + esc(ROLE_LABELS[u.role] || u.role) + '</span>'
       + (inactive ? '<span class="ac-role-badge inactive">Inactive</span>' : '')
+      + (locked ? '<span class="ac-role-badge locked" title="Too many wrong passwords or codes. It unlocks by itself at this time.">' + esc(lockedText) + '</span>' : '')
       + '</span>'
       + '<span class="ac-account-actions">'
+      + (locked ? '<button type="button" class="ac-act on" title="Unlock account" aria-label="Unlock account" data-onclick="event.preventDefault();event.stopPropagation();acUnlockAccount(\'' + esc(u.id) + '\')">' + AC_ICO.unlock + '</button>' : '')
       + '<button type="button" class="ac-act" title="Edit account" aria-label="Edit account" data-onclick="event.preventDefault();event.stopPropagation();acEditAccount(\'' + esc(u.id) + '\')">' + AC_ICO.edit + '</button>'
       + '<button type="button" class="ac-act" title="Reset temporary password" aria-label="Reset temporary password" data-onclick="event.preventDefault();event.stopPropagation();acResetPassword(\'' + esc(u.id) + '\')">' + AC_ICO.key + '</button>'
       + '<button type="button" class="ac-act' + (inactive ? ' on' : ' danger') + '" title="' + (inactive ? 'Reactivate account' : 'Deactivate account') + '" aria-label="' + (inactive ? 'Reactivate account' : 'Deactivate account') + '" data-onclick="event.preventDefault();event.stopPropagation();acToggleActive(\'' + esc(u.id) + '\')"' + (isSelf ? ' disabled' : '') + '>' + AC_ICO.power + '</button>'
@@ -2364,6 +2379,18 @@
       toast('Temporary password set');
     } catch (e) {
       toast(e.message || 'Could not reset password', 'err');
+    }
+  };
+
+  window.acUnlockAccount = async function (id) {
+    var name = acAccountName(id);
+    if (!(await ctgConfirm('Unlock ' + name + '? They can sign in straight away with their own password and code. The wrong tries stay in the audit log.', { okLabel: 'Unlock' }))) return;
+    try {
+      await backend.unlockAccount(id);
+      await renderAcMatrix();
+      toast(name + ' is unlocked');
+    } catch (e) {
+      toast(e.message || 'Could not unlock the account', 'err');
     }
   };
 
