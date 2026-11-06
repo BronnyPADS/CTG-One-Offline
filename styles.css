@@ -14660,3 +14660,9 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nb-add-t svg{width:16px;height:16px;color:#0077B6}
 .nb-add-btns{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:6px}
 .nb-add-btns .rf-btn{min-height:40px}
+
+/* Provider's Dashboard: the status Filter and, for those who see every provider, the Provider filter (6 Nov 2026). */
+.cc-filters{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.cc-prov{display:inline-flex;align-items:center;gap:8px;margin-bottom:14px;font-size:13px;font-weight:700;color:var(--text)}
+#page-commandCenter .cc-prov{margin-bottom:18px}
+.cc-prov-sel{min-height:42px;padding:0 12px;border-radius:12px;border:1px solid var(--border2,#B8DCE6);background:#fff;font:inherit;font-weight:600;color:var(--text);cursor:pointer}

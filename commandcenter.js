@@ -25,6 +25,11 @@
   // Finished should show Finished, not hide it again.
   var filterKey = 'all'
   var filterMenuOpen = false
+  /* Whose patients (6 Nov 2026). A provider is shown only the patients on
+     their own calendar - the server sends nothing else to them. Everyone else
+     sees every provider's and can narrow to one; '' is all of them. */
+  var calendars = []
+  var providerFilter = ''
   var FILTERS = [
     { key: 'all', label: 'All' },
     { key: 'due', label: 'Due now' },
@@ -141,8 +146,10 @@
     if (!window.ctgApiFetch) return
     var date = boardDate || todayISO()
     try {
-      var d = await window.ctgApiFetch('/api/appointments/board?date=' + encodeURIComponent(date))
+      var d = await window.ctgApiFetch('/api/appointments/board?date=' + encodeURIComponent(date)
+        + (providerFilter && !isProvider() ? '&provider=' + encodeURIComponent(providerFilter) : ''))
       slots = d.slots || []
+      calendars = d.calendars || []
       boardDate = d.date
     } catch (e) { /* keep whatever is on screen */ }
     render()
@@ -261,7 +268,9 @@
       + startPromptHTML()
       + '<div class="pt-strip cc-strip">'
         + '<div><div class="cc-title">Provider\'s Dashboard</div>'
-        + '<div class="cc-sub">' + esc(prettyDate(boardDate)) + ' — today’s patients, all in one place. Tap Join to start a video visit.</div></div>'
+        + '<div class="cc-sub">' + esc(prettyDate(boardDate))
+          + (isProvider() ? ' — your patients: everyone on your calendar today. Tap Join to start a video visit.'
+            : ' — today’s patients, all in one place. Tap Join to start a video visit.') + '</div></div>'
         + '<div class="cc-head-right">'
           + '<div class="cc-counts">'
             + '<div class="cc-count"><strong>' + video.length + '</strong><span>Video visits</span></div>'
@@ -275,7 +284,7 @@
         + '</div>'
       + '</div>'
 
-      + filterHTML()
+      + '<div class="cc-filters">' + filterHTML() + providerFilterHTML() + '</div>'
 
       + autoPilotCardHTML(next)
 
@@ -289,7 +298,11 @@
                     : 'Nothing is "' + esc(filterLabel(filterKey)) + '" right now.')
                 + '</div></div></div>')
           : '<div class="card"><div class="card-body"><div class="pld-empty-state">'
-            + 'Nothing booked for this day. Appointments scheduled into a video room appear here as soon as they are saved.'
+            + (isProvider()
+                ? 'No patients on your calendar for this day. A visit booked for you appears here as soon as it is saved.'
+                : providerFilter
+                  ? 'Nothing booked for ' + esc(calendarName(providerFilter)) + ' on this day.'
+                  : 'Nothing booked for this day. Appointments scheduled into a video room appear here as soon as they are saved.')
             + '</div></div></div>')
       + '</div>'
 
@@ -363,7 +376,9 @@
       + rank
       + '<div class="cc-name">' + esc(s.patientName || 'Unnamed') + '</div>'
       + breakTitleHTML(s)
-      + '<div class="cc-meta">' + esc(s.visitType || '—') + (s.room ? ' · ' + esc(s.room) : '') + '</div>'
+      + '<div class="cc-meta">' + esc(s.visitType || '—') + (s.room ? ' · ' + esc(s.room) : '')
+        // Whose patient, for those who see more than one provider's.
+        + (!isProvider() && s.providerCalendar && calendars.length > 1 ? ' · ' + esc(calendarName(s.providerCalendar)) : '') + '</div>'
       + (st.key === 'waiting'
           ? '<div class="cc-wait">Waiting ' + waitedFor + ' min at the door</div>' : '')
       + '<div class="cc-tile-actions">'
@@ -376,6 +391,28 @@
             : '<span class="cc-inperson-note">No video room</span>')
       + '</div>'
     + '</div>'
+  }
+
+  function calendarName(f) {
+    for (var i = 0; i < calendars.length; i++) if (calendars[i].facility === f) return calendars[i].label
+    return 'Provider'
+  }
+  // The Provider filter: for everyone but a provider, who only ever has their own.
+  function providerFilterHTML() {
+    if (isProvider() || !calendars.length) return ''
+    return '<label class="cc-prov"><span>Provider</span>'
+      + '<select class="cc-prov-sel" aria-label="Show the patients of" data-onchange="ccSetProvider(this.value)">'
+      + '<option value="">All providers</option>'
+      + calendars.map(function (c) {
+          return '<option value="' + esc(c.facility) + '"' + (c.facility === providerFilter ? ' selected' : '') + '>'
+            + esc(c.label) + (c.active === false ? ' (inactive)' : '') + '</option>'
+        }).join('')
+      + '</select></label>'
+  }
+  window.ccSetProvider = function (v) {
+    providerFilter = String(v || '')
+    lastRenderedHTML = null
+    load()
   }
 
   function filterLabel(key) {

@@ -12,7 +12,16 @@ const APPT_DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const APPT_DAY_NAMES_FULL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const APPT_MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const APPT_MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December']
-const APPT_FACILITIES = ['Concussion Therapy Group', 'Provider']
+/* The clinic, then one calendar per provider account (6 Nov 2026): 'Provider'
+   is Dr. Grande's (it has always been stored that way), 'Provider:<id>' any
+   other provider's. The server says which (GET /api/appointments/calendars);
+   until it answers, the 'Provider' calendar alone. */
+let APPT_FACILITIES = ['Concussion Therapy Group', 'Provider']
+let apptCalendars = [{ facility: 'Provider', label: 'Provider\u2019s Calendar', active: true }]
+function apptIsProviderFacility(f) { const s = String(f || ''); return s === 'Provider' || /^Provider:/.test(s) }
+function apptCalendarOf(f) { return apptCalendars.find(c => c.facility === f) || null }
+function apptCalendarLabel(f) { const c = apptCalendarOf(f); return c ? c.label : 'Provider\u2019s Calendar' }
+function apptFacilityName(f) { return apptIsProviderFacility(f) ? apptCalendarLabel(f) : f }
 const APPT_VIEW_MODES = [['day','Day'], ['week','Week'], ['month','Month'], ['agenda','Agenda']]
 
 /* bg is intentionally saturated enough to read clearly against both the
@@ -119,8 +128,67 @@ async function loadBreakBlocks() {
     ctgBreakBlocks = d.breakBlocks || []
   } catch (e) { console.error('Could not load break/blocks', e); ctgBreakBlocks = [] }
 }
+async function apptLoadCalendars() {
+  try {
+    const d = await window.ctgApiFetch('/api/appointments/calendars')
+    if (d && Array.isArray(d.calendars) && d.calendars.length) apptCalendars = d.calendars
+  } catch (e) { /* the 'Provider' calendar alone, as before */ }
+}
+/* The calendars shown: the clinic, every active provider, and a deactivated
+   provider's for as long as it holds anything, so no block ever vanishes. */
+function apptRebuildFacilities() {
+  const used = new Set(ctgBreakBlocks.map(breakFacilityOf).concat(ctgAppointments.map(apptFacilityOf)))
+  const cals = apptCalendars.filter(c => c.active !== false || used.has(c.facility))
+  APPT_FACILITIES = ['Concussion Therapy Group'].concat(cals.map(c => c.facility))
+  if (apptFacilityFilter !== 'both' && APPT_FACILITIES.indexOf(apptFacilityFilter) === -1) apptFacilityFilter = 'both'
+  apptRenderFacilitySelects()
+}
+// A select's choice, adding it when it is not listed (a visit on a calendar no longer offered).
+function apptSetSelect(el, value) {
+  if (!el) return
+  if (value && ![...el.options].some(o => o.value === value)) {
+    const o = document.createElement('option'); o.value = value; o.textContent = apptFacilityName(value); el.appendChild(o)
+  }
+  if (value) el.value = value
+}
+function apptRenderFacilitySelects() {
+  const opt = (v, t) => '<option value="' + apptEsc(v) + '">' + apptEsc(t) + '</option>'
+  const fil = document.getElementById('apptFacilityFilterSelect')
+  if (fil) { fil.innerHTML = opt('both', 'All Facilities') + APPT_FACILITIES.map(f => opt(f, apptFacilityName(f))).join(''); fil.value = apptFacilityFilter }
+  // Booking and blocks: the clinic and the providers still on staff.
+  const bookable = APPT_FACILITIES.filter(f => !apptIsProviderFacility(f) || (apptCalendarOf(f) || {}).active !== false)
+  ;['apptFacility', 'breakFacility'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return
+    const keep = el.value
+    el.innerHTML = bookable.map(f => opt(f, apptFacilityName(f))).join('')
+    apptSetSelect(el, keep)
+  })
+  const prov = document.getElementById('apptProvider')
+  if (prov) {
+    const keep = prov.value
+    prov.innerHTML = apptCalendars.filter(c => c.active !== false).map(c => opt(c.facility, c.label)).join('')
+    apptSetSelect(prov, keep)
+  }
+}
+/* The Provider on an appointment matters for ACE visits: their block goes on
+   that provider's calendar. Other visit types make no block, so it is hidden. */
+function apptIsAce(v) { return String(v || '').toUpperCase().split(/[^A-Z0-9]+/).indexOf('ACE') !== -1 }
+function apptSyncProviderRow() {
+  const prov = document.getElementById('apptProvider'), vt = document.getElementById('apptVisitType')
+  const box = prov && prov.closest('.fg')
+  // Through the CSSOM (the form's own display rule outranks the hidden attribute).
+  if (box) box.style.display = vt && apptIsAce(vt.value) ? '' : 'none'
+}
+document.addEventListener('change', function (e) { if (e.target && e.target.id === 'apptVisitType') apptSyncProviderRow() })
+// A provider account added, renamed or deactivated: its calendar follows without a reload.
+window.ctgApptReloadCalendars = async function () {
+  await apptLoadCalendars()
+  apptRebuildFacilities()
+  if (document.getElementById('apptGridMount')) renderAppointments()
+}
 window.ctgLoadAppointmentsStore = async function () {
-  await Promise.all([loadAppointments(), loadBreakBlocks()])
+  await Promise.all([loadAppointments(), loadBreakBlocks(), apptLoadCalendars()])
+  apptRebuildFacilities()
   renderAppointments()
 }
 
@@ -157,18 +225,17 @@ function apptFormat12h(hhmm) {
    name. Without this they fail the APPT_FACILITIES[1] test and quietly render
    on the Concussion Therapy Group calendar instead of the provider's - which
    is what happened during the rename, and it looked like data loss. */
-const APPT_FACILITY_ALIASES = { 'grande chiropractic, llc': APPT_FACILITIES[1] }
+const APPT_FACILITY_ALIASES = { 'grande chiropractic, llc': 'Provider' }
 function apptNormalizeFacility(v) {
   const raw = String(v == null ? '' : v).trim()
   if (!raw) return APPT_FACILITIES[0]
   return APPT_FACILITY_ALIASES[raw.toLowerCase()] || raw
 }
 function apptFacilityOf(a) { return apptNormalizeFacility(a && a.facility) }
-function apptFacilitySlug(facility) { return apptNormalizeFacility(facility) === APPT_FACILITIES[1] ? 'fac-b' : 'fac-a' }
-// The second facility is the provider's own schedule, so both the dropdown
-// and the calendar panel call it that; Concussion Therapy Group keeps its
-// real name. Rows saved under the old label were migrated with it.
-function apptFacilityHeadLabel(facility) { return apptNormalizeFacility(facility) === APPT_FACILITIES[1] ? 'Provider\'s Calendar' : apptEsc(facility) }
+function apptFacilitySlug(facility) { return apptIsProviderFacility(apptNormalizeFacility(facility)) ? 'fac-b' : 'fac-a' }
+// A provider calendar is headed with the provider's name ("Dr. Nicholas A. Grande");
+// Concussion Therapy Group keeps its real name.
+function apptFacilityHeadLabel(facility) { return apptEsc(apptFacilityName(apptNormalizeFacility(facility))) }
 function breakFacilityOf(b) { return apptNormalizeFacility(b && b.facility) }
 
 /* No manual category picker - the color-coded category is detected from
@@ -604,7 +671,7 @@ function apptGutterLabel(minutesFromMidnight) {
    target - matches EnableMyPractice's row-highlight-on-hover behavior.
    In 24-hour mode, minutes outside business hours (8 AM - 7 PM) are dimmed. */
 function apptBlankSlotClick(iso, time, facility) {
-  if (facility === APPT_FACILITIES[1]) openBreakBlockModal(iso, time, facility)
+  if (apptIsProviderFacility(facility)) openBreakBlockModal(iso, time, facility)
   else openApptModal(iso, time, facility)
 }
 
@@ -1162,8 +1229,12 @@ function openApptModal(dateISO, timeHHMM, facility) {
   document.getElementById('apptPatientSelect').innerHTML = apptPatientOptionsHTML(null)
   apptClearNewPatientFields()
   document.getElementById('apptNewPatientBlock').style.display = ''
-  document.getElementById('apptFacility').value = facility || (apptFacilityFilter !== 'both' ? apptFacilityFilter : APPT_FACILITIES[0])
+  apptRenderFacilitySelects()
+  apptSetSelect(document.getElementById('apptFacility'), facility || (apptFacilityFilter !== 'both' ? apptFacilityFilter : APPT_FACILITIES[0]))
   apptPopulateRoomSelect(document.getElementById('apptFacility').value, '')
+  // The provider: the calendar this was opened from, else the one in view, else Dr. Grande's.
+  const provPick = [facility, apptFacilityFilter].filter(apptIsProviderFacility)[0] || (apptCalendars.filter(c => c.active !== false)[0] || {}).facility
+  apptSetSelect(document.getElementById('apptProvider'), provPick)
   document.getElementById('apptCase').value = 'Neuro 1'
   const defaultDate = dateISO ? new Date(dateISO + 'T00:00:00') : (apptViewMode === 'day' ? apptCursorDate : new Date())
   document.getElementById('apptDate').value = apptMMDDYYYY(defaultDate)
@@ -1182,6 +1253,7 @@ function openApptModal(dateISO, timeHHMM, facility) {
   apptRoomChanged()
   apptTeleWanted = true
   apptSyncTelehealthRow()
+  apptSyncProviderRow()
   modal.classList.add('show')
 }
 
@@ -1196,8 +1268,10 @@ function editAppointment(id) {
   document.getElementById('apptPatientSelect').innerHTML = apptPatientOptionsHTML(a.patientId || null)
   apptClearNewPatientFields()
   document.getElementById('apptNewPatientBlock').style.display = a.patientId ? 'none' : ''
-  document.getElementById('apptFacility').value = apptFacilityOf(a)
+  apptRenderFacilitySelects()
+  apptSetSelect(document.getElementById('apptFacility'), apptFacilityOf(a))
   apptPopulateRoomSelect(apptFacilityOf(a), a.room || '')
+  apptSetSelect(document.getElementById('apptProvider'), a.providerCalendar || (apptCalendars.filter(c => c.active !== false)[0] || {}).facility)
   document.getElementById('apptCase').value = a.case || 'Neuro 1'
   document.getElementById('apptDate').value = apptMMDDYYYY(new Date(a.date + 'T00:00:00'))
   document.getElementById('apptStart').value = a.start
@@ -1208,6 +1282,7 @@ function editAppointment(id) {
   apptTeleExisting = a.meetingId || null
   apptTeleWanted = !!a.meetingId
   apptSyncTelehealthRow()
+  apptSyncProviderRow()
   modal.classList.add('show')
 }
 
@@ -1301,6 +1376,9 @@ async function saveAppointment() {
      every save would close the room of any appointment edited for an unrelated
      reason - a rescheduled visit would silently lose its patient link. */
   const payload = { patientId, patientName, date: dateISO, start, end, visitType, status, room, notes, facility, case: caseVal }
+  // An ACE visit's block goes on the provider picked here.
+  const provSel = document.getElementById('apptProvider')
+  if (apptIsAce(visitType) && provSel && provSel.value) payload.providerCalendar = provSel.value
   if (apptTeleWanted && !apptTeleExisting) payload.telehealth = true
   let newToken = null
   try {
@@ -1409,7 +1487,7 @@ async function apptUndoLast() {
       const payload = {
         patientId: d.patientId || null, patientName: d.patientName, date: d.date,
         start: d.start, end: d.end, visitType: d.visitType, status: d.status,
-        room: d.room, notes: d.notes, facility: d.facility, case: d.case
+        room: d.room, notes: d.notes, facility: d.facility, case: d.case, providerCalendar: d.providerCalendar || undefined
       }
       // A telehealth appointment restores WITH a room, matching what was deleted.
       if (d.meetingId) payload.telehealth = true
@@ -1470,7 +1548,7 @@ function apptOpenContextMenu(evt, iso, time, facility) {
   apptCtxPending = { iso, time, facility }
   const addAppointmentBtn = document.getElementById('apptContextAddAppointmentBtn')
   const addBreakBtn = document.getElementById('apptContextAddBreakBtn')
-  const isGrande = facility === APPT_FACILITIES[1]
+  const isGrande = apptIsProviderFacility(facility)
   if (addAppointmentBtn) addAppointmentBtn.style.display = isGrande ? 'none' : 'flex'
   if (addBreakBtn) addBreakBtn.style.display = isGrande ? 'flex' : 'none'
   // Keep the single-action menu on-screen even when the click is near an edge.
@@ -1714,7 +1792,7 @@ async function confirmApptReschedule() {
       const endMin = Math.min(startMin + (durationMin > 0 ? durationMin : 30), 23 * 60 + 59)
       const newEnd = String(Math.floor(endMin / 60)).padStart(2, '0') + ':' + String(endMin % 60).padStart(2, '0')
       const created = await window.ctgApiFetch('/api/appointments', {
-        method: 'POST', body: JSON.stringify({ patientId: a.patientId, patientName: a.patientName, date: newDateISO, start: newTime, end: newEnd, visitType: a.visitType, status: 'Unconfirmed', notes: a.notes || '', facility: a.facility, case: a.case })
+        method: 'POST', body: JSON.stringify({ providerCalendar: a.providerCalendar || undefined, patientId: a.patientId, patientName: a.patientName, date: newDateISO, start: newTime, end: newEnd, visitType: a.visitType, status: 'Unconfirmed', notes: a.notes || '', facility: a.facility, case: a.case })
       })
       ctgAppointments.push(created.appointment)
     }
@@ -1975,7 +2053,8 @@ function openBreakBlockModal(dateISO, timeHHMM, facility) {
   if (!modal) return
   document.getElementById('breakModalTitle').textContent = 'New Break / Block'
   document.getElementById('breakDeleteBtn').style.display = 'none'
-  document.getElementById('breakFacility').value = facility || (apptFacilityFilter !== 'both' ? apptFacilityFilter : APPT_FACILITIES[0])
+  apptRenderFacilitySelects()
+  apptSetSelect(document.getElementById('breakFacility'), facility || (apptFacilityFilter !== 'both' ? apptFacilityFilter : APPT_FACILITIES[0]))
   document.getElementById('breakSchedule').value = breakCurrentAccountName()
   document.getElementById('breakPatientSelect').innerHTML = breakPatientOptionsHTML()
   document.getElementById('breakPatientSelect').value = ''

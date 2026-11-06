@@ -56,7 +56,7 @@
     'caAddToList', 'caApply', 'caAssignRoom', 'caClearFilter', 'caEncounterForSelected', 'caManageList',
     'caOnField', 'caRemoveSelected', 'caSaveFilter', 'caSelectRow', 'caSetDefault', 'caSwitchTab',
     'caToggleFilter', 'caToggleSelectAll', 'ccAdmitAll', 'ccCloseFilterMenu', 'ccCopyLink', 'ccDismissStart',
-    'ccEndAndNext', 'ccHold', 'ccJoin', 'ccResume', 'ccSetFilter', 'ccStartMyDay', 'ccToggleAutoPilot',
+    'ccEndAndNext', 'ccHold', 'ccJoin', 'ccResume', 'ccSetFilter', 'ccSetProvider', 'ccStartMyDay', 'ccToggleAutoPilot',
     'ccToggleFilterMenu', 'cfAddLine', 'cfClearDemo', 'cfClearRadio', 'cfDownloadPdf', 'cfLoadDemo', 'cfPrint',
     'cfRecalc', 'cfRemoveLine', 'cfSave', 'chkOnField', 'chkOpenForm', 'chkPatientInput', 'chkPatientOpenBrowse',
     'chkPatientToggle', 'chkRenderRows', 'chkSelectPatient', 'chkToggleFilter', 'clearAll',

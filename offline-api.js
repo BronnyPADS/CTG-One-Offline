@@ -272,6 +272,47 @@
     }
   }
 
+  /* One calendar per provider account, as the server's providerCalendars.js:
+     'Provider' is the first provider account's (Dr. Grande's), kept from then
+     on; every other provider's is 'Provider:<id>'. ACE visits are copied onto
+     the picked provider's calendar as a block, as providerBlock.js does. */
+  function offlineAccounts() {
+    try { return JSON.parse(localStorage.getItem('ctg_auth_accounts_v1')) || [] } catch (e) { return [] }
+  }
+  function providerCalendars() {
+    var provs = offlineAccounts().filter(function (a) { return a.role === 'provider' })
+    var owner = null
+    try { owner = localStorage.getItem('ctg_offline_provider_owner') } catch (e) { owner = null }
+    if (!owner || !provs.some(function (a) { return String(a.id) === owner })) {
+      var first = provs.filter(function (a) { return a.active !== false })[0] || provs[0]
+      if (first && !owner) { owner = String(first.id); try { localStorage.setItem('ctg_offline_provider_owner', owner) } catch (e) {} }
+    }
+    var label = function (n) { n = String(n || '').trim(); return !n ? 'Provider\u2019s Calendar' : /^dr\.?\s/i.test(n) ? n : 'Dr. ' + n }
+    var list = provs.map(function (a) {
+      return { facility: String(a.id) === owner ? 'Provider' : 'Provider:' + a.id, label: label(a.displayName), accountId: String(a.id), active: a.active !== false }
+    })
+    if (!list.some(function (c) { return c.facility === 'Provider' })) list.unshift({ facility: 'Provider', label: label(''), accountId: null, active: true })
+    return list
+  }
+  function isAce(v) { return String(v || '').toUpperCase().split(/[^A-Z0-9]+/).indexOf('ACE') !== -1 }
+  // The block that mirrors an ACE visit, kept with it; returns the calendar it is on.
+  function syncMirror(appt, picked, u) {
+    var blocks = load(K.blocks, []), i = blocks.findIndex(function (x) { return x.appointmentId === appt.id })
+    if (!isAce(appt.visitType)) { if (i !== -1) { blocks.splice(i, 1); save(K.blocks, blocks) } return null }
+    var ok = picked && providerCalendars().some(function (c) { return c.facility === picked && c.active })
+    var facility = (ok && picked) || (i !== -1 && blocks[i].facility) || 'Provider'
+    var row = blockRow({ facility: facility, schedule: '', category: 'ACE', label: appt.patientName || 'Patient', date: appt.date, start: appt.start, end: appt.end }, i !== -1 ? blocks[i].id : null, u)
+    row.appointmentId = appt.id
+    if (i !== -1) blocks[i] = row; else blocks.push(row)
+    save(K.blocks, blocks)
+    return facility
+  }
+  function withProvider(appts) {
+    var by = {}
+    load(K.blocks, []).forEach(function (b) { if (b.appointmentId) by[b.appointmentId] = b.facility })
+    return appts.map(function (a) { return Object.assign(clone(a), { providerCalendar: by[a.id] || null }) })
+  }
+
   /* ------------------------------ referrals ---------------------------- */
   function referralRow(b) {
     var p = b.patient || {}, pref = b.preferred || {}
@@ -369,24 +410,41 @@
         if (is('GET', 2)) return { breakBlocks: blocks }
         if (is('POST', 2)) { var nb = blockRow(body || {}, null, u); blocks.push(nb); save(K.blocks, blocks); return { breakBlock: nb } }
         var bi = blocks.findIndex(function (x) { return x.id === P[2] })
-        if (is('PUT', 3)) { if (bi === -1) throw httpError(404, 'Break/Block not found'); blocks[bi] = blockRow(body || {}, P[2], u); save(K.blocks, blocks); return { breakBlock: blocks[bi] } }
+        if (is('PUT', 3)) { if (bi === -1) throw httpError(404, 'Break/Block not found'); blocks[bi] = Object.assign(blockRow(body || {}, P[2], u), { appointmentId: blocks[bi].appointmentId || null }); save(K.blocks, blocks); return { breakBlock: blocks[bi] } }
         if (is('DELETE', 3)) { save(K.blocks, blocks.filter(function (x) { return x.id !== P[2] })); return { ok: true } }
       }
       var appts = load(K.appts, [])
-      if (is('GET', 1)) return { appointments: appts }
+      if (is('GET', 1)) return { appointments: withProvider(appts) }
+      if (P[1] === 'calendars' && method === 'GET') return { calendars: providerCalendars() }
       if (P[1] === 'board' && method === 'GET') {
         var day = /^\d{4}-\d{2}-\d{2}$/.test(r.query.date || '') ? r.query.date : today()
-        return { date: day, slots: appts.filter(function (a) { return a.date === day }).map(function (a) { return Object.assign(clone(a), { meetingStatus: null, meetingStarted: null, waiting: 0, waitingSince: null, admitted: 0 }) }) }
+        var cals = providerCalendars(), list = withProvider(appts.filter(function (a) { return a.date === day })), mine = null
+        // A provider sees only the patients on their own calendar; anyone else may narrow to one provider.
+        if (u && u.role === 'provider') {
+          var own = cals.filter(function (c) { return c.accountId === String(u.id) })[0]
+          mine = own ? own.facility : null
+          list = list.filter(function (a) { return mine && a.providerCalendar === mine })
+        } else if (r.query.provider) list = list.filter(function (a) { return a.providerCalendar === r.query.provider })
+        return { date: day, mine: mine, calendars: cals.map(function (c) { return { facility: c.facility, label: c.label, active: c.active } }),
+          slots: list.map(function (a) { return Object.assign(a, { meetingStatus: null, meetingStarted: null, waiting: 0, waitingSince: null, admitted: 0 }) }) }
       }
-      if (is('POST', 1)) { var na = apptRow(body || {}); appts.push(na); save(K.appts, appts); return { appointment: na, guestToken: null } }
+      if (is('POST', 1)) {
+        var na = apptRow(body || {}); appts.push(na); save(K.appts, appts)
+        na = Object.assign(clone(na), { providerCalendar: syncMirror(na, (body || {}).providerCalendar, u) })
+        return { appointment: na, guestToken: null }
+      }
       var ai = appts.findIndex(function (x) { return x.id === P[1] })
       if (is('PUT', 2)) {
         if (ai === -1) throw httpError(404, 'Appointment not found')
         var keepCreated = appts[ai].createdAt
         appts[ai] = Object.assign(apptRow(body || {}, P[1]), { createdAt: keepCreated }); save(K.appts, appts)
-        return { appointment: appts[ai], guestToken: null }
+        return { appointment: Object.assign(clone(appts[ai]), { providerCalendar: syncMirror(appts[ai], (body || {}).providerCalendar, u) }), guestToken: null }
       }
-      if (is('DELETE', 2)) { save(K.appts, appts.filter(function (x) { return x.id !== P[1] })); return { ok: true } }
+      if (is('DELETE', 2)) {
+        save(K.appts, appts.filter(function (x) { return x.id !== P[1] }))
+        save(K.blocks, load(K.blocks, []).filter(function (x) { return x.appointmentId !== P[1] }))
+        return { ok: true }
+      }
       if (P[2] === 'room') throw httpError(503, 'Video rooms are not available in the offline version.')
     }
 

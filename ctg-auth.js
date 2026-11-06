@@ -328,7 +328,8 @@
       return '<option value="' + esc(name) + '"' + (name === selected ? ' selected' : '') + '>' + esc(name) + '</option>';
     }).join('');
   };
-  var PROVIDER_PICKER_IDS = ['regProvider', 'apptProvider'];
+  // apptProvider is the appointment book's: a provider's calendar, filled by appointments.js.
+  var PROVIDER_PICKER_IDS = ['regProvider'];
   window.ctgRenderProviderPickers = function (overrides) {
     overrides = overrides || {};
     PROVIDER_PICKER_IDS.forEach(function (id) {
@@ -430,6 +431,7 @@
       if (msg.type === 'session:expired') { handleSessionRevoked(); return; }
       if (/^meeting:|^data:meetings$/.test(msg.type) && typeof window.ctgMeetingsRealtime === 'function') window.ctgMeetingsRealtime(msg.type, msg.payload);
       if (msg.type === 'data:accounts' && typeof window.ctgLoadProviders === 'function') window.ctgLoadProviders();
+      if (msg.type === 'data:accounts' && typeof window.ctgApptReloadCalendars === 'function') window.ctgApptReloadCalendars();
       /* Shared documents: another user saved Contacts, Appointment Configs,
          Notification settings or a patient chart. Pull the new copy rather
          than leaving this browser on a stale one - the point of moving
@@ -2002,6 +2004,7 @@
     // the admin who just added a provider needs their own picker refreshed
     // here - otherwise it stays stale for them alone until a reload.
     if (typeof window.ctgLoadProviders === 'function') window.ctgLoadProviders();
+    if (typeof window.ctgApptReloadCalendars === 'function') window.ctgApptReloadCalendars();
     window.ctgRefreshLawFirmSelections();
     renderAcMatrix();
     renderAcLawFirms();
