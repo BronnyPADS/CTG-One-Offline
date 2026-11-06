@@ -1549,8 +1549,12 @@
      stay as uploaded. Typing the whole rest of the row once put a bill's
      Quantity, Charges and Balance straight after the description and covered
      the row's lines (5 Nov 2026). */
-  function drawFixedLine(pg, ln, res, right, fontFor) {
+  function drawFixedLine(pg, ln, res, right, fontFor, above) {
     var L = window.PDFLib, items = ln.items, size = ln.size
+    // In a tight template a heading sits under 1 line above its text: the box stops short of it,
+    // or the Word copy, which leaves out whatever a box covers, loses the heading (6 Nov 2026).
+    var top = ln.y + size * 0.84
+    if (above && above.y - ln.y >= size * 0.7 && above.y - 0.4 < top) top = above.y - 0.4
     var blank = function (s) { return !/\S/.test(s) }
     // Columns: a new one starts where the text is more than about a character from the text before it.
     var cols = [], col = null, lastText = null
@@ -1608,7 +1612,7 @@
     // Everything is worked out before anything is drawn, so a line is corrected whole or not at all.
     var boxes = [], words = []
     plans.forEach(function (pl) {
-      var box = { x0: pl.x0 - 0.6, x1: Math.max(pl.oldEnd, pl.lay.end) + 0.8, y0: ln.y - size * 0.26, y1: ln.y + size * 0.84 }
+      var box = { x0: pl.x0 - 0.6, x1: Math.max(pl.oldEnd, pl.lay.end) + 0.8, y0: ln.y - size * 0.26, y1: top }
       pg.drawRectangle({ x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0, color: L.rgb(1, 1, 1) })
       boxes.push(box)
       pl.lay.out.forEach(function (o) {
@@ -1714,6 +1718,25 @@
       next = { open: !ms[i + 1] && rest.every(function (l) { return !l.trim() || PAGE_CHROME.test(l.trim()) }), comma: after[0] === ',' }
     }
     if (carry) { carry.open = next.open; carry.comma = next.comma }
+    return edits
+  }
+
+  /* Causation has no comma after "examination" (6 Nov 2026), on an uploaded report too.
+     The sentence wraps at any word, so it is found across the page's lines, and only this
+     sentence: the Prognosis says "history and examination, it is reasonable" and keeps its
+     comma. A report from before the letterhead has no practice name on the page; this
+     sentence is the practice's own, so the comma comes off there as well, and nothing else
+     on such a page changes. raw: the page's lines. Returns { line number: [edit] }. */
+  var CAUSATION_COMMA = /records\s+and\s+examination,(?=\s+it\s+is\s+my\s+opinion\s+that\s+there\s+exists\b)/g
+  function causationCommaEdits(raw) {
+    var text = raw.join('\n'), starts = [], pos = 0, edits = {}, m
+    raw.forEach(function (l) { starts.push(pos); pos += l.length + 1 })
+    CAUSATION_COMMA.lastIndex = 0
+    while ((m = CAUSATION_COMMA.exec(text))) {
+      var at = m.index + m[0].length - 1, li = starts.length - 1
+      while (li > 0 && starts[li] > at) li--
+      ;(edits[li] = edits[li] || []).push({ at: at - starts[li], len: 1, to: '' })
+    }
     return edits
   }
 
@@ -1915,20 +1938,22 @@
         var own = rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })
         if (!day1File && opensDay1(rawLines)) day1File = true
         if (!own) { r42Carry.open = false; fsCarry.open = false }
-        if (!own && !day1File) { plainCarry.part = null; glossCarry.part = null; continue }
+        var comma = causationCommaEdits(rawLines), report = own || day1File
+        if (!report) { plainCarry.part = null; glossCarry.part = null; if (!Object.keys(comma).length) continue }
         var r42 = own ? r42Edits(rawLines, r42Carry) : {}
-        var ge = glossaryEdits(rawLines, terms, glossCarry)
+        var ge = report ? glossaryEdits(rawLines, terms, glossCarry) : {}
         Object.keys(ge).forEach(function (k) { r42[k] = (r42[k] || []).concat(ge[k]) })
+        Object.keys(comma).forEach(function (k) { r42[k] = (r42[k] || []).concat(comma[k]) })
         if (own && opts && opts.noFinalStatus) {
           var fse = finalStatusEdits(rawLines, fsCarry)
           Object.keys(fse).forEach(function (k) { r42[k] = (r42[k] || []).concat(fse[k]) })
         }
-        var plain = plainLines(lines, rawLines, plainCarry)
+        var plain = report ? plainLines(lines, rawLines, plainCarry) : {}
         lines.forEach(function (ln, li) {
           var res = fixWordingLine(ln, prev, measure, own ? rules : [], lineText(lines[li + 1]), r42[li])
           prev = res.text
           if (plain[li] !== undefined) res.plain = boldPieces(ln, res, plain[li])
-          if (res.changed || res.plain) fixes.push({ ln: ln, res: res })
+          if (res.changed || res.plain) fixes.push({ ln: ln, res: res, above: lines[li - 1] })
         })
         if (!fixes.length) continue
         if (!doc) {
@@ -1941,7 +1966,7 @@
         var right = lines.reduce(function (mx, l) { var e = l.items[l.items.length - 1]; return Math.max(mx, e.x + e.w) }, 0)
         var patch = { boxes: [], words: [] }
         fixes.forEach(function (fx) {
-          try { var r = drawFixedLine(pg, fx.ln, fx.res, right, fontFor); patch.boxes = patch.boxes.concat(r.boxes); patch.words = patch.words.concat(r.words); if (r.boxes.length) changed++ }
+          try { var r = drawFixedLine(pg, fx.ln, fx.res, right, fontFor, fx.above); patch.boxes = patch.boxes.concat(r.boxes); patch.words = patch.words.concat(r.words); if (r.boxes.length) changed++ }
           catch (e) { console.warn('FCR: a line of an uploaded report was left as uploaded', e) }
         })
         if (patch.boxes.length) patches[n - 1] = patch
