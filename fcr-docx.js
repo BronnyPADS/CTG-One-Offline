@@ -1805,6 +1805,72 @@
     return flags
   }
 
+  /* The Day 1's glossary explains head impacts and SOCs only where the report has
+     them (6 Nov 2026; for reports printed from the form, see buildPDF in app.js). An
+     uploaded report still has every line, so its own answers decide: they come after
+     the glossary, so the whole file is read first. Anything that might be an answer
+     keeps the lines. Taking away a term the report uses is the worse mistake. */
+  var GLOSSARY_PARTS = [
+    { key: 'either', re: /^Direct\/Indirect Head Impacts\s*:/, max: 3 },
+    { key: 'ihi', re: /^Note on Indirect Head Impacts\s*:/, max: 7 },
+    { key: 'dhi', re: /^DHI 1\s*:\s*Direct Head Impacts\b/, max: 3 },
+    { key: 'ihi', re: /^IHI 1\s*:\s*Indirect Head Impacts\b/, max: 3 },
+    { key: 'soc', re: /^SOC 1\s*:\s*Stationary object/i, max: 3 }
+  ]
+  // Each line of a glossary entry, across a page break if it has to. carry: { part, count }
+  function walkGlossary(raw, carry, onLine) {
+    raw.forEach(function (text, k) {
+      var t = text.trim()
+      if (!t || PAGE_CHROME.test(t)) return
+      var part = null
+      GLOSSARY_PARTS.forEach(function (p) { if (!part && p.re.test(t)) part = p })
+      if (part) { carry.part = part; carry.count = 0 }
+      else if (carry.part) {
+        // The next label ("Unit 1:") or heading ends an entry, and so does running too long.
+        var ended = /^[A-Z][A-Za-z0-9 \/()'-]{0,50}:(\s|$)/.test(t) || !/[a-z]/.test(t) || carry.count >= carry.part.max
+        if (ended) carry.part = null
+      }
+      if (carry.part) { carry.count++; onLine(k, carry.part.key) } else onLine(k, null)
+    })
+  }
+  function pageLineTexts(pdf, n) {
+    return pdf.getPage(n).then(function (page) { return page.getTextContent() }).then(function (tc) {
+      return wordingLines(tc.items.filter(function (it) { return it.str }).map(function (it) {
+        return { s: it.str, x: it.transform[4], y: it.transform[5], w: it.width, size: Math.hypot(it.transform[2], it.transform[3]) || it.height || 10 }
+      })).map(function (ln) { return fixWordingLine(ln, '', null, []).text })
+    })
+  }
+  // What the report itself says outside the glossary: a blank value or dash is no answer.
+  async function glossaryTermsUsed(pdf) {
+    var used = { found: false, dhi: false, ihi: false, soc: false }, total = false, anyHead = false, carry = { part: null, count: 0 }
+    var value = function (m) { return m && !/^[\s\-\u2013\u2014\uFFFD.]*$/.test(m[1]) }
+    for (var n = 1; n <= pdf.numPages; n++) {
+      var raw = await pageLineTexts(pdf, n)
+      walkGlossary(raw, carry, function (k, key) {
+        if (key) { used.found = true; return }
+        var t = raw[k].trim()
+        if (value(/^DHI [1-9]\s*:(.*)$/.exec(t)) || /\(DHI [1-9]\)/.test(t) || /^Total DHIs\s*:\s*[1-9]/.test(t)) used.dhi = true
+        if (value(/^IHI [1-9]\s*:(.*)$/.exec(t)) || /\(IHI [1-9]\)/.test(t) || /^Total IHIs\s*:\s*[1-9]/.test(t)) used.ihi = true
+        if (value(/^SOC [1-9]\s*:(.*)$/.exec(t)) || /\(SOC [1-9]\)/.test(t) || /^Total SOCs\s*:\s*[1-9]/.test(t)) used.soc = true
+        if (/^Total Head Impacts\s*:\s*[1-9]/.test(t)) total = true
+        var head = /^Head Impacts\s*:(.*)$/.exec(t)
+        if (value(head) && !/^\s*(none|n\/?a|0)\.?\s*$/i.test(head[1])) anyHead = true
+      })
+    }
+    // Head impacts it mentions but does not sort into direct and indirect: both stay.
+    if (anyHead || (total && !used.dhi && !used.ihi)) { used.dhi = true; used.ihi = true }
+    return used
+  }
+  function glossaryEdits(raw, used, carry) {
+    var edits = {}
+    walkGlossary(raw, carry, function (k, key) {
+      if (!key) return
+      var keep = key === 'either' ? (used.dhi || used.ihi) : used[key]
+      if (!keep) edits[k] = [{ at: 0, len: raw[k].length, to: '' }]
+    })
+    return edits
+  }
+
   /* Corrections that need the patient: the discharge summary's "Patient is
      now discharged from active care" names them (5 Nov 2026), also where
      "Patient" ends one line and "is now discharged" starts the next. */
@@ -1837,6 +1903,7 @@
         try { return fnt.widthOfTextAtSize(it.s, it.size) } catch (e) { return it.w }
       }
       var r42Carry = { open: false, comma: false }, fsCarry = { open: false }, plainCarry = { part: null }, day1File = false
+      var terms = await glossaryTermsUsed(pdf), glossCarry = { part: null, count: 0 }
       for (var n = 1; n <= pdf.numPages; n++) {
         var rd = await readWords(pdf, n)
         if (rd.rot % 360) { r42Carry.open = false; fsCarry.open = false; plainCarry.part = null; continue }
@@ -1848,8 +1915,10 @@
         var own = rd.items.some(function (it) { return /concussion therapy group/i.test(it.s) })
         if (!day1File && opensDay1(rawLines)) day1File = true
         if (!own) { r42Carry.open = false; fsCarry.open = false }
-        if (!own && !day1File) { plainCarry.part = null; continue }
+        if (!own && !day1File) { plainCarry.part = null; glossCarry.part = null; continue }
         var r42 = own ? r42Edits(rawLines, r42Carry) : {}
+        var ge = glossaryEdits(rawLines, terms, glossCarry)
+        Object.keys(ge).forEach(function (k) { r42[k] = (r42[k] || []).concat(ge[k]) })
         if (own && opts && opts.noFinalStatus) {
           var fse = finalStatusEdits(rawLines, fsCarry)
           Object.keys(fse).forEach(function (k) { r42[k] = (r42[k] || []).concat(fse[k]) })

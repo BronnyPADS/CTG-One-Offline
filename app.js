@@ -13954,11 +13954,17 @@ function buildPDF(name,opts){
   kvLine('Note','The numbering of motor vehicle impacts, stationary object impacts, head impacts and body impacts is not necessarily in chronological order of occurrence, but is intended to add a name and an identity to a separate event, so that the reader can more clearly distinguish one entity of the injury incident from another.')
   kvRich('Unit 1','The patient\'s vehicle may be referred to in the report as (Unit 1), and any other vehicles involved are designated as (Unit 2), (Unit 3), and so on.')
   kvRich('MVC 1','In order to identify and distinguish between any multiple motor vehicle collisions that are included in the entire set of collision events comprising the entire entity of the incident of injury, the separate motor vehicle collisions will be identified as (MVC 1), (MVC 2), (MVC 3), and so on.')
-  kvRich('Direct/Indirect Head Impacts','Head impacts will be identified as either Direct Head Impacts (DHI) or Indirect Head Impacts (IHI).')
-  kvLine('Note on Indirect Head Impacts','Indirect Head Impacts are associated with head jolts experienced immediately following coup (first forceful movement caused by collision) and/or contre coup (second forceful movement caused by collision, a rebounding movement) movements of the head. Head jolts are associated with brain impact to the interior of the skull and/or twisting and stretching of brain tissue resulting in concussion symptoms.')
-  kvRich('DHI 1','Direct Head Impacts will be identified as (DHI 1), (DHI 2), (DHI 3), and so on.')
-  kvRich('IHI 1','Indirect Head Impacts will be identified as (IHI 1), (IHI 2), (IHI 3), and so on.')
-  kvRich('SOC 1','Stationary object collisions will similarly be identified as Stationary Object Collision (SOC 1), (SOC 2), (SOC 3), and so on.')
+  /* These terms are explained only where this report uses them (staff, 6 Nov 2026):
+     the DHI line with a direct head impact, the IHI line and its note with an
+     indirect one, the opening line with either, and SOC 1 with a SOC. The
+     uploaded-report version of this rule is in fcr-docx.js (glossaryEdits). */
+  const glossHas=(ids,total)=>ids.some(id=>!isUnanswered(gv(id)))||parseInt(go(total))>0
+  const glossDhi=glossHas(['dhi1','dhi2','dhi3'],'totalDHI'),glossIhi=glossHas(['ihi1','ihi2','ihi3'],'totalIHI')
+  if(glossDhi||glossIhi)kvRich('Direct/Indirect Head Impacts','Head impacts will be identified as either Direct Head Impacts (DHI) or Indirect Head Impacts (IHI).')
+  if(glossIhi)kvLine('Note on Indirect Head Impacts','Indirect Head Impacts are associated with head jolts experienced immediately following coup (first forceful movement caused by collision) and/or contre coup (second forceful movement caused by collision, a rebounding movement) movements of the head. Head jolts are associated with brain impact to the interior of the skull and/or twisting and stretching of brain tissue resulting in concussion symptoms.')
+  if(glossDhi)kvRich('DHI 1','Direct Head Impacts will be identified as (DHI 1), (DHI 2), (DHI 3), and so on.')
+  if(glossIhi)kvRich('IHI 1','Indirect Head Impacts will be identified as (IHI 1), (IHI 2), (IHI 3), and so on.')
+  if(parseInt(go('totalSOC'))>0)kvRich('SOC 1','Stationary object collisions will similarly be identified as Stationary Object Collision (SOC 1), (SOC 2), (SOC 3), and so on.')
 
   H1('MECHANISM OF INJURY')
   plainParas=true
