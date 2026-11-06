@@ -11,28 +11,40 @@
    the chart. Only Partner and Condition Focus are chosen on this page.
 
    Saved on the patient as p.neuroReferral:
-     { status: 'pending' | 'submitted' | 'scheduled',
-       referredOn, apptDate, notes, form: {...},
+     { status: 'pending' | 'submitted' | 'accepted' | 'scheduled' | 'examined' | 'reported',
+       referredOn, acceptedOn, apptDate, examinedOn, reportOn, notes, form: {...},
+       history: [{ type: 'rescheduled', from, to, at, by } | { type: 'noshow', date, at, by }],
        updatedAt, updatedBy }
    form is a copy of every field as it stood at the last save (what the
    referral said); the page itself always shows the chart's current values. */
 (function () {
   'use strict';
 
-  /* The referral's three stages, in order; Appointment Scheduled is the last,
-     where the referral is complete. `date` is the field that stage records:
-     Submitted defaults to the day it is marked, Scheduled needs the
-     appointment date entered. */
+  /* The referral's six stages, in order, from referral to report (6 Nov 2026);
+     Report Received is the last, where the referral is complete. `date` is the
+     field that stage records: most default to the day they are marked, the
+     appointment date has to be entered, and Patient Examined starts from the
+     appointment date once it has passed. */
   var NR_STEPS = [
     { key: 'pending', label: 'Pending Referral', tab: 'Pending', icon: 'clock' },
     { key: 'submitted', label: 'Referral Submitted', tab: 'Submitted', icon: 'send', date: 'referredOn', dateLabel: 'Date Submitted', today: true },
-    { key: 'scheduled', label: 'Appointment Scheduled', tab: 'Scheduled', icon: 'calendar', date: 'apptDate', dateLabel: 'Appointment Date' }
+    { key: 'accepted', label: 'Referral Accepted', tab: 'Accepted', icon: 'accept', date: 'acceptedOn', dateLabel: 'Date Accepted', today: true },
+    { key: 'scheduled', label: 'Appointment Scheduled', tab: 'Scheduled', icon: 'calendar', date: 'apptDate', dateLabel: 'Appointment Date' },
+    { key: 'examined', label: 'Patient Examined', tab: 'Examined', icon: 'exam', date: 'examinedOn', dateLabel: 'Date Examined', today: true, fromAppt: true },
+    { key: 'reported', label: 'Report Received', tab: 'Report Received', icon: 'report', date: 'reportOn', dateLabel: 'Report Received', today: true }
   ];
+  var NR_DATE_KEYS = NR_STEPS.filter(function (s) { return s.date; }).map(function (s) { return s.date; });
+  // The date a stage starts from when it is marked: today, or for an exam the appointment day once it is past.
+  function nrStepDefault(s, f) {
+    if (!s.today) return '';
+    if (s.fromAppt && f.apptDate && f.apptDate <= nrToday()) return f.apptDate;
+    return nrToday();
+  }
   var NR_STEP_KEYS = NR_STEPS.map(function (s) { return s.key; });
   var NR_LAST = NR_STEP_KEYS[NR_STEP_KEYS.length - 1];
   // Statuses saved by earlier versions of this page (a Completed stage existed briefly).
   var NR_LEGACY = { needed: 'pending', referred: 'submitted', completed: 'scheduled' };
-  var NR_TRACK = ['status', 'referredOn', 'apptDate', 'notes'];
+  var NR_TRACK = ['status'].concat(NR_DATE_KEYS, ['notes']);
 
   var nrFilter = 'pending';     // a step key, or 'all'
   var nrQuery = '';
@@ -70,6 +82,10 @@
     clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
     check: '<polyline points="20 6 9 17 4 12"/>',
+    accept: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',
+    exam: '<path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6 6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>',
+    report: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 15 11 17 15 13"/>',
+    noshow: '<circle cx="12" cy="12" r="9"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
     checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
     chart: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
     sync: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
@@ -194,6 +210,19 @@
     return !!d && (Object.keys(d).some(function (k) { return k !== '__track'; }) || !!(d.__track && Object.keys(d.__track).length));
   }
 
+  /* The appointment's history: every reschedule and no-show, oldest first. */
+  function nrHistory(r) { return Array.isArray(r && r.history) ? r.history.slice() : []; }
+  function nrHistoryLine(h) {
+    if (h.type === 'rescheduled') return 'Rescheduled ' + nrUs(h.from) + ' \u2192 ' + nrUs(h.to);
+    if (h.type === 'noshow') return 'No-show ' + nrUs(h.date);
+    return '';
+  }
+  function nrHistoryText(r) { return nrHistory(r).map(nrHistoryLine).filter(Boolean).join('; '); }
+  function nrMe() {
+    var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
+    return me ? (me.displayName || me.username || '') : '';
+  }
+
   /* -------------------------------- motion -------------------------------- */
   /* The portal's motion on these pages (styles.css, "Motion on the Neurologist
      pages"): content rises in as a page opens, the tiles cascade, the active
@@ -279,12 +308,11 @@
     }).sort(function (a, b) {
       var sa = NR_STEP_KEYS.indexOf(nrStatus(a)), sb = NR_STEP_KEYS.indexOf(nrStatus(b));
       if (sa !== sb) return sa - sb;
-      var ra = nrSaved(a), rb = nrSaved(b);
-      switch (NR_STEP_KEYS[sa]) {
-        case 'pending': return nrDay1Date(a).localeCompare(nrDay1Date(b));                       // longest wait first
-        case 'submitted': return String(ra.referredOn || '').localeCompare(String(rb.referredOn || '')); // longest awaiting a date first
-        default: return String(ra.apptDate || '').localeCompare(String(rb.apptDate || ''));              // soonest appointment first
-      }
+      var ra = nrSaved(a), rb = nrSaved(b), st = NR_STEPS[sa];
+      if (!st.date) return nrDay1Date(a).localeCompare(nrDay1Date(b));                       // longest wait first
+      var c = String(ra[st.date] || '').localeCompare(String(rb[st.date] || ''));
+      // Waiting the longest (or the soonest appointment) first; finished referrals newest first.
+      return st.key === NR_LAST ? -c : c;
     });
   }
 
@@ -298,7 +326,8 @@
   }
 
   function nrCounts(all) {
-    var n = { pending: 0, submitted: 0, scheduled: 0 };
+    var n = {};
+    NR_STEP_KEYS.forEach(function (k) { n[k] = 0; });
     all.forEach(function (p) { n[nrStatus(p)]++; });
     return n;
   }
@@ -314,11 +343,19 @@
         + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
         + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
     }
-    return '<div class="nr-kpis">'
+    var longestSince = function (key, field) {
+      return all.filter(function (p) { return nrStatus(p) === key; })
+        .reduce(function (m, p) { var d = nrDaysSince(nrSaved(p)[field]); return d !== null && d > m ? d : m; }, -1);
+    };
+    var waitReport = longestSince('examined', 'examinedOn');
+    var days = function (d) { return d + (d === 1 ? ' day' : ' days'); };
+    return '<div class="nr-kpis nr-kpis-6">'
       + tile('k-total', 'pin', 'Virginia Patients', all.length, 'Incident location: Virginia')
-      + tile('k-pending', 'clock', 'Pending Referral', n.pending, oldest < 0 ? 'No patients awaiting referral' : 'Longest wait: ' + oldest + (oldest === 1 ? ' day' : ' days'))
-      + tile('k-progress', 'send', 'Referral Submitted', n.submitted, 'Awaiting appointment')
-      + tile('k-done', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming + ' upcoming')
+      + tile('k-pending', 'clock', 'Pending Referral', n.pending, oldest < 0 ? 'No patients awaiting referral' : 'Longest wait: ' + days(oldest))
+      + tile('k-progress', 'send', 'Awaiting Appointment', n.submitted + n.accepted, n.submitted + ' submitted · ' + n.accepted + ' accepted')
+      + tile('k-sched', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming + ' upcoming')
+      + tile('k-exam', 'exam', 'Awaiting Report', n.examined, waitReport < 0 ? 'No reports outstanding' : 'Longest since exam: ' + days(waitReport))
+      + tile('k-done', 'report', 'Report Received', n.reported, 'Referral complete')
       + '</div>';
   }
 
@@ -347,7 +384,10 @@
     var r = nrSaved(p);
     switch (nrStatus(p)) {
       case 'submitted': return r.referredOn ? 'Submitted ' + nrUs(r.referredOn) : 'Submitted';
+      case 'accepted': return (r.acceptedOn ? 'Accepted ' + nrUs(r.acceptedOn) : 'Accepted') + ' · awaiting a date';
       case 'scheduled': return r.apptDate ? 'Appointment ' + nrUs(r.apptDate) : 'Appointment scheduled';
+      case 'examined': return (r.examinedOn ? 'Examined ' + nrUs(r.examinedOn) : 'Examined') + ' · awaiting the report';
+      case 'reported': return r.reportOn ? 'Report received ' + nrUs(r.reportOn) : 'Report received';
     }
     var wait = nrDaysSince(nrDay1Date(p));
     return wait === null ? 'Day 1 date not recorded' : wait === 0 ? 'Day 1 completed today' : wait + (wait === 1 ? ' day' : ' days') + ' since Day 1';
@@ -441,21 +481,40 @@
       + '<button type="button" class="nr-link" data-onclick="nrOpenChart(\'' + id + '\')">' + nrIcon('chart') + 'Open Chart</button></div>'
       + '</div>';
 
-    var closed = f.status === NR_LAST && f.apptDate
-      ? '<div class="nr-closed">' + nrIcon('checkCircle') + '<div><b>Referral complete · Appointment scheduled for ' + nrEsc(nrUs(f.apptDate)) + '</b>'
-        + '<span>No further action is needed. Select an earlier stage above to reopen it.</span></div></div>'
+    var closed = f.status === NR_LAST && f.reportOn
+      ? '<div class="nr-closed">' + nrIcon('checkCircle') + '<div><b>Referral complete · Report received ' + nrEsc(nrUs(f.reportOn)) + '</b>'
+        + '<span>' + (f.examinedOn ? 'Patient examined ' + nrEsc(nrUs(f.examinedOn)) + '. ' : '') + 'No further action is needed. Select an earlier stage above to reopen it.</span></div></div>'
       : '';
 
     // Only the dates of stages reached so far, so the form asks for nothing ahead of time.
+    var savedSched = nrStatus(p) === 'scheduled' && saved.apptDate;
     var dates = NR_STEPS.filter(function (s, i) { return s.date && i <= cur; }).map(function (s) {
-      return nrF(s.dateLabel, s.date, nrDateInput(s.date, f[s.date]));
+      var hint = s.date === 'apptDate' && savedSched ? 'To reschedule, change the date and save. The earlier date is kept in the history.' : '';
+      return nrF(s.dateLabel, s.date, nrDateInput(s.date, f[s.date]), hint);
     });
     while (dates.length % 2) dates.push('<div></div>');
+
+    /* While an appointment is on the books: it can be rescheduled (the date
+       box above) or marked a no-show, which sends the referral back to waiting
+       for a new date. Every reschedule and no-show stays in the history. */
+    var appt = savedSched && f.status === 'scheduled'
+      ? '<div class="nr-appt-actions">'
+        + '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrReschedule()">' + nrIcon('calendar') + 'Reschedule</button>'
+        + '<button type="button" class="rf-btn rf-btn-quiet nr-btn-warn" data-onclick="nrNoShow()">' + nrIcon('noshow') + 'Mark No-show</button></div>'
+      : '';
+    var hist = nrHistory(saved);
+    var histHTML = hist.length
+      ? '<div class="nr-history"><b>' + nrIcon('clock') + 'Appointment history</b><ul>' + hist.map(function (h) {
+          return '<li class="nr-h-' + nrEsc(h.type) + '"><span>' + nrEsc(nrHistoryLine(h)) + '</span>'
+            + (h.at || h.by ? '<i>' + nrEsc([h.by, h.at ? nrUs(String(h.at).slice(0, 10)) : ''].filter(Boolean).join(' · ')) + '</i>' : '') + '</li>';
+        }).join('') + '</ul></div>'
+      : '';
 
     var body = '<div class="nr-form-body">'
       + '<h3 class="nr-sec nr-sec-first">Referral Status</h3>'
       + nrStepperHTML(f) + closed
       + (dates.length ? '<div class="rf-pair nr-dates">' + dates.join('') + '</div>' : '')
+      + appt + histHTML
       + nrF('Notes <i>(optional)</i>', 'notes', '<textarea id="nrf_notes" rows="2" placeholder="e.g. Submitted through the partner portal; awaiting scheduling" data-oninput="nrTrack(\'notes\',this.value)">' + nrEsc(f.notes) + '</textarea>')
       + '<div class="nr-autofill">' + nrIcon('sync') + '<span>Patient details are pulled automatically from <b>Registration</b> and <b>Day 1</b>, so they always match the chart. To correct one, update it in the patient’s chart (<b>Open Chart</b>).</span></div>'
       + '<h3 class="nr-sec">Partner’s Info</h3>'
@@ -484,7 +543,11 @@
     /* The main button moves the referral one stage on from where it was SAVED,
        so it still reads "Schedule Appointment" while the date is being entered.
        A stage picked on the tracker instead is saved as it is. */
-    var NEXT = { pending: ['submitted', 'send', 'Submit Referral'], submitted: ['scheduled', 'calendar', 'Schedule Appointment'] };
+    var NEXT = {
+      pending: ['submitted', 'send', 'Submit Referral'], submitted: ['accepted', 'accept', 'Mark Accepted'],
+      accepted: ['scheduled', 'calendar', 'Schedule Appointment'], scheduled: ['examined', 'exam', 'Mark Patient Examined'],
+      examined: ['reported', 'report', 'Mark Report Received']
+    };
     var savedSt = nrStatus(p), next = NEXT[savedSt];
     if (f.status !== savedSt && !(next && next[0] === f.status)) next = null;
     var foot = '<div class="nr-form-ft"><span class="nr-meta"><b class="nr-unsaved"' + (dirty ? '' : ' hidden') + '>Unsaved changes · </b>' + meta + '</span>'
@@ -560,8 +623,8 @@
     d.__track = d.__track || {};
     if (key === nrBaseValue(p, 'status')) delete d.__track.status;
     else d.__track.status = key;
-    var s = nrStep(key);
-    if (s.today && !nrFormValues(p)[s.date]) d.__track[s.date] = nrToday();
+    var s = nrStep(key), now = nrFormValues(p);
+    if (s.today && !now[s.date]) d.__track[s.date] = nrStepDefault(s, now);
     if (!nrIsDirty(p.id)) delete nrDrafts[p.id];
     return nrFormValues(p);
   }
@@ -583,26 +646,66 @@
     if (!p) return;
     var f = advance ? nrApplyStep(advance) : nrFormValues(p);
     if (!f.partner) { nrShowError('partner', 'Select the partner.'); return; }
-    if (f.status === 'scheduled' && !f.apptDate) { nrShowError('apptDate', 'Enter the appointment date, then save.'); return; }
+    // From Scheduled on, the appointment date is needed (it can be the day it happened).
+    if (NR_STEP_KEYS.indexOf(f.status) >= NR_STEP_KEYS.indexOf('scheduled') && !f.apptDate) {
+      nrShowError('apptDate', 'Enter the appointment date, then save.'); return;
+    }
     // A copy of what the referral said at this save: the chart's details as they are now, plus the choices.
     var form = {};
     Object.keys(nrChartValues(p)).concat(Object.keys(NR_CHOSEN)).forEach(function (k) { form[k] = String(f[k] == null ? '' : f[k]).trim(); });
-    var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
-    var cur = NR_STEP_KEYS.indexOf(f.status);
+    var cur = NR_STEP_KEYS.indexOf(f.status), saved = nrSaved(p);
     // A date belongs to a stage the referral has reached; stepping back clears the later ones.
-    var dateFor = function (key) { var s = nrStep(key); return NR_STEP_KEYS.indexOf(key) <= cur ? (f[s.date] || '') : ''; };
-    p.neuroReferral = {
-      status: f.status,
-      referredOn: dateFor('submitted'), apptDate: dateFor('scheduled'),
-      notes: String(f.notes || '').trim(), form: form,
-      updatedAt: new Date().toISOString(), updatedBy: me ? (me.displayName || me.username || '') : ''
-    };
+    var next = { status: f.status, notes: String(f.notes || '').trim(), form: form };
+    NR_STEPS.forEach(function (s, i) { if (s.date) next[s.date] = i <= cur ? (f[s.date] || '') : ''; });
+    // A scheduled appointment given a new date is a reschedule: the earlier date stays in the history.
+    var history = nrHistory(saved);
+    if (nrStatus(p) === 'scheduled' && saved.apptDate && next.apptDate && next.apptDate !== saved.apptDate && f.status === 'scheduled') {
+      history.push({ type: 'rescheduled', from: saved.apptDate, to: next.apptDate, at: new Date().toISOString(), by: nrMe() });
+    }
+    next.history = history;
+    next.updatedAt = new Date().toISOString();
+    next.updatedBy = nrMe();
+    p.neuroReferral = next;
     delete nrDrafts[p.id];
     nrError = null;
     persistPatients();
-    var MSG = { submitted: 'Referral submitted.', scheduled: 'Appointment scheduled. Referral complete.' };
+    var MSG = { submitted: 'Referral submitted.', accepted: 'Referral accepted.', scheduled: 'Appointment scheduled.',
+      examined: 'Patient examined. Awaiting the report.', reported: 'Report received. Referral complete.' };
     showToast(MSG[advance] || 'Changes saved.', 'ok');
     renderNeuroReferrals();
+  }
+  // Reschedule: the appointment date box, ready for the new date.
+  function nrReschedule() {
+    var box = document.getElementById('nrf_apptDate');
+    if (!box) return;
+    box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    box.focus({ preventScroll: true });
+    try { if (box.showPicker) box.showPicker(); } catch (e) { /* the picker needs a click in some browsers */ }
+  }
+  /* No-show: the appointment did not happen. It is kept in the history and the
+     referral goes back to Referral Accepted, waiting for a new date. Works from
+     what is saved; unsaved typing on this referral is dropped. */
+  function nrNoShow() {
+    var p = nrSelectedId ? getPatient(nrSelectedId) : null;
+    var r = p ? nrSaved(p) : null;
+    if (!p || nrStatus(p) !== 'scheduled' || !r.apptDate) return;
+    var when = nrUs(r.apptDate);
+    ctgConfirm('Mark the appointment on ' + when + ' as a no-show? The referral goes back to Referral Accepted, waiting for a new appointment date. The missed date stays in the history.',
+      { title: 'Mark No-show', okLabel: 'Mark No-show', danger: true }).then(function (ok) {
+      if (!ok) return;
+      var next = Object.assign({}, r, { status: 'accepted', apptDate: '', examinedOn: '', reportOn: '' });
+      if (!next.acceptedOn) next.acceptedOn = r.referredOn || nrToday();
+      next.history = nrHistory(r).concat([{ type: 'noshow', date: r.apptDate, at: new Date().toISOString(), by: nrMe() }]);
+      next.updatedAt = new Date().toISOString();
+      next.updatedBy = nrMe();
+      p.neuroReferral = next;
+      delete nrDrafts[p.id];
+      nrError = null;
+      persistPatients();
+      showToast('No-show recorded for ' + when + '. Waiting for a new appointment date.', 'ok');
+      nrFilter = nrFilter === 'all' ? 'all' : 'accepted';
+      renderNeuroReferrals();
+    });
   }
   function nrOpenChart(id) {
     var p = nrFind(id);
@@ -632,14 +735,19 @@
      button on Neurologist Referrals and shares that page's permission
      (SUBPAGE_PARENT in ctg-auth.js / rbac.js). Read-only: a referral is
      changed on its own form (the Open link). */
-  var nrlTab = 'all';           // 'all' | 'submitted' | 'scheduled'
+  var nrlTab = 'all';           // 'all' or a NRL_TABS group
   var nrlQuery = '';
   var nrlSort = { key: 'patient', dir: 1 };
-  var NRL_TABS = [['all', 'All Referrals'], ['submitted', 'Referral Submitted'], ['scheduled', 'Appointment Scheduled']];
+  var NRL_TABS = [['all', 'All Referrals'], ['waiting', 'Awaiting Appointment'], ['scheduled', 'Appointment Scheduled'],
+    ['examined', 'Awaiting Report'], ['reported', 'Report Received']];
+  // Which stages each sheet tab holds.
+  var NRL_GROUP = { waiting: ['submitted', 'accepted'], scheduled: ['scheduled'], examined: ['examined'], reported: ['reported'] };
+  function nrlInTab(st, tab) { return tab === 'all' || (NRL_GROUP[tab] || []).indexOf(st) !== -1; }
   /* The referral's own fields can be edited in the sheet, with the editor
      each needs. The patient's details stay read-only: they come from the
      chart (as on the referral form) and are changed there. */
-  var NRL_EDIT = { status: 'select', referredOn: 'date', apptDate: 'date', partner: 'select', conditionFocus: 'select', notes: 'text' };
+  var NRL_EDIT = { status: 'select', referredOn: 'date', acceptedOn: 'date', apptDate: 'date', examinedOn: 'date', reportOn: 'date',
+    partner: 'select', conditionFocus: 'select', notes: 'text' };
   var nrlSel = null;            // { id, k } of the selected cell, kept across repaints
   var nrlLastTab = null;        // the sheet tab last painted (its rows ease in when it changes)
   var nrlEditing = null;        // { id, k, td, before } while a cell's editor is open
@@ -652,7 +760,11 @@
     { key: 'chart', label: 'Chart', w: 110, link: true, text: 'Open Chart' },
     { key: 'status', label: 'Status', w: 210 },
     { key: 'referredOn', label: 'Date Submitted', w: 170, date: true },
+    { key: 'acceptedOn', label: 'Date Accepted', w: 170, date: true },
     { key: 'apptDate', label: 'Appointment Date', w: 190, date: true },
+    { key: 'apptHistory', label: 'Appointment History', w: 260 },
+    { key: 'examinedOn', label: 'Date Examined', w: 170, date: true },
+    { key: 'reportOn', label: 'Report Received', w: 170, date: true },
     { key: 'partner', label: 'Partner', w: 210 },
     { key: 'conditionFocus', label: 'Condition Focus', w: 190 },
     { key: 'dob', label: 'Date of Birth', w: 150, date: true },
@@ -683,7 +795,8 @@
         id: p.id, st: nrStatus(p),
         patient: typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName),
         status: nrStep(nrStatus(p)).label,
-        referredOn: r.referredOn || '', apptDate: r.apptDate || '',
+        referredOn: r.referredOn || '', acceptedOn: r.acceptedOn || '', apptDate: r.apptDate || '',
+        apptHistory: nrHistoryText(r), examinedOn: r.examinedOn || '', reportOn: r.reportOn || '',
         partner: f.partner || NR_CHOSEN.partner, conditionFocus: f.conditionFocus || NR_CHOSEN.conditionFocus,
         dob: nrIsoDate(d.dob), phone: c.phone, email: c.email, state: c.state, zip: c.zip, language: c.language,
         doi: nrDoi(p), day1: nrDay1Date(p), injury: nrInjury(p), lawFirm: d.lawFirm || '', mrn: d.mrn || '',
@@ -697,7 +810,7 @@
     var q = nrlQuery.trim().toLowerCase(), k = nrlSort.key, dir = nrlSort.dir;
     var sortKey = k === 'updated' ? 'updatedSort' : k;
     return nrlAllRows().filter(function (r) {
-      if (nrlTab !== 'all' && r.st !== nrlTab) return false;
+      if (!nrlInTab(r.st, nrlTab)) return false;
       if (!q) return true;
       return [r.patient, r.partner, r.conditionFocus, r.phone, r.email, r.lawFirm, r.mrn, r.notes, r.injury].join(' ').toLowerCase().indexOf(q) !== -1;
     }).sort(function (a, b) {
@@ -716,11 +829,11 @@
     var mount = document.getElementById('neuroReferralLogMount');
     if (!mount) return;
     var all = nrlAllRows(), rows = nrlRows();
-    var n = { all: all.length, submitted: 0, scheduled: 0 };
-    all.forEach(function (r) { n[r.st]++; });
+    var n = { all: all.length };
+    NRL_TABS.forEach(function (t) { if (t[0] !== 'all') n[t[0]] = all.filter(function (r) { return nrlInTab(r.st, t[0]); }).length; });
 
     var h = '<div class="rf-head"><div class="rf-head-t"><h1>Neurologist Referral Log</h1>'
-      + '<p>Every Virginia patient whose neurologist referral has been submitted or scheduled, in one sheet. Download it as Excel or CSV.</p></div>'
+      + '<p>Every Virginia patient whose neurologist referral has been submitted, from referral to report, in one sheet. Download it as Excel or CSV.</p></div>'
       + '<div class="rf-head-actions">'
       + '<button type="button" class="btn btn-ghost" data-onclick="showPage(\'neuroReferrals\')">' + nrIcon('back') + 'Neurologist Referrals</button>'
       + '<button type="button" class="btn btn-ghost" data-onclick="nrlDownload(\'csv\')">' + nrIcon('download') + 'Download CSV</button>'
@@ -738,6 +851,7 @@
         + '<div class="nrs-meta">'
           + '<span class="nrs-key">' + nrIcon('pencil', 'nrs-key-i') + 'Editable columns: double-click a cell</span>'
           + '<span class="nrs-key"><i class="nrs-key-sw" aria-hidden="true"></i>Yellow rows: awaiting an appointment</span>'
+          + '<span class="nrs-key"><i class="nrs-key-sw nrs-key-rep" aria-hidden="true"></i>Blue rows: awaiting the report</span>'
           + '<span class="nrs-count">' + rows.length + (rows.length === 1 ? ' row' : ' rows') + ' · sorted by ' + nrEsc(nrlSortLabel()) + '</span>'
         + '</div>'
       + '</div>'
@@ -828,9 +942,13 @@
   // What the log holds at a glance, as the tiles on Neurologist Referrals.
   function nrlKpisHTML(all, n) {
     var today = nrToday();
-    var waits = all.filter(function (r) { return r.st === 'submitted'; }).map(function (r) { return nrDaysSince(r.referredOn); })
-      .filter(function (d) { return d !== null; });
-    var longest = waits.length ? Math.max.apply(null, waits) : null;
+    var since = function (st, field) {
+      var w = all.filter(function (r) { return st.indexOf(r.st) !== -1; }).map(function (r) { return nrDaysSince(r[field]); })
+        .filter(function (d) { return d !== null; });
+      return w.length ? Math.max.apply(null, w) : null;
+    };
+    var days = function (d) { return d + (d === 1 ? ' day' : ' days'); };
+    var waitAppt = since(['submitted', 'accepted'], 'referredOn'), waitReport = since(['examined'], 'examinedOn');
     var upcoming = all.filter(function (r) { return r.st === 'scheduled' && r.apptDate >= today; })
       .sort(function (a, b) { return a.apptDate.localeCompare(b.apptDate); });
     var next = upcoming[0];
@@ -839,12 +957,13 @@
         + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
         + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
     }
-    return '<div class="nr-kpis">'
-      + tile('k-total', 'sheet', 'Referrals in Log', n.all, 'Submitted or scheduled')
-      + tile('k-pending', 'clock', 'Awaiting Appointment', n.submitted,
-          longest === null ? 'None waiting' : 'Longest wait: ' + longest + (longest === 1 ? ' day' : ' days') + ' since submitted')
-      + tile('k-done', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming.length + ' upcoming')
+    return '<div class="nr-kpis nr-kpis-6">'
+      + tile('k-total', 'sheet', 'Referrals in Log', n.all, 'Submitted, through to report')
+      + tile('k-pending', 'clock', 'Awaiting Appointment', n.waiting, waitAppt === null ? 'None waiting' : 'Longest wait: ' + days(waitAppt) + ' since submitted')
+      + tile('k-sched', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming.length + ' upcoming')
       + tile('k-progress', 'send', 'Next Appointment', next ? nrEsc(nrUs(next.apptDate)) : '—', next ? nrEsc(next.patient) : 'Nothing upcoming')
+      + tile('k-exam', 'exam', 'Awaiting Report', n.examined, waitReport === null ? 'No reports outstanding' : 'Longest since exam: ' + days(waitReport))
+      + tile('k-done', 'report', 'Report Received', n.reported, 'Referral complete')
       + '</div>';
   }
 
@@ -952,46 +1071,69 @@
     nrlFocusGrid();
   }
   /* Saves one edited field on the referral, keeping the stages consistent the
-     way the referral form does: an appointment date on a submitted referral
-     schedules it, clearing it sends it back; Appointment Scheduled needs a
-     date; a move back a stage clears the later dates, after a confirmation. */
+     way the referral form does. A stage's date entered on a referral not yet
+     there moves it there; clearing the current stage's date moves it back one
+     stage. From Scheduled on, the appointment date is needed; changing it on a
+     scheduled referral is a reschedule, kept in the history. Moving back a
+     stage clears the later dates, after a confirmation. */
+  function nrlStepOfDate(k) { for (var i = 0; i < NR_STEPS.length; i++) if (NR_STEPS[i].date === k) return i; return -1; }
   function nrlCommit(id, k, v) {
     var p = getPatient(id);
     if (!p) { renderNeuroReferralLog(); return; }
-    var r = Object.assign({}, nrSaved(p));
+    var saved = nrSaved(p);
+    var r = Object.assign({}, saved);
     r.form = Object.assign({}, r.form || {});
+    r.history = nrHistory(saved);
     r.status = nrStatus(p);
+    var cur = NR_STEP_KEYS.indexOf(r.status), sched = NR_STEP_KEYS.indexOf('scheduled');
     var msg = 'Saved.', confirmText = '';
+    var refuse = function (text, cell) {
+      showToast(text, 'err');
+      if (cell) nrlSel = { id: nrIdArg(id), k: cell };
+      renderNeuroReferralLog(); nrlFocusGrid();
+    };
     if (NR_CHOSEN[k] !== undefined) r.form[k] = v;
     else if (k === 'notes') r.notes = v.trim();
-    else if (k === 'referredOn') r.referredOn = v;
-    else if (k === 'apptDate') {
-      r.apptDate = v;
-      if (v && r.status === 'submitted') { r.status = 'scheduled'; msg = 'Appointment date saved. Moved to Appointment Scheduled.'; }
-      else if (!v && r.status === 'scheduled') { r.status = 'submitted'; msg = 'Appointment date cleared. Moved back to Referral Submitted.'; }
+    else if (nrlStepOfDate(k) !== -1) {
+      var si = nrlStepOfDate(k);
+      if (v) {
+        if (k === 'apptDate' && r.status === 'scheduled' && saved.apptDate && v !== saved.apptDate) {
+          r.history.push({ type: 'rescheduled', from: saved.apptDate, to: v, at: new Date().toISOString(), by: nrMe() });
+          msg = 'Appointment rescheduled to ' + nrUs(v) + '. The earlier date is kept in the history.';
+        }
+        r[k] = v;
+        if (si > cur) {
+          if (si > sched && !r.apptDate) return refuse('Enter the Appointment Date first.', 'apptDate');
+          r.status = NR_STEP_KEYS[si];
+          msg = NR_STEPS[si].dateLabel + ' saved. Moved to ' + NR_STEPS[si].label + '.';
+        }
+      } else {
+        if (k === 'apptDate' && cur > sched) return refuse('A referral past Appointment Scheduled needs its appointment date.', 'apptDate');
+        r[k] = '';
+        if (si === cur) {
+          r.status = NR_STEP_KEYS[cur - 1];
+          msg = NR_STEPS[si].dateLabel + ' cleared. Moved back to ' + NR_STEPS[cur - 1].label + '.';
+        }
+      }
     } else if (k === 'status') {
-      if (v === 'scheduled' && !r.apptDate) {
-        showToast('Enter the Appointment Date first. Adding it marks the referral scheduled.', 'err');
-        nrlSel = { id: nrIdArg(id), k: 'apptDate' };
-        renderNeuroReferralLog(); nrlFocusGrid();
-        return;
-      }
-      if (v === 'submitted') {
-        if (r.apptDate) confirmText = 'Move back to Referral Submitted? The appointment date (' + nrUs(r.apptDate) + ') will be cleared.';
-        r.apptDate = '';
-        if (!r.referredOn) r.referredOn = nrToday();
-      }
-      if (v === 'pending') {
-        confirmText = 'Move back to Pending Referral? Its referral dates will be cleared and it will leave this log. It stays on Neurologist Referrals.';
-        r.referredOn = ''; r.apptDate = '';
+      var vi = NR_STEP_KEYS.indexOf(v);
+      if (vi >= sched && !r.apptDate) return refuse('Enter the Appointment Date first. Adding it marks the referral scheduled.', 'apptDate');
+      if (vi < cur) {
+        // Moving back: the dates of the stages after it are cleared.
+        var lost = NR_STEPS.filter(function (s, i) { return i > vi && s.date && r[s.date]; });
+        if (vi === 0) confirmText = 'Move back to Pending Referral? Its referral dates will be cleared and it will leave this log. It stays on Neurologist Referrals.';
+        else if (lost.length) confirmText = 'Move back to ' + NR_STEPS[vi].label + '? ' + lost.map(function (s) { return s.dateLabel + ' (' + nrUs(r[s.date]) + ')'; }).join(', ') + ' will be cleared.';
+        NR_STEPS.forEach(function (s, i) { if (i > vi && s.date) r[s.date] = ''; });
+      } else {
+        // Moving on: each stage reached gets its date if it has none and the date is simply the day.
+        NR_STEPS.forEach(function (s, i) { if (i > cur && i <= vi && s.today && !r[s.date]) r[s.date] = nrStepDefault(s, r); });
       }
       r.status = v;
       msg = 'Status changed to ' + nrStep(v).label + '.';
     }
     var apply = function () {
-      var me = typeof window.ctgCurrentUser === 'function' ? window.ctgCurrentUser() : null;
       r.updatedAt = new Date().toISOString();
-      r.updatedBy = me ? (me.displayName || me.username || '') : '';
+      r.updatedBy = nrMe();
       p.neuroReferral = r;
       persistPatients();
       showToast(msg, 'ok');
@@ -1108,19 +1250,25 @@
       return '<c r="' + ref + '" t="inlineStr" s="' + s + '"><is><t xml:space="preserve">' + nrlXml(v) + '</t></is></c>';
     };
     var row = function (n, ht, cells) { return '<row r="' + n + '" ht="' + ht + '" customHeight="1">' + cells + '</row>'; };
-    var n = { submitted: 0, scheduled: 0 };
+    var n = {};
+    NR_STEP_KEYS.forEach(function (k) { n[k] = 0; });
     rows.forEach(function (r) { n[r.st]++; });
+    var counts = NR_STEPS.filter(function (st) { return st.key !== 'pending' && n[st.key]; })
+      .map(function (st) { return n[st.key] + ' ' + st.label; }).join(', ');
+    // Status cells coloured by stage, as on screen: [text, fill].
+    var ST_XL = { submitted: ['0077B6', 'E0F2FE'], accepted: ['5B21B6', 'EDE9FE'], scheduled: ['0E7490', 'CFFAFE'],
+      examined: ['9A3412', 'FFEDD5'], reported: ['15803D', 'DCFCE7'] };
 
     var W = 'FFFFFF';   // the heading block's white fill
     var out = [
       row(1, 30, text('A1', 'Neurologist Referral Log', S.get({ size: 18, bold: true, color: '03045E', fill: W }))),
       row(2, 18, text('A2', 'Concussion Therapy Group · Patients whose incident occurred in Virginia (Day 1 Location / Jurisdiction) '
-        + 'and whose neurologist referral has been submitted or scheduled.', S.get({ color: '475569', fill: W }))),
+        + 'and whose neurologist referral has been submitted, from referral to report.', S.get({ color: '475569', fill: W }))),
       row(3, 20, text('A3', 'View: ' + meta.view + '   ·   ' + rows.length + (rows.length === 1 ? ' referral' : ' referrals')
-        + ' (' + n.submitted + ' Referral Submitted, ' + n.scheduled + ' Appointment Scheduled)'
+        + (counts ? ' (' + counts + ')' : '')
         + (meta.search ? '   ·   Search: "' + meta.search + '"' : '') + '   ·   Sorted by ' + meta.sort,
         S.get({ bold: true, color: '0F172A', fill: W }))),
-      row(4, 18, text('A4', 'Yellow rows: referral submitted, still awaiting an appointment. Use the filter arrows on the header row to sort or filter.'
+      row(4, 18, text('A4', 'Yellow rows: still awaiting an appointment. Blue rows: examined, awaiting the report. Use the filter arrows on the header row to sort or filter.'
         + '   Generated ' + meta.when + (meta.by ? ' by ' + meta.by : '') + ' from CTG One.', S.get({ size: 10, color: '475569', fill: W }))),
       row(5, 18, text('A5', 'CONFIDENTIAL: contains protected health information (PHI). Store and share it only as the practice’s HIPAA policy allows.',
         S.get({ size: 10, bold: true, color: 'B42318', fill: W }))),
@@ -1131,11 +1279,12 @@
     ];
     rows.forEach(function (r, ri) {
       var rn = H + 1 + ri;
-      var fill = r.st === 'submitted' ? 'FFF8E1' : (ri % 2 ? 'F5F8FB' : null);
+      var fill = r.st === 'submitted' || r.st === 'accepted' ? 'FFF8E1' : r.st === 'examined' ? 'EAF4FF' : (ri % 2 ? 'F5F8FB' : null);
       out.push(row(rn, 22, cols.map(function (c, ci) {
         var ref = nrlColLetter(ci) + rn;
         if (c.key === 'status') {
-          return text(ref, r.status, S.get({ bold: true, border: true, color: r.st === 'submitted' ? '0077B6' : '15803D', fill: r.st === 'submitted' ? 'E0F2FE' : 'DCFCE7' }));
+          var sc = ST_XL[r.st] || ST_XL.submitted;
+          return text(ref, r.status, S.get({ bold: true, border: true, color: sc[0], fill: sc[1] }));
         }
         if (c.date) {
           var d = nrlSerial(r[c.key]), s = S.get({ border: true, date: true, fill: fill });
@@ -1239,6 +1388,8 @@
   window.nrSetStep = nrSetStep;
   window.nrSave = nrSave;
   window.nrOpenChart = nrOpenChart;
+  window.nrReschedule = nrReschedule;
+  window.nrNoShow = nrNoShow;
   window.nrSetFilter = nrSetFilter;
   window.nrSearch = nrSearch;
   window.nrSearchClear = nrSearchClear;
