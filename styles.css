@@ -14405,6 +14405,13 @@ body.topbar-has-tabs:not(.auth-active) #page-day1 .pt-strip{ margin-bottom:18px!
 .nr-kpis.nr-kpis-6{grid-template-columns:repeat(6,minmax(0,1fr))}
 @media(max-width:1500px){.nr-kpis.nr-kpis-6{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.nr-kpis.nr-kpis-6{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Neurologist Referrals boxes: just the number and what it counts; a thin edge in that step's color. */
+.nr-st-total{--st:#00B4D8}
+.nr-kpis.nr-kpis-plain{grid-auto-rows:1fr}
+.nr-kpi.nr-kpi-plain{position:relative;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;padding:18px 20px 18px 24px;min-height:96px;overflow:hidden}
+.nr-kpi.nr-kpi-plain::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:4px;border-radius:0 4px 4px 0;background:var(--st)}
+.nr-kpi-plain .nr-kpi-v{font-size:30px;line-height:1}
+.nr-kpi-plain .nr-kpi-l{margin-top:0;font-size:13px;font-weight:600;line-height:1.3;color:var(--muted)}
 .nr-steps .nr-step-t{font-size:12px}
 .nr-appt-actions{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 14px}
 .nr-appt-actions .rf-btn{min-height:40px}

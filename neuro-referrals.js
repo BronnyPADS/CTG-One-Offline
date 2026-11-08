@@ -334,28 +334,18 @@
 
   function nrKpisHTML(all) {
     var n = nrCounts(all);
-    var today = nrToday();
-    var upcoming = all.filter(function (p) { return nrStatus(p) === 'scheduled' && String(nrSaved(p).apptDate || '') >= today; }).length;
-    var oldest = all.filter(function (p) { return nrStatus(p) === 'pending'; })
-      .reduce(function (m, p) { var d = nrDaysSince(nrDay1Date(p)); return d !== null && d > m ? d : m; }, -1);
-    function tile(cls, icon, label, value, sub) {
-      return '<div class="nr-kpi ' + cls + '"><span class="nr-kpi-i">' + nrIcon(icon) + '</span>'
-        + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
-        + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
+    // Just the number and what it counts; the colored edge matches that step's color in the status steps.
+    function tile(st, label, value) {
+      return '<div class="nr-kpi nr-kpi-plain nr-st-' + st + '"><div class="nr-kpi-v">' + value + '</div>'
+        + '<div class="nr-kpi-l">' + label + '</div></div>';
     }
-    var longestSince = function (key, field) {
-      return all.filter(function (p) { return nrStatus(p) === key; })
-        .reduce(function (m, p) { var d = nrDaysSince(nrSaved(p)[field]); return d !== null && d > m ? d : m; }, -1);
-    };
-    var waitReport = longestSince('examined', 'examinedOn');
-    var days = function (d) { return d + (d === 1 ? ' day' : ' days'); };
-    return '<div class="nr-kpis nr-kpis-6">'
-      + tile('k-total', 'pin', 'Virginia Patients', all.length, 'Incident location: Virginia')
-      + tile('k-pending', 'clock', 'Pending Referral', n.pending, oldest < 0 ? 'No patients awaiting referral' : 'Longest wait: ' + days(oldest))
-      + tile('k-progress', 'send', 'Awaiting Appointment', n.submitted + n.accepted, n.submitted + ' submitted · ' + n.accepted + ' accepted')
-      + tile('k-sched', 'calendar', 'Appointment Scheduled', n.scheduled, upcoming + ' upcoming')
-      + tile('k-exam', 'exam', 'Awaiting Report', n.examined, waitReport < 0 ? 'No reports outstanding' : 'Longest since exam: ' + days(waitReport))
-      + tile('k-done', 'report', 'Report Received', n.reported, 'Referral complete')
+    return '<div class="nr-kpis nr-kpis-6 nr-kpis-plain">'
+      + tile('total', 'Virginia Patients', all.length)
+      + tile('pending', 'Pending Referral', n.pending)
+      + tile('submitted', 'Awaiting Appointment', n.submitted + n.accepted)
+      + tile('scheduled', 'Appointment Scheduled', n.scheduled)
+      + tile('examined', 'Awaiting Report', n.examined)
+      + tile('reported', 'Report Received', n.reported)
       + '</div>';
   }
 
