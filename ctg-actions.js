@@ -127,7 +127,7 @@
     'nbRefresh', 'nbRemoveLine', 'nbSaveBill', 'nbSearch', 'nbSelect', 'nbSetFilter', 'nbSigRemove', 'nbSigUpload', 'nfCheckToken',
     'nfLoadStatus', 'nfProbe', 'nfProbeFake', 'nfProbeKey', 'nfToggleRaw', 'notesFormEditLink', 'notesFormLoad',
     'notifSetActive', 'notifSetMedium', 'npBackdrop', 'npClosePay', 'npDeletePay', 'npOpenPay', 'npSavePay',
-    'npSearch', 'npSetTab', 'npToggle', 'nrField', 'nrItemKey', 'nrJump', 'nrNoShow', 'nrOpenChart', 'nrRefresh', 'nrReschedule', 'nrSave', 'nrSearch',
+    'npSearch', 'npSetTab', 'npToggle', 'nrField', 'nrItemKey', 'nrNoShow', 'nrOpenChart', 'nrRefresh', 'nrReschedule', 'nrSave', 'nrSearch',
     'nrSearchClear', 'nrSelect', 'nrSetFilter', 'nrSetStep', 'nrTrack', 'nrlCellClick', 'nrlDownload',
     'nrlOpenReferral', 'nrlSearch', 'nrlSetTab', 'nrlSortBy', 'openApptModal', 'openArChargeModal',
     'openArPaymentModal', 'openBillingTableEditor', 'openChangePassword', 'openDailyNoteForPatient',

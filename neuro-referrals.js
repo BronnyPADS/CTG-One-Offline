@@ -291,12 +291,11 @@
     var rows = nrRows(all);
     if (!rows.some(function (p) { return p.id === nrSelectedId; })) nrSelectedId = rows.length ? rows[0].id : null;
     nrPaint(mount, 'page-neuroReferrals', nrHeaderHTML() + nrKpisHTML(all) + nrToolbarHTML(all)
-      + (all.length ? '<div class="nr-split">' + nrSideHTML(rows, all) + nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null) + '</div>'
+      + (all.length ? '<div class="nr-split">' + nrListHTML(rows) + nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null) + '</div>'
         : nrEmptyHTML('No Virginia patients yet',
           'Patients appear here once their Day 1 is saved with Location / Jurisdiction set to Virginia.')),
       [nrFilter !== nrLastFilter && '.nr-list', nrSelectedId !== nrLastSel && '.nr-form']);
     nrLastSel = nrSelectedId; nrLastFilter = nrFilter;
-    nrBars(mount);
   }
 
   function nrRows(all) {
@@ -414,91 +413,6 @@
         // The tab already names the stage; only the mixed list needs it per row.
         + (nrFilter === 'all' ? nrPill(st) : '') + '</div>';
     }).join('') + '</div>';
-  }
-
-  /* The side panel (8 Nov 2026): the patient list, then where every referral
-     stands, the appointments coming up and who has waited longest - so the
-     column beside the form is useful however few patients there are. It stays
-     in view while the form scrolls. */
-  function nrSideHTML(rows, all) {
-    return '<div class="nr-side">' + nrListHTML(rows) + nrPipelineHTML(all) + nrComingHTML(all) + nrWaitingHTML(all) + '</div>';
-  }
-  function nrSideCard(icon, title, note, body) {
-    return '<div class="nr-sidecard card"><div class="nr-sidecard-h">' + nrIcon(icon) + '<b>' + title + '</b>'
-      + (note ? '<span>' + note + '</span>' : '') + '</div>' + body + '</div>';
-  }
-  // Every stage with its count and a bar; picking one shows those patients.
-  function nrPipelineHTML(all) {
-    var n = nrCounts(all), most = 1;
-    NR_STEP_KEYS.forEach(function (k) { if (n[k] > most) most = n[k]; });
-    return nrSideCard('sheet', 'Referral Pipeline', all.length + (all.length === 1 ? ' patient' : ' patients'), NR_STEPS.map(function (st) {
-      var on = nrFilter === st.key;
-      return '<button type="button" class="nr-pipe-row nr-st-' + st.key + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-onclick="nrSetFilter(\'' + st.key + '\')">'
-        + '<span class="nr-pipe-i">' + nrIcon(st.icon) + '</span><span class="nr-pipe-l">' + st.label + '</span>'
-        + '<span class="nr-pipe-n">' + n[st.key] + '</span>'
-        + '<span class="nr-pipe-bar" aria-hidden="true"><i data-pct="' + Math.round(n[st.key] / most * 100) + '"></i></span></button>';
-    }).join(''));
-  }
-  // Whole days from today to an ISO date (negative when it has passed).
-  function nrDaysUntil(iso) {
-    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
-    if (!m) return null;
-    var now = new Date(); now.setHours(0, 0, 0, 0);
-    return Math.round((new Date(+m[1], +m[2] - 1, +m[3]) - now) / 86400000);
-  }
-  var NR_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function nrName(p) {
-    var d = p.demographics || {};
-    return typeof naturalPatientName === 'function' ? naturalPatientName(p) : [d.firstName, d.lastName].filter(Boolean).join(' ');
-  }
-  // The next neurologist appointments, soonest first.
-  function nrComingHTML(all) {
-    var today = nrToday();
-    var list = all.filter(function (p) { return nrStatus(p) === 'scheduled' && String(nrSaved(p).apptDate || '') >= today; })
-      .sort(function (a, b) { return String(nrSaved(a).apptDate).localeCompare(String(nrSaved(b).apptDate)); });
-    var body = list.length ? list.slice(0, 5).map(function (p) {
-      var iso = nrSaved(p).apptDate, d = nrDaysUntil(iso);
-      return '<button type="button" class="nr-mini" data-onclick="nrJump(\'' + nrIdArg(p.id) + '\')">'
-        + '<span class="nr-mini-date"><b>' + Number(iso.slice(8, 10)) + '</b><i>' + NR_MON[Number(iso.slice(5, 7)) - 1] + '</i></span>'
-        + '<span class="nr-mini-t"><b>' + nrEsc(nrName(p)) + '</b><span>' + (d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : 'In ' + d + ' days') + '</span></span></button>';
-    }).join('') + (list.length > 5 ? '<div class="nr-sidecard-more">and ' + (list.length - 5) + ' more on the Scheduled tab</div>' : '')
-      : '<div class="nr-sidecard-empty">No appointments booked yet. A referral shows here once its appointment is scheduled.</div>';
-    return nrSideCard('calendar', 'Coming Up', list.length ? list.length + ' booked' : '', body);
-  }
-  // Who has waited longest where they are: since Day 1, since submitted, or since the exam.
-  function nrWaitingHTML(all) {
-    var list = all.map(function (p) {
-      var r = nrSaved(p), st = nrStatus(p);
-      var from = st === 'pending' ? nrDay1Date(p) : st === 'submitted' ? r.referredOn : st === 'accepted' ? (r.acceptedOn || r.referredOn) : st === 'examined' ? r.examinedOn : null;
-      var days = from ? nrDaysSince(from) : null;
-      return days === null ? null : { p: p, st: st, days: days };
-    }).filter(Boolean).sort(function (a, b) { return b.days - a.days; });
-    var why = { pending: 'Waiting to be referred', submitted: 'Waiting for the neurologist to accept', accepted: 'Waiting for an appointment date', examined: 'Waiting for the report' };
-    var body = list.length ? list.slice(0, 4).map(function (x) {
-      return '<button type="button" class="nr-mini nr-st-' + x.st + '" data-onclick="nrJump(\'' + nrIdArg(x.p.id) + '\')">'
-        + '<span class="nr-mini-days"><b>' + x.days + '</b><i>' + (x.days === 1 ? 'day' : 'days') + '</i></span>'
-        + '<span class="nr-mini-t"><b>' + nrEsc(nrName(x.p)) + '</b><span>' + why[x.st] + '</span></span></button>';
-    }).join('')
-      : '<div class="nr-sidecard-empty">Nobody is waiting: every referral is booked or complete.</div>';
-    return nrSideCard('clock', 'Waiting the Longest', '', body);
-  }
-  // The bars take their width once drawn (a style attribute is not allowed here; the CSSOM is).
-  function nrBars(mount) {
-    if (!mount) return;
-    var bars = mount.querySelectorAll('.nr-pipe-bar i[data-pct]');
-    requestAnimationFrame(function () {
-      Array.prototype.forEach.call(bars, function (b) { b.style.width = Math.max(0, Math.min(100, Number(b.getAttribute('data-pct')) || 0)) + '%'; });
-    });
-  }
-  // Open a patient from the side panel, on the tab that holds them.
-  function nrJump(id) {
-    var p = nrFind(id);
-    if (!p) return;
-    nrFilter = nrStatus(p);
-    nrQuery = '';
-    nrSelectedId = p.id;
-    nrError = null;
-    renderNeuroReferrals();
   }
 
   function nrSelectHTML(field, value, options, required) {
@@ -1477,7 +1391,6 @@
   window.nrReschedule = nrReschedule;
   window.nrNoShow = nrNoShow;
   window.nrSetFilter = nrSetFilter;
-  window.nrJump = nrJump;
   window.nrSearch = nrSearch;
   window.nrSearchClear = nrSearchClear;
   window.nrRefresh = nrRefresh;
