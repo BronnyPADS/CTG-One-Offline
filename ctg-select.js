@@ -30,14 +30,20 @@
     var panel = document.createElement('div');
     panel.className = 'ctg-sel-panel';
     panel.setAttribute('role', 'listbox');
+    panel._opts = [];
     var opts = sel.options;
+    /* A dropdown that takes typed choices (data-addable, app.js) has a Type Here
+       box with Add right under its first row, as the Injury Event Type list does
+       (9 Nov 2026); its "+ Type Here / Add" choice is for the plain dropdown only. */
+    var addable = sel.hasAttribute('data-addable') && typeof window.ctgAddableAdd === 'function';
     for (var i = 0; i < opts.length; i++) {
       (function (o, idx) {
         var it = document.createElement('div');
         it.className = 'ctg-sel-opt';
         it.textContent = o.textContent;
         it.setAttribute('role', 'option');
-        if (o.disabled) it.classList.add('disabled');
+        if (o.disabled || (addable && o.value === '__ctgAdd')) it.classList.add('disabled');
+        if (addable && o.value === '__ctgAdd') it.classList.add('ctg-sel-hidden');
         if (idx === sel.selectedIndex) { it.classList.add('sel'); it.setAttribute('aria-selected', 'true'); }
         it.addEventListener('mousedown', function (ev) {
           ev.preventDefault();
@@ -46,9 +52,33 @@
         });
         it.addEventListener('mouseenter', function () { setHl(panel, idx); });
         panel.appendChild(it);
+        panel._opts.push(it);
+        if (addable && idx === 0) panel.appendChild(addRow(sel));
       })(opts[i], i);
     }
     return panel;
+  }
+
+  function addRow(sel) {
+    var row = document.createElement('div');
+    row.className = 'ctg-sel-add';
+    var inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = 'Type Here'; inp.maxLength = 120;
+    inp.setAttribute('aria-label', 'Type a new choice');
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = 'Add';
+    var go = function () {
+      if (!inp.value.trim()) { inp.focus(); return; }
+      if (window.ctgAddableAdd(sel, inp.value)) { closePanel(); try { sel.focus(); } catch (e) {} }
+    };
+    btn.addEventListener('click', go);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); go(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closePanel(); try { sel.focus(); } catch (x) {} }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); try { sel.focus(); } catch (x) {} moveHl(1); }
+    });
+    row.appendChild(inp); row.appendChild(btn);
+    return row;
   }
 
   function positionPanel(sel, panel) {
@@ -71,7 +101,7 @@
     openPanel = panel; openSel = sel;
     positionPanel(sel, panel);
     hlIndex = sel.selectedIndex;
-    if (hlIndex >= 0 && panel.children[hlIndex]) panel.children[hlIndex].classList.add('hl');
+    if (hlIndex >= 0 && panel._opts[hlIndex]) panel._opts[hlIndex].classList.add('hl');
     scrollToHl(panel, hlIndex);
     document.addEventListener('mousedown', onDocDown, true);
     window.addEventListener('scroll', onScrollAway, true);
@@ -79,12 +109,12 @@
   }
 
   function setHl(panel, i) {
-    var kids = panel.children;
+    var kids = panel._opts;
     for (var j = 0; j < kids.length; j++) kids[j].classList.toggle('hl', j === i);
     hlIndex = i;
   }
   function scrollToHl(panel, i) {
-    var el = panel.children[i];
+    var el = panel._opts[i];
     if (el) try { el.scrollIntoView({ block: 'nearest' }); } catch (e) {}
   }
 
@@ -100,10 +130,10 @@
 
   function moveHl(dir) {
     if (!openPanel) return;
-    var n = openPanel.children.length, i = hlIndex;
+    var rows = openPanel._opts, n = rows.length, i = hlIndex;
     for (var k = 0; k < n; k++) {
       i = (i + dir + n) % n;
-      if (!openPanel.children[i].classList.contains('disabled')) { setHl(openPanel, i); scrollToHl(openPanel, i); break; }
+      if (!rows[i].classList.contains('disabled')) { setHl(openPanel, i); scrollToHl(openPanel, i); break; }
     }
   }
 

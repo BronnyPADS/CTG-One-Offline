@@ -12686,6 +12686,17 @@ function ctgAddableOption(sel,text){
   sel.insertBefore(o,sel.querySelector('option[value="'+CTG_ADDABLE+'"]'))
   return o
 }
+// Adds a typed choice to the dropdown, selects it and remembers it for everyone. The Type
+// Here box inside the styled list (ctg-select.js) and the one under the plain dropdown use it.
+function ctgAddableAdd(sel,text){
+  const o=ctgAddableOption(sel,text)
+  if(!o)return false
+  if(o.dataset.custom)ctgChoiceMemory.add('select:'+sel.id,o.value)
+  sel.value=o.value
+  sel.dispatchEvent(new Event('input',{bubbles:true}));sel.dispatchEvent(new Event('change',{bubbles:true}))
+  return true
+}
+window.ctgAddableAdd=ctgAddableAdd
 function ctgAddableApplyRemembered(){
   document.querySelectorAll('select[data-addable]').forEach(sel=>ctgChoiceMemory.get('select:'+sel.id).forEach(t=>ctgAddableOption(sel,t)))
 }
@@ -12704,11 +12715,8 @@ function ctgAddableSetup(sel){
   let prev=sel.value
   const close=()=>{row.hidden=true;inp.value=''}
   const doAdd=()=>{
-    const o=ctgAddableOption(sel,inp.value)
-    if(!o){inp.focus();return}
-    if(o.dataset.custom)ctgChoiceMemory.add('select:'+sel.id,o.value)
-    sel.value=o.value;prev=o.value;close()
-    sel.dispatchEvent(new Event('input',{bubbles:true}));sel.dispatchEvent(new Event('change',{bubbles:true}))
+    if(!ctgAddableAdd(sel,inp.value)){inp.focus();return}
+    prev=sel.value;close()
     try{sel.focus()}catch(e){}
   }
   // Picking "+ Type Here / Add" keeps the answer as it was until a choice is added.

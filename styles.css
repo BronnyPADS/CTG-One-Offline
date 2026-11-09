@@ -14762,3 +14762,10 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .ctg-add-row button{flex:none;height:34px;padding:0 12px;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}
 .ctg-add-ok{border:1px solid var(--accent);background:var(--accent);color:#fff}
 .ctg-add-no{border:1px solid var(--border);background:var(--surface);color:var(--muted)}
+/* The Type Here / Add row inside the styled dropdown list, as on Injury Event Type (9 Nov 2026). */
+.ctg-sel-panel .ctg-sel-hidden{display:none}
+.ctg-sel-add{display:flex;align-items:center;gap:8px;padding:8px 10px;margin:2px 0 4px;border-bottom:1px solid var(--border)}
+.ctg-sel-add input{flex:1;min-width:0;height:36px;padding:6px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:inherit;font-size:13.5px}
+.ctg-sel-add input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,119,182,.14)}
+.ctg-sel-add button{flex:none;height:36px;padding:0 18px;border:0;border-radius:10px;background:#0077B6;color:#fff;font:inherit;font-size:13.5px;font-weight:800;cursor:pointer}
+.ctg-sel-add button:hover{background:#023E8A}
