@@ -11167,7 +11167,7 @@ function applyAceFormState(state){
     const el=document.getElementById(id);if(!el)return
     el.value=value
     if(el.value!==value){
-      const opt=[...el.options].find(o=>o.text===value||o.value===value)
+      const opt=[...el.options].find(o=>o.text===value||o.value===value)||(el.hasAttribute('data-addable')&&value?ctgAddableOption(el,value):null)
       if(opt)el.value=opt.value
     }
     el.dispatchEvent(new Event('change',{bubbles:true}))
@@ -12670,6 +12670,69 @@ function riskApplyRemembered(){
   RISK_WRITEIN_LISTS.forEach(id=>ctgChoiceMemory.get('list:'+id).forEach(t=>addCustomRiskLabel(id,t,false)))
 }
 ctgChoiceMemory.onChange(riskApplyRemembered)
+/* "+ Type Here / Add..." on a single-choice Day 1 dropdown (9 Nov 2026; History of
+   Migraine Headache first). A <select data-addable> gets it as its last choice:
+   picking it opens a box under the dropdown; Add puts the typed choice in the
+   list, selects it, and remembers it for every patient and staff member
+   (ctgChoiceMemory, list "select:<id>"). The choice saves, prints and shows on
+   the read-only chart like the built-in ones. */
+const CTG_ADDABLE='__ctgAdd'
+function ctgAddableOption(sel,text){
+  const t=String(text==null?'':text).replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim().slice(0,120)
+  if(!sel||!t||t===CTG_ADDABLE)return null
+  const hit=[...sel.options].find(o=>o.value!==CTG_ADDABLE&&(o.value.toLowerCase()===t.toLowerCase()||o.text.toLowerCase()===t.toLowerCase()))
+  if(hit)return hit
+  const o=document.createElement('option');o.value=t;o.textContent=t;o.dataset.custom='1'
+  sel.insertBefore(o,sel.querySelector('option[value="'+CTG_ADDABLE+'"]'))
+  return o
+}
+function ctgAddableApplyRemembered(){
+  document.querySelectorAll('select[data-addable]').forEach(sel=>ctgChoiceMemory.get('select:'+sel.id).forEach(t=>ctgAddableOption(sel,t)))
+}
+function ctgAddableSetup(sel){
+  if(!sel||sel.dataset.addableReady)return
+  sel.dataset.addableReady='1'
+  const add=document.createElement('option');add.value=CTG_ADDABLE;add.textContent='+ Type Here / Add\u2026'
+  sel.appendChild(add)
+  const row=document.createElement('div');row.className='ctg-add-row';row.hidden=true
+  const inp=document.createElement('input');inp.type='text';inp.maxLength=120;inp.placeholder='Type Here'
+  inp.setAttribute('aria-label','New choice for '+(((sel.closest('.fg,.rpr-row,label')||{}).textContent||'this question').replace(/\s+/g,' ').trim().slice(0,60)))
+  const ok=document.createElement('button');ok.type='button';ok.className='ctg-add-ok';ok.textContent='Add'
+  const no=document.createElement('button');no.type='button';no.className='ctg-add-no';no.textContent='Cancel'
+  row.append(inp,ok,no)
+  sel.insertAdjacentElement('afterend',row)
+  let prev=sel.value
+  const close=()=>{row.hidden=true;inp.value=''}
+  const doAdd=()=>{
+    const o=ctgAddableOption(sel,inp.value)
+    if(!o){inp.focus();return}
+    if(o.dataset.custom)ctgChoiceMemory.add('select:'+sel.id,o.value)
+    sel.value=o.value;prev=o.value;close()
+    sel.dispatchEvent(new Event('input',{bubbles:true}));sel.dispatchEvent(new Event('change',{bubbles:true}))
+    try{sel.focus()}catch(e){}
+  }
+  // Picking "+ Type Here / Add" keeps the answer as it was until a choice is added.
+  sel.addEventListener('change',ev=>{
+    if(sel.value===CTG_ADDABLE){
+      ev.stopImmediatePropagation()
+      sel.value=prev
+      row.hidden=false
+      // After the styled list's own focus-back to the dropdown (ctg-select.js choose).
+      setTimeout(()=>inp.focus(),0)
+      return
+    }
+    prev=sel.value
+  })
+  ok.addEventListener('click',doAdd)
+  no.addEventListener('click',()=>{close();try{sel.focus()}catch(e){}})
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();doAdd()}
+    else if(e.key==='Escape'){e.preventDefault();close();try{sel.focus()}catch(x){}}
+  })
+}
+document.querySelectorAll('select[data-addable]').forEach(ctgAddableSetup)
+ctgAddableApplyRemembered()
+ctgChoiceMemory.onChange(ctgAddableApplyRemembered)
 function buildRiskAdditional(containerId){
   const c=document.getElementById(containerId)
   if(!c)return
