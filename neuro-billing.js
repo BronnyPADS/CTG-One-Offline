@@ -265,10 +265,12 @@
       h += '<div class="card"><div class="card-body rf-empty">' + nbIcon('dollar', 'rf-empty-i') + '<b>No referred patients yet</b>'
         + '<p>A patient appears here once their neurologist referral is submitted on Neurologist Referrals.</p></div></div>';
     } else {
-      h += '<div class="nr-split nb-split">' + nbListHTML(rows) + nbFormHTML(nbSelectedId ? getPatient(nbSelectedId) : null) + '</div>';
+      h += '<div class="nr-solo">' + (rows.length ? nbFormHTML(nbSelectedId ? getPatient(nbSelectedId) : null)
+        : '<div class="nr-form card"><div class="nr-list-empty">' + nbEmptyText() + '</div></div>') + '</div>';
     }
-    N().paint(mount, 'page-neuroBilling', h, [nbFilter !== nbLastFilter && '.nr-list', nbSelectedId !== nbLastSel && '.nr-form']);
+    N().paint(mount, 'page-neuroBilling', h, [(nbFilter !== nbLastFilter || nbSelectedId !== nbLastSel) && '.nr-form']);
     nbLastSel = nbSelectedId; nbLastFilter = nbFilter;
+    if (nbPickOpen) nbPickFocus();
   }
 
   function nbRows(all) {
@@ -308,15 +310,64 @@
     return '<div class="rf-toolbar"><div class="rf-tabs">'
       + tab('none', 'Not Entered', n.none) + tab('unpaid', 'Unpaid', n.unpaid) + tab('partial', 'Partially Paid', n.partial)
       + tab('paid', 'Paid in Full', n.paid) + tab('all', 'All', all.length)
-      + '</div>' + nbSearchBox() + '</div>';
+      + '</div>' + nbPickHTML(nbRows(all)) + nbSearchBox() + '</div>';
   }
 
+  function nbEmptyText() {
+    return nbQuery ? 'No patients match “' + esc(nbQuery) + '”.' : nbFilter === 'none' ? 'Every referred patient’s bill has been entered.' : 'No bills at this stage.';
+  }
+
+  /* The patient picker, as on Neurologist Referrals: a pill beside the tabs
+     showing whose bill is open; it drops down the patients in the current tab
+     (and the search matches). */
+  var nbPickOpen = false;
+  function nbPickHTML(rows) {
+    var sel = nbSelectedId && rows.filter(function (p) { return p.id === nbSelectedId; })[0];
+    var open = nbPickOpen && rows.length;
+    var face = sel
+      ? '<span class="nr-av">' + esc(typeof initialsForPatient === 'function' ? initialsForPatient(sel) : '') + '</span><span class="nr-pick-name">' + esc(nbName(sel)) + '</span>'
+      : '<span class="nr-pick-name nr-pick-none">No patients</span>';
+    return '<div class="nr-pick' + (open ? ' open' : '') + (sel && nbIsDirty(sel) ? ' dirty' : '') + '">'
+      + '<button type="button" class="nr-pick-btn" aria-haspopup="listbox" aria-expanded="' + (open ? 'true' : 'false') + '"'
+      + (rows.length ? '' : ' disabled') + ' aria-label="Choose a patient" data-onclick="nbPickToggle()">'
+      + face + '<span class="nr-pick-chev">' + N().icon('chevronDown') + '</span></button>'
+      + '<div class="nr-pick-panel">' + (rows.length ? nbListHTML(rows) : '') + '</div></div>';
+  }
+  function nbPickSet(open) {
+    nbPickOpen = !!open;
+    var box = document.querySelector('#neuroBillingMount .nr-pick');
+    if (!box) return;
+    var can = !!box.querySelector('.nr-item');
+    box.classList.toggle('open', nbPickOpen && can);
+    var btn = box.querySelector('.nr-pick-btn');
+    if (btn) btn.setAttribute('aria-expanded', nbPickOpen && can ? 'true' : 'false');
+  }
+  function nbPickFocus() {
+    var it = document.querySelector('#neuroBillingMount .nr-pick.open .nr-item.active') || document.querySelector('#neuroBillingMount .nr-pick.open .nr-item');
+    var list = it && it.parentNode;
+    if (it && list) list.scrollTop = Math.max(0, it.offsetTop - list.clientHeight / 2);
+    return it;
+  }
+  function nbPickToggle() {
+    nbPickSet(!nbPickOpen);
+    var it = nbPickOpen && nbPickFocus();
+    if (it) it.focus({ preventScroll: true });
+  }
+  // Click outside or press Escape: the dropdown closes.
+  document.addEventListener('click', function (ev) {
+    if (!nbPickOpen) return;
+    var t = ev.target;
+    if (t && t.closest && (t.closest('#neuroBillingMount .nr-pick') || t.closest('#neuroBillingMount .rf-search'))) return;
+    nbPickSet(false);
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (!nbPickOpen || ev.key !== 'Escape') return;
+    nbPickSet(false);
+    var btn = document.querySelector('#neuroBillingMount .nr-pick-btn');
+    if (btn) btn.focus();
+  });
+
   function nbListHTML(rows) {
-    if (!rows.length) {
-      return '<div class="nr-list card"><div class="nr-list-empty">'
-        + (nbQuery ? 'No patients match “' + esc(nbQuery) + '”.' : nbFilter === 'none' ? 'Every referred patient’s bill has been entered.' : 'No bills at this stage.')
-        + '</div></div>';
-    }
     return '<div class="nr-list card" role="listbox" aria-label="Referred patients">' + rows.map(function (p) {
       var d = p.demographics || {}, id = N().idArg(p.id), b = nbBill(p), t = nbTotals(b), st = nbStage(b);
       var when = st === 'none' ? 'No bill entered yet' : 'Billed ' + nbFmt(t.billed) + (t.balance > 0 ? ' · Owed ' + nbFmt(t.balance) : ' · Paid in full');
@@ -536,6 +587,8 @@
     if (flag) flag.hidden = !dirty;
     var item = document.querySelector('#neuroBillingMount .nr-item.active');
     if (item) item.classList.toggle('dirty', dirty);
+    var pick = document.querySelector('#neuroBillingMount .nr-pick');
+    if (pick) pick.classList.toggle('dirty', dirty);
   }
   function nbCurrent() { return nbSelectedId ? getPatient(nbSelectedId) : null; }
   function nbLine(i, key, value) {
@@ -660,11 +713,26 @@
     showToast('Neurologist bill saved.', 'ok');
     renderNeuroBilling();
   }
-  function nbSelect(id) { var p = nbFind(id); if (!p) return; nbSelectedId = p.id; renderNeuroBilling(); }
-  function nbItemKey(ev, id) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nbSelect(id); } }
-  function nbSetFilter(key) { nbFilter = key; renderNeuroBilling(); }
+  function nbSelect(id) {
+    var p = nbFind(id); if (!p) return;
+    nbSelectedId = p.id; nbPickOpen = false;
+    renderNeuroBilling();
+    var btn = document.querySelector('#neuroBillingMount .nr-pick-btn');
+    if (btn) btn.focus({ preventScroll: true });
+  }
+  function nbItemKey(ev, id) {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nbSelect(id); return; }
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      var cur = ev.target && ev.target.closest ? ev.target.closest('.nr-item') : null;
+      var next = cur && (ev.key === 'ArrowDown' ? cur.nextElementSibling : cur.previousElementSibling);
+      if (next) next.focus();
+    }
+  }
+  function nbSetFilter(key) { nbFilter = key; nbPickOpen = false; renderNeuroBilling(); }
   function nbSearch(v) {
     nbQuery = String(v || '');
+    nbPickOpen = !!nbQuery;
     renderNeuroBilling();
     var box = document.getElementById('nbSearch');
     if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
@@ -1121,6 +1189,7 @@
   window.renderNeuroPayments = renderNeuroPayments;
   window.nbSelect = nbSelect;
   window.nbItemKey = nbItemKey;
+  window.nbPickToggle = nbPickToggle;
   window.nbSetFilter = nbSetFilter;
   window.nbSearch = nbSearch;
   window.nbRefresh = nbRefresh;

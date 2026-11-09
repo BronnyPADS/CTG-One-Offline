@@ -123,7 +123,7 @@
     'mtgShareRecording', 'mtgShowTranscript', 'mtgStartInstant', 'mtgStartRecording', 'mtgSubmitNew',
     'mtgToggleDock', 'mtgToggleLiveTranscript', 'mtgToggleMore', 'mtgToggleMute', 'mtgTogglePanel',
     'mtgToggleRecord', 'mtgToggleShare', 'mtgToggleSubtitles', 'mtgToggleTouch', 'mtgToggleVideo', 'mtgTranscribe',
-    'nbAddLine', 'nbClearAssign', 'nbDownloadPdf', 'nbAddCancel', 'nbAddCred', 'nbAddSave', 'nbField', 'nbGoPay', 'nbItemKey', 'nbPickPhysician', 'nbPickPractice', 'nbLine', 'nbOpenReferral',
+    'nbAddLine', 'nbClearAssign', 'nbDownloadPdf', 'nbAddCancel', 'nbAddCred', 'nbAddSave', 'nbField', 'nbGoPay', 'nbItemKey', 'nbPickToggle', 'nbPickPhysician', 'nbPickPractice', 'nbLine', 'nbOpenReferral',
     'nbRefresh', 'nbRemoveLine', 'nbSaveBill', 'nbSearch', 'nbSelect', 'nbSetFilter', 'nbSigRemove', 'nbSigUpload', 'nfCheckToken',
     'nfLoadStatus', 'nfProbe', 'nfProbeFake', 'nfProbeKey', 'nfToggleRaw', 'notesFormEditLink', 'notesFormLoad',
     'notifSetActive', 'notifSetMedium', 'npBackdrop', 'npClosePay', 'npDeletePay', 'npOpenPay', 'npSavePay',
