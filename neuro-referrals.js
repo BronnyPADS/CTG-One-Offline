@@ -93,6 +93,7 @@
     download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+    chevronDown: '<polyline points="6 9 12 15 18 9"/>',
     sortBoth: '<polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>',
     sortUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/>',
     sortDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="18 13 12 19 6 13"/>',
@@ -291,10 +292,12 @@
     var rows = nrRows(all);
     if (!rows.some(function (p) { return p.id === nrSelectedId; })) nrSelectedId = rows.length ? rows[0].id : null;
     nrPaint(mount, 'page-neuroReferrals', nrHeaderHTML() + nrKpisHTML(all) + nrToolbarHTML(all)
-      + (all.length ? '<div class="nr-split">' + nrListHTML(rows) + nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null) + '</div>'
+      + (all.length ? '<div class="nr-solo">' + (rows.length ? nrFormHTML(nrSelectedId ? getPatient(nrSelectedId) : null)
+          : '<div class="nr-form card"><div class="nr-list-empty">' + nrEmptyText() + '</div></div>') + '</div>'
         : nrEmptyHTML('No Virginia patients yet',
           'Patients appear here once their Day 1 is saved with Location / Jurisdiction set to Virginia.')),
-      [nrFilter !== nrLastFilter && '.nr-list', nrSelectedId !== nrLastSel && '.nr-form']);
+      [(nrFilter !== nrLastFilter || nrSelectedId !== nrLastSel) && '.nr-form']);
+    if (nrPickOpen) nrPickFocus();
     nrLastSel = nrSelectedId; nrLastFilter = nrFilter;
   }
 
@@ -358,7 +361,7 @@
     return '<div class="rf-toolbar"><div class="rf-tabs">'
       + NR_STEPS.map(function (s) { return tab(s.key, s.tab, n[s.key]); }).join('')
       + tab('all', 'All', all.length)
-      + '</div><div class="rf-search">' + nrIcon('search')
+      + '</div>' + nrPickHTML(nrRows(all)) + '<div class="rf-search">' + nrIcon('search')
       + '<input id="nrSearch" type="search" autocomplete="off" placeholder="Search patient, account # or firm" value="' + nrEsc(nrQuery) + '" data-oninput="nrSearch(this.value)">'
       + (nrQuery ? '<button type="button" class="rf-search-x" data-onclick="nrSearchClear()" aria-label="Clear search">&times;</button>' : '')
       + '</div></div>';
@@ -369,21 +372,77 @@
     return '<span class="nr-pill nr-st-' + s.key + '">' + nrIcon(s.icon) + s.label + '</span>';
   }
 
+  function nrEmptyText() {
+    return nrQuery ? 'No patients match “' + nrEsc(nrQuery) + '”.'
+      : nrFilter === 'pending' ? 'No referrals pending. Every Virginia patient has been referred.'
+      : 'No patients at this stage.';
+  }
+  function nrInitials(p) {
+    var d = p.demographics || {};
+    return typeof initialsForPatient === 'function' ? initialsForPatient(p) : ((d.firstName || ' ')[0] + (d.lastName || ' ')[0]);
+  }
+  function nrListName(p) {
+    var d = p.demographics || {};
+    return typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName);
+  }
+
+  /* The patient picker: a pill beside the tabs showing who is open; it drops
+     down the patients in the current tab (and the search matches). */
+  var nrPickOpen = false;
+  function nrPickHTML(rows) {
+    var sel = nrSelectedId && rows.filter(function (p) { return p.id === nrSelectedId; })[0];
+    var open = nrPickOpen && rows.length;
+    var face = sel
+      ? '<span class="nr-av">' + nrEsc(nrInitials(sel)) + '</span><span class="nr-pick-name">' + nrEsc(nrListName(sel)) + '</span>'
+      : '<span class="nr-pick-name nr-pick-none">No patients</span>';
+    return '<div class="nr-pick' + (open ? ' open' : '') + (sel && nrIsDirty(sel.id) ? ' dirty' : '') + '">'
+      + '<button type="button" class="nr-pick-btn" aria-haspopup="listbox" aria-expanded="' + (open ? 'true' : 'false') + '"'
+      + (rows.length ? '' : ' disabled') + ' aria-label="Choose a patient" data-onclick="nrPickToggle()">'
+      + face + '<span class="nr-pick-chev">' + nrIcon('chevronDown') + '</span></button>'
+      + '<div class="nr-pick-panel">' + (rows.length ? nrListHTML(rows) : '') + '</div></div>';
+  }
+  function nrPickSet(open) {
+    nrPickOpen = !!open;
+    var box = document.querySelector('#neuroReferralsMount .nr-pick');
+    if (!box) return;
+    var can = !!box.querySelector('.nr-item');
+    box.classList.toggle('open', nrPickOpen && can);
+    var btn = box.querySelector('.nr-pick-btn');
+    if (btn) btn.setAttribute('aria-expanded', nrPickOpen && can ? 'true' : 'false');
+  }
+  function nrPickFocus() {
+    var it = document.querySelector('#neuroReferralsMount .nr-pick.open .nr-item.active') || document.querySelector('#neuroReferralsMount .nr-pick.open .nr-item');
+    var list = it && it.parentNode;
+    if (it && list) list.scrollTop = Math.max(0, it.offsetTop - list.clientHeight / 2);
+    return it;
+  }
+  function nrPickToggle() {
+    nrPickSet(!nrPickOpen);
+    var it = nrPickOpen && nrPickFocus();
+    if (it) it.focus({ preventScroll: true });
+  }
+  // Click outside or press Escape: the dropdown closes.
+  document.addEventListener('click', function (ev) {
+    if (!nrPickOpen) return;
+    var t = ev.target;
+    if (t && t.closest && (t.closest('#neuroReferralsMount .nr-pick') || t.closest('#neuroReferralsMount .rf-search'))) return;
+    nrPickSet(false);
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (!nrPickOpen || ev.key !== 'Escape') return;
+    nrPickSet(false);
+    var btn = document.querySelector('#neuroReferralsMount .nr-pick-btn');
+    if (btn) btn.focus();
+  });
+
   function nrListHTML(rows) {
-    if (!rows.length) {
-      var empty = nrQuery ? 'No patients match “' + nrEsc(nrQuery) + '”.'
-        : nrFilter === 'pending' ? 'No referrals pending. Every Virginia patient has been referred.'
-        : 'No patients at this stage.';
-      return '<div class="nr-list card"><div class="nr-list-empty">' + empty + '</div></div>';
-    }
     return '<div class="nr-list card" role="listbox" aria-label="Virginia patients">' + rows.map(function (p) {
-      var d = p.demographics || {}, id = nrIdArg(p.id), st = nrStatus(p);
-      var initials = typeof initialsForPatient === 'function' ? initialsForPatient(p) : ((d.firstName || ' ')[0] + (d.lastName || ' ')[0]);
+      var id = nrIdArg(p.id), st = nrStatus(p), initials = nrInitials(p);
       return '<div class="nr-item nr-is-' + st + (p.id === nrSelectedId ? ' active' : '') + (nrIsDirty(p.id) ? ' dirty' : '') + '" role="option" tabindex="0"'
         + ' aria-selected="' + (p.id === nrSelectedId ? 'true' : 'false') + '"'
         + ' data-onclick="nrSelect(\'' + id + '\')" data-onkeydown="nrItemKey(event,\'' + id + '\')">'
         + '<span class="nr-av">' + nrEsc(initials) + '</span>'
-        + '<span class="nr-item-main"><b>' + nrEsc(typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName)) + '</b></span>'
+        + '<span class="nr-item-main"><b>' + nrEsc(nrListName(p)) + '</b></span>'
         // The tab already names the stage; only the mixed list needs it per row.
         + (nrFilter === 'all' ? nrPill(st) : '') + '</div>';
     }).join('') + '</div>';
@@ -545,10 +604,19 @@
     if (!p) return;
     nrSelectedId = p.id;
     nrError = null;
+    nrPickOpen = false;
     renderNeuroReferrals();
+    var btn = document.querySelector('#neuroReferralsMount .nr-pick-btn');
+    if (btn) btn.focus({ preventScroll: true });
   }
   function nrItemKey(ev, id) {
-    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nrSelect(id); }
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); nrSelect(id); return; }
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      var cur = ev.target && ev.target.closest ? ev.target.closest('.nr-item') : null;
+      var next = cur && (ev.key === 'ArrowDown' ? cur.nextElementSibling : cur.previousElementSibling);
+      if (next) next.focus();
+    }
   }
   function nrDraft() {
     if (!nrSelectedId) return null;
@@ -561,6 +629,8 @@
     if (!dirty) delete nrDrafts[nrSelectedId];
     var item = document.querySelector('#neuroReferralsMount .nr-item.active');
     if (item) item.classList.toggle('dirty', dirty);
+    var pick = document.querySelector('#neuroReferralsMount .nr-pick');
+    if (pick) pick.classList.toggle('dirty', dirty);
     var flag = document.querySelector('#neuroReferralsMount .nr-unsaved');
     if (flag) flag.hidden = !dirty;
   }
@@ -681,9 +751,10 @@
     showPage('patientLists');
     selectPatient(p.id);
   }
-  function nrSetFilter(key) { nrFilter = key; renderNeuroReferrals(); }
+  function nrSetFilter(key) { nrFilter = key; nrPickOpen = false; renderNeuroReferrals(); }
   function nrSearch(v) {
     nrQuery = String(v || '');
+    nrPickOpen = !!nrQuery;
     renderNeuroReferrals();
     var box = document.getElementById('nrSearch');
     if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
@@ -1351,6 +1422,7 @@
   window.renderNeuroReferrals = renderNeuroReferrals;
   window.nrSelect = nrSelect;
   window.nrItemKey = nrItemKey;
+  window.nrPickToggle = nrPickToggle;
   window.nrField = nrField;
   window.nrTrack = nrTrack;
   window.nrSetStep = nrSetStep;
