@@ -188,10 +188,9 @@
     for (var i = 0; i < list.length; i++) if (N().idArg(list[i].id) === id) return list[i];
     return null;
   }
-  function nbTile(cls, icon, label, value, sub) {
+  function nbTile(cls, icon, label, value) {
     return '<div class="nr-kpi ' + cls + '"><span class="nr-kpi-i">' + nbIcon(icon) + '</span>'
-      + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div>'
-      + '<div class="nr-kpi-s">' + sub + '</div></div></div>';
+      + '<div class="nr-kpi-t"><div class="nr-kpi-v">' + value + '</div><div class="nr-kpi-l">' + label + '</div></div></div>';
   }
   function nbHead(title, sub, actions) {
     return '<div class="rf-head"><div class="rf-head-t"><h1>' + title + '</h1><p>' + sub + '</p></div>'
@@ -285,18 +284,17 @@
   }
 
   function nbBillingKpis(all) {
-    var billed = 0, paid = 0, owedN = 0, entered = 0, none = 0, payN = 0;
+    var billed = 0, paid = 0, none = 0;
     all.forEach(function (p) {
       var b = nbBill(p), t = nbTotals(b);
       if (nbStage(b) === 'none') { none++; return; }
-      entered++; billed += t.billed; paid += t.paid; payN += (b.payments || []).length;
-      if (t.balance > 0) owedN++;
+      billed += t.billed; paid += t.paid;
     });
     return '<div class="nr-kpis">'
-      + nbTile('k-total', 'dollar', 'Total Billed', nbFmt(billed), entered + (entered === 1 ? ' bill entered' : ' bills entered'))
-      + nbTile('k-done', 'check', 'Total Paid', nbFmt(paid), payN + (payN === 1 ? ' payment recorded' : ' payments recorded'))
-      + nbTile('k-pending', 'wallet', 'Balance Owed', nbFmt(Math.round((billed - paid) * 100) / 100), owedN + (owedN === 1 ? ' patient with a balance' : ' patients with a balance'))
-      + nbTile('k-progress', 'file', 'Bill Not Entered', none, none ? 'Referred, bill not entered yet' : 'Every bill is entered')
+      + nbTile('k-total', 'dollar', 'Total Billed', nbFmt(billed))
+      + nbTile('k-done', 'check', 'Total Paid', nbFmt(paid))
+      + nbTile('k-pending', 'wallet', 'Balance Owed', nbFmt(Math.round((billed - paid) * 100) / 100))
+      + nbTile('k-progress', 'file', 'Bill Not Entered', none)
       + '</div>';
   }
 
@@ -411,21 +409,14 @@
 
   function nbFormHTML(p) {
     if (!p) return '<div class="nr-form card"><div class="nr-list-empty">Select a patient to enter their neurologist bill.</div></div>';
-    var b = nbDraftFor(p), t = nbFormTotals(p), id = N().idArg(p.id), r = N().saved(p);
+    var b = nbDraftFor(p), t = nbFormTotals(p), id = N().idArg(p.id);
     var dirty = nbIsDirty(p), saved = nbBill(p);
-    var head = '<div class="nr-form-hd"><div><h2>' + esc(typeof naturalPatientName === 'function' ? naturalPatientName(p) : nbName(p)) + '</h2>'
-      + '<div class="nr-facts">'
-        + '<span class="nr-fact nr-fact-va">' + nbIcon('send') + esc(N().step(N().status(p)).label) + '</span>'
-        + (r.apptDate ? '<span class="nr-fact">Appointment: ' + esc(us(r.apptDate)) + '</span>' : '')
-        + (r.form && r.form.partner ? '<span class="nr-fact">' + esc(r.form.partner) + '</span>' : '')
-        + ((p.demographics || {}).mrn ? '<span class="nr-fact">Acct #: ' + esc(p.demographics.mrn) + '</span>' : '')
-      + '</div></div>'
+    var head = '<div class="nr-form-hd"><div><h2>' + esc(typeof naturalPatientName === 'function' ? naturalPatientName(p) : nbName(p)) + '</h2></div>'
       + '<div class="nr-form-hd-r">' + nbPill(nbStage(saved))
       + '<button type="button" class="nr-link" data-onclick="nbOpenReferral(\'' + id + '\')">' + nbIcon('file') + 'Open Referral</button></div></div>';
 
     var body = '<div class="nr-form-body">'
       + '<h3 class="nr-sec nr-sec-first"><span>Services</span></h3>'
-      + '<p class="nb-sub">From the neurologist’s bill: one line for each service. Charges are each line’s total.</p>'
       + nbLinesHTML(b)
       + '<div class="nb-svc-foot"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddLine()">' + nbIcon('plus') + 'Add service line</button>'
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
@@ -511,7 +502,6 @@
         + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'physician\')">' + nbIcon('plus') + 'Add to list and use</button></div></div>';
     };
     return '<h3 class="nr-sec"><span>Billing Provider &amp; Treating Physician</span></h3>'
-      + '<p class="nb-sub">Who billed (Concussion Therapy Group or an outside practice) and the physician who treated the patient. Pick from the saved list, or add a new one: it is saved for every bill.</p>'
       + '<div class="nb-grid">'
         + '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
           + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }) + '</select></div>'
@@ -990,22 +980,22 @@
   }
 
   function npKpis(billed) {
-    var owed = 0, owedN = 0, month = N().today().slice(0, 7), monthPaid = 0, monthN = 0, allPaid = 0, oldest = null;
+    var owed = 0, month = N().today().slice(0, 7), monthPaid = 0, allPaid = 0, oldest = null;
     billed.forEach(function (p) {
       var b = nbBill(p), t = nbTotals(b);
       allPaid += t.paid;
       if (t.balance > 0) {
-        owed += t.balance; owedN++;
+        owed += t.balance;
         var since = N().daysSince(nbFirstService(b));
         if (since !== null && (oldest === null || since > oldest)) oldest = since;
       }
-      (b.payments || []).forEach(function (x) { if (String(x.date || '').slice(0, 7) === month) { monthPaid += nbMoney(x.amount); monthN++; } });
+      (b.payments || []).forEach(function (x) { if (String(x.date || '').slice(0, 7) === month) monthPaid += nbMoney(x.amount); });
     });
     return '<div class="nr-kpis">'
-      + nbTile('k-pending', 'wallet', 'Balance Owed', nbFmt(Math.round(owed * 100) / 100), owedN + (owedN === 1 ? ' patient' : ' patients') + ' with a balance')
-      + nbTile('k-done', 'check', 'Paid This Month', nbFmt(Math.round(monthPaid * 100) / 100), monthN + (monthN === 1 ? ' payment' : ' payments'))
-      + nbTile('k-total', 'dollar', 'Paid All Time', nbFmt(Math.round(allPaid * 100) / 100), billed.length + (billed.length === 1 ? ' bill' : ' bills'))
-      + nbTile('k-progress', 'clock', 'Oldest Unpaid', oldest === null ? '—' : oldest + (oldest === 1 ? ' day' : ' days'), oldest === null ? 'Nothing owed' : 'Since the first service date')
+      + nbTile('k-pending', 'wallet', 'Balance Owed', nbFmt(Math.round(owed * 100) / 100))
+      + nbTile('k-done', 'check', 'Paid This Month', nbFmt(Math.round(monthPaid * 100) / 100))
+      + nbTile('k-total', 'dollar', 'Paid All Time', nbFmt(Math.round(allPaid * 100) / 100))
+      + nbTile('k-progress', 'clock', 'Oldest Unpaid', oldest === null ? '—' : oldest + (oldest === 1 ? ' day' : ' days'))
       + '</div>';
   }
 
