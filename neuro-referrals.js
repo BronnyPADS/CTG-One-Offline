@@ -369,20 +369,6 @@
     return '<span class="nr-pill nr-st-' + s.key + '">' + nrIcon(s.icon) + s.label + '</span>';
   }
 
-  // One line under the patient's name saying where the referral stands.
-  function nrWhen(p) {
-    var r = nrSaved(p);
-    switch (nrStatus(p)) {
-      case 'submitted': return r.referredOn ? 'Submitted ' + nrUs(r.referredOn) : 'Submitted';
-      case 'accepted': return (r.acceptedOn ? 'Accepted ' + nrUs(r.acceptedOn) : 'Accepted') + ' · awaiting a date';
-      case 'scheduled': return r.apptDate ? 'Appointment ' + nrUs(r.apptDate) : 'Appointment scheduled';
-      case 'examined': return (r.examinedOn ? 'Examined ' + nrUs(r.examinedOn) : 'Examined') + ' · awaiting the report';
-      case 'reported': return r.reportOn ? 'Report received ' + nrUs(r.reportOn) : 'Report received';
-    }
-    var wait = nrDaysSince(nrDay1Date(p));
-    return wait === null ? 'Day 1 date not recorded' : wait === 0 ? 'Day 1 completed today' : wait + (wait === 1 ? ' day' : ' days') + ' since Day 1';
-  }
-
   function nrListHTML(rows) {
     if (!rows.length) {
       var empty = nrQuery ? 'No patients match “' + nrEsc(nrQuery) + '”.'
@@ -397,9 +383,7 @@
         + ' aria-selected="' + (p.id === nrSelectedId ? 'true' : 'false') + '"'
         + ' data-onclick="nrSelect(\'' + id + '\')" data-onkeydown="nrItemKey(event,\'' + id + '\')">'
         + '<span class="nr-av">' + nrEsc(initials) + '</span>'
-        + '<span class="nr-item-main"><b>' + nrEsc(typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName)) + '</b>'
-        + '<span class="nr-item-sub">DOI ' + nrEsc(nrUs(nrDoi(p)) || '—') + (d.lawFirm ? ' · ' + nrEsc(d.lawFirm) : '') + '</span>'
-        + '<span class="nr-item-when">' + nrIcon(nrStep(st).icon) + nrEsc(nrWhen(p)) + '</span></span>'
+        + '<span class="nr-item-main"><b>' + nrEsc(typeof fullPatientName === 'function' ? fullPatientName(p) : (d.lastName + ', ' + d.firstName)) + '</b></span>'
         // The tab already names the stage; only the mixed list needs it per row.
         + (nrFilter === 'all' ? nrPill(st) : '') + '</div>';
     }).join('') + '</div>';
@@ -460,13 +444,7 @@
     var dirty = nrIsDirty(p.id);
     var head = '<div class="nr-form-hd">'
       + '<div><h2>' + nrEsc(typeof naturalPatientName === 'function' ? naturalPatientName(p) : f.firstName + ' ' + f.lastName) + '</h2>'
-      + '<div class="nr-facts">'
-        + '<span class="nr-fact nr-fact-va">' + nrIcon('pin') + 'Incident in Virginia</span>'
-        + '<span class="nr-fact">DOI: ' + nrEsc(nrUs(nrDoi(p)) || '—') + '</span>'
-        + '<span class="nr-fact">Day 1: ' + nrEsc(nrUs(nrDay1Date(p)) || '—') + '</span>'
-        + (nrInjury(p) ? '<span class="nr-fact">' + nrEsc(nrInjury(p)) + '</span>' : '')
-        + ((p.demographics || {}).mrn ? '<span class="nr-fact">Acct #: ' + nrEsc(p.demographics.mrn) + '</span>' : '')
-      + '</div></div>'
+      + '</div>'
       + '<div class="nr-form-hd-r">' + nrPill(f.status)
       + '<button type="button" class="nr-link" data-onclick="nrOpenChart(\'' + id + '\')">' + nrIcon('chart') + 'Open Chart</button></div>'
       + '</div>';
