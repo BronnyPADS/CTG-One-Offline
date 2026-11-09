@@ -8178,7 +8178,7 @@ function patientDetailStatusBadges(p,forRow){
   // The neurologist's report uploaded on Neurologist Referrals: on the chart, a pill that opens it (9 Nov 2026).
   if(!forRow&&Array.isArray(p?.neuroReferral?.reportFiles)&&p.neuroReferral.reportFiles.length){
     const pid=String(p.id||'').replace(/[^A-Za-z0-9_-]/g,''),n=p.neuroReferral.reportFiles.length
-    badges.push(`<button type="button" class="pld-status nrr" data-onclick="nrReportPick('${pid}')" title="${n>1?'Open the referral to see its '+n+' report files':'Open the report'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>NeuraHealth Report</button>`)
+    badges.push(`<button type="button" class="pld-status nrr" data-onclick="nrReportPick('${pid}')" title="${n>1?'Open the report ('+n+' files)':'Open the report'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>NeuraHealth Report</button>`)
   }
   return badges.join('')
 }

@@ -825,13 +825,15 @@
     ov.id = 'nrReportView'; ov.className = 'modal-overlay nr-view-ov';
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'nrViewTitle');
     ov.innerHTML = '<div class="modal nr-viewer"><div class="modal-hd"><div class="nr-view-t"><span class="nr-view-i">' + nrIcon('report') + '</span><b id="nrViewTitle"></b></div>'
-      + '<div class="nr-view-btns"><button type="button" class="rf-btn rf-btn-quiet" id="nrViewDownload">' + nrIcon('download') + 'Download</button>'
+      + '<div class="nr-view-btns"><select id="nrViewPick" class="nr-view-pick" aria-label="Report file" hidden></select>'
+      + '<button type="button" class="rf-btn rf-btn-quiet" id="nrViewDownload">' + nrIcon('download') + 'Download</button>'
       + '<button type="button" class="modal-close" id="nrViewClose" aria-label="Close">\u00d7</button></div></div>'
       + '<div class="nr-view-body" id="nrViewBody"></div></div>';
     document.body.appendChild(ov);
     ov.addEventListener('click', function (e) { if (e.target === ov) nrViewClose(); });
     document.getElementById('nrViewClose').addEventListener('click', function () { nrViewClose(); });
     document.getElementById('nrViewDownload').addEventListener('click', function () { if (nrView) nrReportDownload(nrView.pid, nrView.fid); });
+    document.getElementById('nrViewPick').addEventListener('change', function (e) { if (nrView) nrReportOpen(nrView.pid, e.target.value); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && ov.classList.contains('show')) nrViewClose(); });
     return ov;
   }
@@ -861,6 +863,15 @@
     if (nrView) nrViewClose();
     nrView = { pid: pid, fid: fid, name: at.file.name, blob: null, url: null, back: document.activeElement };
     document.getElementById('nrViewTitle').textContent = at.file.name || 'NeuraHealth report';
+    // Several files: a list in the window to switch between them, newest first.
+    var pick = document.getElementById('nrViewPick'), all = nrReportFiles(at.p).slice().reverse();
+    pick.textContent = '';
+    all.forEach(function (x) {
+      var o = document.createElement('option');
+      o.value = nrIdArg(x.id); o.textContent = x.name || 'Report'; o.selected = nrIdArg(x.id) === fid;
+      pick.appendChild(o);
+    });
+    pick.hidden = all.length < 2;
     var body = document.getElementById('nrViewBody');
     nrViewMsg(body, 'Loading the report\u2026');
     ov.classList.add('show');
@@ -919,12 +930,10 @@
       });
     }).catch(function (e) { showToast('Could not remove the file: ' + ((e && e.message) || 'server error'), 'err'); });
   }
-  // The chart's NeuraHealth Report pill: one file opens; several open the referral, where they are listed.
+  // The chart's pill and the Provider's Dashboard button: the newest file, in the window (it lists the others).
   function nrReportPick(pid) {
-    var p = nrReportPatient(pid);
-    var files = nrReportFiles(p);
-    if (files.length === 1) nrReportOpen(pid, nrIdArg(files[0].id));
-    else if (files.length) nrlOpenReferral(pid);
+    var files = nrReportFiles(nrReportPatient(pid));
+    if (files.length) nrReportOpen(pid, nrIdArg(files[files.length - 1].id));
   }
 
   // Reschedule: the appointment date box, ready for the new date.

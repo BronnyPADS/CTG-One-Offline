@@ -374,7 +374,7 @@
         + '<span class="cc-badges">' + topBadgeHTML + '</span>'
       + '</div>'
       + rank
-      + '<div class="cc-name">' + esc(s.patientName || 'Unnamed') + '</div>'
+      + '<div class="cc-name-row"><div class="cc-name">' + esc(s.patientName || 'Unnamed') + '</div>' + reportBtnHTML(s) + '</div>'
       + breakTitleHTML(s)
       + '<div class="cc-meta">' + esc(s.visitType || '—') + (s.room ? ' · ' + esc(s.room) : '')
         // Whose patient, for those who see more than one provider's.
@@ -391,6 +391,20 @@
             : '<span class="cc-inperson-note">No video room</span>')
       + '</div>'
     + '</div>'
+  }
+
+  /* The neurologist's report, beside the name, when the patient's referral has
+     one uploaded (9 Nov 2026): it opens in the report window (neuro-referrals.js).
+     Only for an account that sees referrals - the patient record carries the
+     referral for no one else. */
+  function reportBtnHTML(s) {
+    var p = s.patientId && typeof getPatient === 'function' ? getPatient(s.patientId) : null
+    var files = p && p.neuroReferral && Array.isArray(p.neuroReferral.reportFiles) ? p.neuroReferral.reportFiles : []
+    if (!files.length || typeof window.nrReportPick !== 'function') return ''
+    var pid = String(p.id).replace(/[^A-Za-z0-9_-]/g, '')
+    return '<button type="button" class="cc-nrr" data-onclick="nrReportPick(\'' + pid + '\')" title="Open the NeuraHealth report">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+      + 'NeuraHealth Report</button>'
   }
 
   function calendarName(f) {
