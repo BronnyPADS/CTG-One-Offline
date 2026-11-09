@@ -486,7 +486,25 @@
       '<w:sz w:val="' + Math.round(part.size * 2) + '"/><w:szCs w:val="' + Math.round(part.size * 2) + '"/>'
     return '<w:r><w:rPr>' + pr + '</w:rPr><w:t xml:space="preserve">' + esc(part.s) + '</w:t></w:r>'
   }
+  /* Only two double spaces become one, and nothing else changes: after an ICD
+     code ("(S06.0X0A)  Concussion") and before a result date ("SYMPTOMS  Date:").
+     The reports leave them as a gap on the page; in Word they are a grammar flag
+     (9 Nov 2026). prev is the text just before s on the same line. */
+  var CODE_END = /\([A-Z][0-9][0-9A-Z.]*\) +$/
+  function tidyGaps(prev, s) {
+    s = s.replace(/(\([A-Z][0-9][0-9A-Z.]*\)) {2,}/g, '$1 ').replace(/(\S) {2,}(Date:)/g, '$1 $2')
+    if (CODE_END.test(prev)) s = s.replace(/^ +/, '')
+    else if (/^ {2,}Date:/.test(s) || (/^ +Date:/.test(s) && / $/.test(prev))) s = s.replace(/^ +/, prev && !/ $/.test(prev) ? ' ' : '')
+    return s
+  }
   function runsXml(parts) {
+    var prev = ''
+    parts = parts.map(function (pt) {
+      if (pt.tab || pt.br) { prev = ''; return pt }
+      var s = tidyGaps(prev, String(pt.s))
+      prev = s.length ? s : prev
+      return s === pt.s ? pt : Object.assign({}, pt, { s: s })
+    }).filter(function (pt) { return pt.tab || pt.br || pt.s.length })
     // neighbouring pieces in the same font and size become one run
     var merged = []
     parts.forEach(function (pt) {

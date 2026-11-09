@@ -35,10 +35,17 @@
     var body = parts.map(function (t) { return '<w:t xml:space="preserve">' + esc(t) + '</w:t>' }).join('<w:br/>')
     return '<w:r>' + (pr ? '<w:rPr>' + pr + '</w:rPr>' : '') + body + '</w:r>'
   }
+  /* Only the double space after an ICD code ("(S06.0X0A)  Concussion") becomes
+     one: the PDF leaves it as a gap, and in Word it is a grammar flag (9 Nov 2026).
+     Every other space stays as it is. */
   function segRuns(segs, o) {
+    var afterCode = false
     return (segs || []).map(function (s) {
       if (typeof s === 'string') s = { t: s }
-      return run(s.t, { b: s.b || (o && o.b), i: s.i, u: s.u, sz: o && o.sz, color: o && o.color })
+      var t = String(s.t == null ? '' : s.t).replace(/(\([A-Z][0-9][0-9A-Z.]*\)) {2,}/g, '$1 ')
+      if (afterCode) t = t.replace(/^ +/, '')
+      if (t.length) afterCode = /\([A-Z][0-9][0-9A-Z.]*\) +$/.test(t)
+      return run(t, { b: s.b || (o && o.b), i: s.i, u: s.u, sz: o && o.sz, color: o && o.color })
     }).join('')
   }
   /* A paragraph. o: {before, after (points), align, keepNext, tabs, ind (twips)} */
