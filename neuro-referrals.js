@@ -94,6 +94,7 @@
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+    eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
     upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
     sortBoth: '<polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>',
@@ -745,7 +746,8 @@
       var fid = nrIdArg(file.id);
       return '<li class="nr-file"><span class="nr-file-i">' + nrIcon('report') + '</span>'
         + '<span class="nr-file-t"><b>' + nrEsc(file.name) + '</b><i>' + nrEsc([file.by, file.at ? nrUs(String(file.at).slice(0, 10)) : ''].filter(Boolean).join(' · ')) + '</i></span>'
-        + '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrReportOpen(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('download') + 'Open</button>'
+        + '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrReportOpen(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('eye') + 'Open</button>'
+        + '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrReportDownload(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('download') + 'Download</button>'
         + '<button type="button" class="nr-file-x" aria-label="Remove ' + nrEsc(file.name) + '" title="Remove" data-onclick="nrReportRemove(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('trash') + '</button></li>';
     }).join('');
     return '<div class="nr-report"><b>' + nrIcon('report') + 'NeuraHealth Report</b>'
@@ -800,27 +802,107 @@
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return new Blob([bytes], { type: (/^data:([^;,]+)/.exec(head) || [])[1] || 'application/octet-stream' });
   }
-  // A PDF, picture or text opens in a new tab; Word and Excel download.
-  function nrReportOpen(pid, fid) {
+  function nrReportFile(pid, fid) {
     var p = nrReportPatient(pid);
     var file = p && nrReportFiles(p).filter(function (x) { return nrIdArg(x.id) === fid; })[0];
-    if (!file) return;
-    var view = /^(application\/pdf|image\/(jpeg|png|gif|webp)|text\/plain)$/.test(file.type || '');
-    var win = view ? window.open('', '_blank') : null;
-    window.ctgApiFetch('/api/patients/' + encodeURIComponent(p.id) + '/neuro-report/' + encodeURIComponent(file.id) + '/content').then(function (res) {
+    return file ? { p: p, file: file } : null;
+  }
+  function nrReportBlob(p, file) {
+    return window.ctgApiFetch('/api/patients/' + encodeURIComponent(p.id) + '/neuro-report/' + encodeURIComponent(file.id) + '/content').then(function (res) {
       if (!res || !res.dataUrl) throw new Error('The file is empty');
-      var url = URL.createObjectURL(nrDataUrlBlob(res.dataUrl));
-      if (win) { try { win.opener = null; } catch (e) { /* ignore */ } win.location.href = url; }
-      else {
-        var a = document.createElement('a');
-        a.href = url; a.download = file.name || 'NeuraHealth report';
-        document.body.appendChild(a); a.click(); a.remove();
-      }
-      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-    }).catch(function (e) {
-      if (win) win.close();
-      showToast('Could not open the report: ' + ((e && e.message) || 'server error'), 'err');
+      return nrDataUrlBlob(res.dataUrl);
     });
+  }
+
+  /* Open: the report in a window on the page (9 Nov 2026), not a new tab. A PDF,
+     picture or text file shows in it; Word and Excel cannot be shown in a
+     browser, so the window says so and offers Download. */
+  var nrView = null;   // { pid, fid, name, blob, url, back } while it is open
+  function nrViewerEl() {
+    var ov = document.getElementById('nrReportView');
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = 'nrReportView'; ov.className = 'modal-overlay nr-view-ov';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'nrViewTitle');
+    ov.innerHTML = '<div class="modal nr-viewer"><div class="modal-hd"><div class="nr-view-t"><span class="nr-view-i">' + nrIcon('report') + '</span><b id="nrViewTitle"></b></div>'
+      + '<div class="nr-view-btns"><button type="button" class="rf-btn rf-btn-quiet" id="nrViewDownload">' + nrIcon('download') + 'Download</button>'
+      + '<button type="button" class="modal-close" id="nrViewClose" aria-label="Close">\u00d7</button></div></div>'
+      + '<div class="nr-view-body" id="nrViewBody"></div></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) { if (e.target === ov) nrViewClose(); });
+    document.getElementById('nrViewClose').addEventListener('click', function () { nrViewClose(); });
+    document.getElementById('nrViewDownload').addEventListener('click', function () { if (nrView) nrReportDownload(nrView.pid, nrView.fid); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && ov.classList.contains('show')) nrViewClose(); });
+    return ov;
+  }
+  function nrViewMsg(body, line, sub) {
+    body.textContent = '';
+    var box = document.createElement('div'); box.className = 'nr-view-msg';
+    var b = document.createElement('b'); b.textContent = line; box.appendChild(b);
+    if (sub) { var s = document.createElement('span'); s.textContent = sub; box.appendChild(s); }
+    body.appendChild(box);
+  }
+  function nrViewClose() {
+    var ov = document.getElementById('nrReportView');
+    if (ov) ov.classList.remove('show');
+    var body = document.getElementById('nrViewBody');
+    if (body) body.textContent = '';
+    if (nrView) {
+      if (nrView.url) URL.revokeObjectURL(nrView.url);
+      var back = nrView.back;
+      nrView = null;
+      if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
+    }
+  }
+  function nrReportOpen(pid, fid) {
+    var at = nrReportFile(pid, fid);
+    if (!at) return;
+    var ov = nrViewerEl();
+    if (nrView) nrViewClose();
+    nrView = { pid: pid, fid: fid, name: at.file.name, blob: null, url: null, back: document.activeElement };
+    document.getElementById('nrViewTitle').textContent = at.file.name || 'NeuraHealth report';
+    var body = document.getElementById('nrViewBody');
+    nrViewMsg(body, 'Loading the report\u2026');
+    ov.classList.add('show');
+    document.getElementById('nrViewClose').focus({ preventScroll: true });
+    var type = at.file.type || '';
+    nrReportBlob(at.p, at.file).then(function (blob) {
+      if (!nrView || nrView.fid !== fid) return;
+      nrView.blob = blob;
+      body.textContent = '';
+      if (type === 'application/pdf' || /^image\/(jpeg|png|gif|webp)$/.test(type)) {
+        nrView.url = URL.createObjectURL(blob);
+        var el = document.createElement(type === 'application/pdf' ? 'iframe' : 'img');
+        el.className = type === 'application/pdf' ? 'nr-view-frame' : 'nr-view-img';
+        if (type === 'application/pdf') el.title = at.file.name || 'NeuraHealth report'; else el.alt = at.file.name || 'NeuraHealth report';
+        el.src = nrView.url;
+        body.appendChild(el);
+      } else if (/^text\/(plain|csv)$/.test(type)) {
+        return blob.text().then(function (t) {
+          if (!nrView || nrView.fid !== fid) return;
+          var pre = document.createElement('pre'); pre.className = 'nr-view-text'; pre.textContent = t;
+          body.appendChild(pre);
+        });
+      } else {
+        nrViewMsg(body, 'This file cannot be shown here.', 'Use Download to open it in Word, Excel or another program.');
+      }
+    }).catch(function (e) {
+      if (!nrView || nrView.fid !== fid) return;
+      nrViewMsg(body, 'Could not open the report.', (e && e.message) || 'server error');
+    });
+  }
+  // Download: the file itself, with its name (the one already shown is not fetched again).
+  function nrReportDownload(pid, fid) {
+    var at = nrReportFile(pid, fid);
+    if (!at) return;
+    var have = nrView && nrView.fid === fid && nrView.blob;
+    (have ? Promise.resolve(nrView.blob) : nrReportBlob(at.p, at.file)).then(function (blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = at.file.name || 'NeuraHealth report';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }).catch(function (e) { showToast('Could not download the report: ' + ((e && e.message) || 'server error'), 'err'); });
   }
   function nrReportRemove(pid, fid) {
     var p = nrReportPatient(pid);
@@ -1558,6 +1640,7 @@
   window.nrPickToggle = nrPickToggle;
   window.nrReportUpload = nrReportUpload;
   window.nrReportOpen = nrReportOpen;
+  window.nrReportDownload = nrReportDownload;
   window.nrReportRemove = nrReportRemove;
   window.nrReportPick = nrReportPick;
   window.nrField = nrField;

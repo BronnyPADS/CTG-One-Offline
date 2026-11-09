@@ -80,7 +80,7 @@
     return [name, cred].filter(Boolean).join(', ');
   }
   // The bill's provider fields, all text: who billed, and the treating physician's NPI.
-  var NB_PROV_FIELDS = ['practiceName', 'practiceAddress', 'practicePhone', 'practiceNpi', 'practiceTaxId', 'physicianNpi'];
+  var NB_PROV_FIELDS = ['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi', 'practiceTaxId', 'physicianNpi'];
   function nbBlank(p) {
     var b = { lines: [], accountNo: (p.demographics || {}).mrn || '', acceptAssignment: '', signature: '', signDate: '',
       physicianName: '', physicianCred: '', physicianCredOther: '', signatureImage: '', payments: [] };
@@ -95,7 +95,8 @@
      reached for a moment still shows what was there. */
   var NB_PROV_KEY = 'ctg_neuro_providers_v1';
   var nbProv = { practices: [], physicians: [] }, nbProvVersion = 0, nbProvLoadedAt = 0;
-  var nbAdding = null;          // 'practice' | 'physician' while its "add new" form is open
+  var nbAdding = null;          // 'practice' | 'physician' while a new one is being typed in
+  var nbAddPrev = null;         // what the bill said before, put back by Cancel
   function nbProvTake(d) {
     var ok = d && typeof d === 'object' && Array.isArray(d.practices) && Array.isArray(d.physicians);
     if (ok) nbProv = { practices: d.practices.slice(), physicians: d.physicians.slice() };
@@ -432,7 +433,7 @@
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
         + '<div class="rf-f"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
           + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
-        + '<div class="rf-f"><label for="nbf_signature">Signature of Physician or Supplier</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
+        + '<div class="rf-f"><label for="nbf_signature">Signature of Provider</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
           // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
           + '<div class="nb-sig">'
             + (nbSigOk(b.signatureImage) ? '<img class="nb-sig-img" alt="Uploaded signature" src="' + esc(b.signatureImage) + '">' : '')
@@ -478,53 +479,47 @@
         + (own && !at ? '<option value="__bill" selected>' + esc(own) + ' (on this bill)</option>' : '')
         + '<option value="__add">+ Type Here / Add new\u2026</option>';
     };
-    var addForm = function (kind) {
-      if (nbAdding !== kind) return '';
-      if (kind === 'practice') {
-        return '<div class="nb-add" role="group" aria-label="Add a billing provider">'
-          + '<div class="nb-add-t">' + nbIcon('building') + 'New billing provider</div><div class="nb-grid">'
-          + '<div class="rf-f"><label for="nba_name">Practice name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Northern Virginia Neurology"></div>'
-          + '<div class="rf-f"><label for="nba_address">Address</label><input id="nba_address" type="text" maxlength="300" placeholder="Street, city, state ZIP"></div>'
-          + '<div class="rf-f"><label for="nba_phone">Phone</label><input id="nba_phone" type="text" maxlength="60"></div>'
-          + '<div class="rf-f"><label for="nba_npi">Provider NPI</label><input id="nba_npi" type="text" inputmode="numeric" maxlength="40"></div>'
-          + '<div class="rf-f"><label for="nba_taxId">Tax ID</label><input id="nba_taxId" type="text" maxlength="40"></div>'
-          + '</div><div class="nb-add-btns"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddCancel()">Cancel</button>'
-          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'practice\')">' + nbIcon('plus') + 'Add to list and use</button></div></div>';
-      }
-      return '<div class="nb-add" role="group" aria-label="Add a treating physician">'
-        + '<div class="nb-add-t">' + nbIcon('user') + 'New treating physician</div><div class="nb-grid">'
-        + '<div class="rf-f"><label for="nba_name">Physician name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Jane Doe"></div>'
+    /* Adding a new one (9 Nov 2026): its list becomes a box for the name, and the
+       details are typed in the boxes beside it, the same ones a pick fills in. */
+    var addBtns = function (kind) {
+      return nbAdding === kind
+        ? '<div class="nb-add-btns"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddCancel()">Cancel</button>'
+          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'' + kind + '\')">' + nbIcon('plus') + 'Add to list and use</button></div>'
+        : '';
+    };
+    var practice = nbAdding === 'practice'
+      ? '<div class="rf-f nb-new"><label for="nba_name">Practice Name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Northern Virginia Neurology"></div>'
+      : '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
+        + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }) + '</select></div>';
+    var physician = nbAdding === 'physician'
+      ? '<div class="rf-f nb-new"><label for="nba_name">Physician Name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Jane Doe"></div>'
         + '<div class="rf-f"><label for="nba_cred">Credentials</label><select id="nba_cred" data-onchange="nbAddCred(this.value)"><option value="">\u2014 Select \u2014</option>'
           + NB_CREDENTIALS.map(function (c) { return '<option>' + c + '</option>'; }).join('') + '</select>'
           + '<input id="nba_credOther" class="nb-cred-other" type="text" maxlength="40" placeholder="Type the credential, e.g. DO" aria-label="Other credential" hidden></div>'
-        + '<div class="rf-f"><label for="nba_npi">Physician NPI</label><input id="nba_npi" type="text" inputmode="numeric" maxlength="40"></div>'
-        + '</div><div class="nb-add-btns"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddCancel()">Cancel</button>'
-        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'physician\')">' + nbIcon('plus') + 'Add to list and use</button></div></div>';
-    };
+      : '<div class="rf-f"><label for="nbf_physician">Treating Physician</label><select id="nbf_physician" data-onchange="nbPickPhysician(this.value)">'
+        + opts(nbProv.physicians, physAt, physName, nbPhysicianOf) + '</select></div>';
     return '<h3 class="nr-sec"><span>Billing Provider &amp; Treating Physician</span></h3>'
       + '<div class="nb-grid">'
-        + '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
-          + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }) + '</select></div>'
+        + practice
         + input('practiceAddress', 'Provider Address', 'Street, city, state ZIP', 300)
         + input('practicePhone', 'Provider Phone', '', 60)
+        + input('practiceEmail', 'Provider Email', 'name@example.com', 200)
         + input('practiceNpi', 'Provider NPI', '', 40)
         + input('practiceTaxId', 'Tax ID', '', 40)
-        + '<div></div>'
-      + '</div>' + addForm('practice')
+      + '</div>' + addBtns('practice')
       + '<div class="nb-grid">'
-        + '<div class="rf-f"><label for="nbf_physician">Treating Physician</label><select id="nbf_physician" data-onchange="nbPickPhysician(this.value)">'
-          + opts(nbProv.physicians, physAt, physName, nbPhysicianOf) + '</select></div>'
+        + physician
         + input('physicianNpi', 'Physician NPI', '', 40)
-      + '</div>' + addForm('physician');
+      + '</div>' + addBtns('physician');
   }
   function nbPickPractice(v) {
     var p = nbCurrent(); if (!p) return;
-    if (v === '__add') { nbAdding = 'practice'; renderNeuroBilling(); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
+    if (v === '__add') { nbStartAdd(p, 'practice'); return; }
     if (v === '__bill') return;
     var b = nbDraftFor(p), x = nbProv.practices.filter(function (e) { return e.id === v; })[0] || {};
-    b.practiceName = x.name || ''; b.practiceAddress = x.address || ''; b.practicePhone = x.phone || '';
+    b.practiceName = x.name || ''; b.practiceAddress = x.address || ''; b.practicePhone = x.phone || ''; b.practiceEmail = x.email || '';
     b.practiceNpi = x.npi || ''; b.practiceTaxId = x.taxId || '';
-    nbAdding = null;
+    nbAdding = null; nbAddPrev = null;
     renderNeuroBilling();
   }
   // A physician's NPI also goes on the service lines that have none yet (each line's rendering NPI).
@@ -535,30 +530,49 @@
   }
   function nbPickPhysician(v) {
     var p = nbCurrent(); if (!p) return;
-    if (v === '__add') { nbAdding = 'physician'; renderNeuroBilling(); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
+    if (v === '__add') { nbStartAdd(p, 'physician'); return; }
     if (v === '__bill') return;
     var b = nbDraftFor(p);
     if (!v) { nbUsePhysician(b, {}); } else nbUsePhysician(b, nbProv.physicians.filter(function (e) { return e.id === v; })[0] || {});
-    nbAdding = null;
+    nbAdding = null; nbAddPrev = null;
     renderNeuroBilling();
   }
   function nbAddCred(v) { var o = document.getElementById('nba_credOther'); if (o) { o.hidden = v !== 'Other'; if (v === 'Other') o.focus(); } }
-  function nbAddCancel() { nbAdding = null; renderNeuroBilling(); }
+  var NB_ADD_KEYS = {
+    practice: ['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi', 'practiceTaxId'],
+    physician: ['physicianName', 'physicianCred', 'physicianCredOther', 'physicianNpi']
+  };
+  function nbStartAdd(p, kind) {
+    var b = nbDraftFor(p);
+    nbAddPrev = { kind: kind, values: {} };
+    NB_ADD_KEYS[kind].forEach(function (k) { nbAddPrev.values[k] = b[k] || ''; b[k] = ''; });
+    nbAdding = kind;
+    renderNeuroBilling();
+    var f = document.getElementById('nba_name'); if (f) f.focus();
+  }
+  // Cancel: the bill says what it said before.
+  function nbAddCancel() {
+    var p = nbCurrent();
+    if (p && nbAddPrev) { var b = nbDraftFor(p); Object.keys(nbAddPrev.values).forEach(function (k) { b[k] = nbAddPrev.values[k]; }); }
+    nbAdding = null; nbAddPrev = null;
+    renderNeuroBilling();
+  }
   function nbAddSave(kind) {
     var p = nbCurrent(); if (!p) return;
     var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
     var name = val('nba_name');
-    if (!name) { showToast(kind === 'practice' ? 'Enter the practice name.' : 'Enter the physician’s name.', 'err'); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
+    if (!name) { showToast(kind === 'practice' ? 'Enter the practice name.' : 'Enter the physician\u2019s name.', 'err'); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
     var b = nbDraftFor(p), entry;
+    var got = function (k) { return String(b[k] || '').trim(); };
     if (kind === 'practice') {
-      entry = { id: nbNewId(), name: name, address: val('nba_address'), phone: val('nba_phone'), npi: val('nba_npi'), taxId: val('nba_taxId') };
-      b.practiceName = entry.name; b.practiceAddress = entry.address; b.practicePhone = entry.phone; b.practiceNpi = entry.npi; b.practiceTaxId = entry.taxId;
+      entry = { id: nbNewId(), name: name, address: got('practiceAddress'), phone: got('practicePhone'), email: got('practiceEmail'), npi: got('practiceNpi'), taxId: got('practiceTaxId') };
+      b.practiceName = entry.name;
     } else {
       var cred = val('nba_cred');
-      entry = { id: nbNewId(), name: name, cred: NB_CREDENTIALS.indexOf(cred) !== -1 ? cred : '', credOther: cred === 'Other' ? val('nba_credOther') : '', npi: val('nba_npi') };
+      entry = { id: nbNewId(), name: name, cred: NB_CREDENTIALS.indexOf(cred) !== -1 ? cred : '', credOther: cred === 'Other' ? val('nba_credOther') : '', npi: got('physicianNpi') };
       nbUsePhysician(b, entry);
     }
-    nbAdding = null;
+    nbAdding = null; nbAddPrev = null;
     nbProvAdd(kind, entry).then(function () { renderNeuroBilling(); });
     renderNeuroBilling();
     showToast((kind === 'practice' ? 'Billing provider' : 'Physician') + ' added to the saved list and put on this bill. Click Save Bill to keep it.', 'ok');
@@ -843,8 +857,8 @@
       kvBox([
         [['Billing Provider', b.practiceName], ['Provider NPI', b.practiceNpi]],
         [['Address', b.practiceAddress], ['Tax ID', b.practiceTaxId]],
-        [['Phone', b.practicePhone], ['Treating Physician', nbPhysician(b)]],
-        [['', ''], ['Physician NPI', b.physicianNpi]]
+        [['Phone', b.practicePhone], ['Email', b.practiceEmail]],
+        [['Treating Physician', nbPhysician(b)], ['Physician NPI', b.physicianNpi]]
       ]);
     }
     y += 24;
@@ -868,7 +882,7 @@
       try {
         var ip = doc.getImageProperties(b.signatureImage);
         f('bold', 9);
-        var room = CW * 0.56 - doc.getTextWidth('Signature of Physician or Supplier: ') - 4;
+        var room = CW * 0.56 - doc.getTextWidth('Signature of Provider: ') - 4;
         var s = Math.min(34 / ip.height, room / ip.width);
         if (s > 0 && isFinite(s)) sig = { w: ip.width * s, h: ip.height * s };
       } catch (e) { sig = null; }
@@ -879,7 +893,7 @@
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
       ['Physician', nbPhysician(b)],
-      ['Signature of Physician or Supplier', b.signature, sig],
+      ['Signature of Provider', b.signature, sig],
       ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
       var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';
       var pic = x[2];
