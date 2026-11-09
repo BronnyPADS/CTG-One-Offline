@@ -94,6 +94,8 @@
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
     back: '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
     chevronDown: '<polyline points="6 9 12 15 18 9"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
     sortBoth: '<polyline points="8 9 12 5 16 9"/><polyline points="16 15 12 19 8 15"/>',
     sortUp: '<line x1="12" y1="19" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/>',
     sortDown: '<line x1="12" y1="5" x2="12" y2="19"/><polyline points="18 13 12 19 6 13"/>',
@@ -541,7 +543,7 @@
       + '<h3 class="nr-sec nr-sec-first">Referral Status</h3>'
       + nrStepperHTML(f) + closed
       + (dates.length ? '<div class="rf-pair nr-dates">' + dates.join('') + '</div>' : '')
-      + appt + histHTML
+      + appt + histHTML + nrReportHTML(p, f)
       + nrF('Notes <i>(optional)</i>', 'notes', '<textarea id="nrf_notes" rows="2" placeholder="e.g. Submitted through the partner portal; awaiting scheduling" data-oninput="nrTrack(\'notes\',this.value)">' + nrEsc(f.notes) + '</textarea>')
       + '<div class="nr-autofill">' + nrIcon('sync') + '<span>Patient details are pulled automatically from <b>Registration</b> and <b>Day 1</b>, so they always match the chart. To correct one, update it in the patient’s chart (<b>Open Chart</b>).</span></div>'
       + '<h3 class="nr-sec">Partner’s Info</h3>'
@@ -701,6 +703,7 @@
       history.push({ type: 'rescheduled', from: saved.apptDate, to: next.apptDate, at: new Date().toISOString(), by: nrMe() });
     }
     next.history = history;
+    if (nrReportFiles(p).length) next.reportFiles = nrReportFiles(p);   // the upload's, kept by every save
     next.updatedAt = new Date().toISOString();
     next.updatedBy = nrMe();
     p.neuroReferral = next;
@@ -712,6 +715,136 @@
     showToast(MSG[advance] || 'Changes saved.', 'ok');
     renderNeuroReferrals();
   }
+  /* ---------------------- the NeuraHealth report (9 Nov 2026) ----------------------
+     At Report Received the report itself is uploaded here: a PDF, Word, Excel,
+     a picture or text, up to 8 MB a file. The server keeps each file as a
+     patient document ('Neurologist Report') and lists it on the referral; the
+     chart's NeuraHealth Report pill opens it too. */
+  var NR_REPORT_MAX_BYTES = 8 * 1024 * 1024;
+  var NR_REPORT_TYPES = {
+    pdf: 'application/pdf', doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', heic: 'image/heic',
+    txt: 'text/plain', csv: 'text/csv'
+  };
+  var NR_REPORT_ACCEPT = Object.keys(NR_REPORT_TYPES).map(function (e) { return '.' + e; }).join(',');
+  function nrReportFiles(p) { var r = p && p.neuroReferral; return r && Array.isArray(r.reportFiles) ? r.reportFiles : []; }
+  // The patient for a report action: one on this page, or any chart (the pill).
+  function nrReportPatient(id) {
+    var p = nrFind(id);
+    if (p) return p;
+    var all = Array.isArray(window.ctgPatients) ? window.ctgPatients : (typeof ctgPatients !== 'undefined' ? ctgPatients : []);
+    return all.filter(function (x) { return nrIdArg(x.id) === id; })[0] || null;
+  }
+  function nrReportHTML(p, f) {
+    var files = nrReportFiles(p);
+    if (f.status !== NR_LAST && !files.length) return '';
+    var pid = nrIdArg(p.id), savedOnce = !!p.neuroReferral;
+    var list = files.map(function (file) {
+      var fid = nrIdArg(file.id);
+      return '<li class="nr-file"><span class="nr-file-i">' + nrIcon('report') + '</span>'
+        + '<span class="nr-file-t"><b>' + nrEsc(file.name) + '</b><i>' + nrEsc([file.by, file.at ? nrUs(String(file.at).slice(0, 10)) : ''].filter(Boolean).join(' · ')) + '</i></span>'
+        + '<button type="button" class="rf-btn rf-btn-quiet" data-onclick="nrReportOpen(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('download') + 'Open</button>'
+        + '<button type="button" class="nr-file-x" aria-label="Remove ' + nrEsc(file.name) + '" title="Remove" data-onclick="nrReportRemove(\'' + pid + '\',\'' + fid + '\')">' + nrIcon('trash') + '</button></li>';
+    }).join('');
+    return '<div class="nr-report"><b>' + nrIcon('report') + 'NeuraHealth Report</b>'
+      + (list ? '<ul class="nr-files">' + list + '</ul>' : '')
+      + '<label class="rf-btn rf-btn-quiet nr-file-up' + (savedOnce ? '' : ' is-off') + '">' + nrIcon('upload') + 'Upload report'
+      + '<input type="file" multiple accept="' + NR_REPORT_ACCEPT + '"' + (savedOnce ? '' : ' disabled') + ' data-onchange="nrReportUpload(this,\'' + pid + '\')"></label>'
+      + (savedOnce ? '' : '<p class="nr-file-note">Save the referral first, then upload the report.</p>')
+      + '</div>';
+  }
+  function nrReadFile(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result || '')); };
+      r.onerror = function () { reject(new Error('The file could not be read.')); };
+      r.readAsDataURL(file);
+    });
+  }
+  async function nrReportUpload(input, pid) {
+    var files = input && input.files ? Array.prototype.slice.call(input.files) : [];
+    var p = nrReportPatient(pid);
+    if (!files.length || !p) { if (input) input.value = ''; return; }
+    try {
+      for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+        var ext = String(file.name || '').split('.').pop().toLowerCase();
+        var type = NR_REPORT_TYPES[ext] || '';
+        if (!type) { showToast('\u201c' + file.name + '\u201d is not a file type that can be attached. Use a PDF, Word, Excel, picture or text file.', 'err'); continue; }
+        if (file.size > NR_REPORT_MAX_BYTES) { showToast('\u201c' + file.name + '\u201d is over 8 MB. Upload a smaller file or a PDF export.', 'err'); continue; }
+        showToast('Uploading ' + file.name + '\u2026');
+        var dataUrl = await nrReadFile(file);
+        var res = await window.ctgApiFetch('/api/patients/' + encodeURIComponent(p.id) + '/neuro-report', {
+          method: 'POST', body: JSON.stringify({ name: file.name, contentType: type, data: dataUrl.slice(dataUrl.indexOf(',') + 1) })
+        });
+        if (!res || !res.neuroReferral || !res.file) throw new Error('The server did not confirm the upload');
+        p.neuroReferral = res.neuroReferral;
+        // In the patient's Documents too, as the server keeps it.
+        p.documents = p.documents || {};
+        if (!Array.isArray(p.documents.uploads)) p.documents.uploads = [];
+        p.documents.uploads.push({ id: res.file.id, documentType: 'Neurologist Report', name: res.file.name, type: res.file.type, uploadedAt: res.file.at });
+        showToast('NeuraHealth report uploaded.', 'ok');
+      }
+    } catch (e) {
+      showToast('Could not upload the report: ' + ((e && e.message) || 'server error'), 'err');
+    } finally {
+      if (input) input.value = '';
+      renderNeuroReferrals();
+    }
+  }
+  function nrDataUrlBlob(dataUrl) {
+    var comma = dataUrl.indexOf(','), head = dataUrl.slice(0, comma), bin = atob(dataUrl.slice(comma + 1));
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: (/^data:([^;,]+)/.exec(head) || [])[1] || 'application/octet-stream' });
+  }
+  // A PDF, picture or text opens in a new tab; Word and Excel download.
+  function nrReportOpen(pid, fid) {
+    var p = nrReportPatient(pid);
+    var file = p && nrReportFiles(p).filter(function (x) { return nrIdArg(x.id) === fid; })[0];
+    if (!file) return;
+    var view = /^(application\/pdf|image\/(jpeg|png|gif|webp)|text\/plain)$/.test(file.type || '');
+    var win = view ? window.open('', '_blank') : null;
+    window.ctgApiFetch('/api/patients/' + encodeURIComponent(p.id) + '/neuro-report/' + encodeURIComponent(file.id) + '/content').then(function (res) {
+      if (!res || !res.dataUrl) throw new Error('The file is empty');
+      var url = URL.createObjectURL(nrDataUrlBlob(res.dataUrl));
+      if (win) { try { win.opener = null; } catch (e) { /* ignore */ } win.location.href = url; }
+      else {
+        var a = document.createElement('a');
+        a.href = url; a.download = file.name || 'NeuraHealth report';
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    }).catch(function (e) {
+      if (win) win.close();
+      showToast('Could not open the report: ' + ((e && e.message) || 'server error'), 'err');
+    });
+  }
+  function nrReportRemove(pid, fid) {
+    var p = nrReportPatient(pid);
+    var file = p && nrReportFiles(p).filter(function (x) { return nrIdArg(x.id) === fid; })[0];
+    if (!file) return;
+    ctgConfirm('Remove \u201c' + file.name + '\u201d? It is removed from this referral and from the patient\u2019s Documents.',
+      { title: 'Remove report file', okLabel: 'Remove', danger: true }).then(function (ok) {
+      if (!ok) return;
+      return window.ctgApiFetch('/api/patients/' + encodeURIComponent(p.id) + '/neuro-report/' + encodeURIComponent(file.id), { method: 'DELETE' }).then(function (res) {
+        if (res && res.neuroReferral) p.neuroReferral = res.neuroReferral;
+        if (p.documents && Array.isArray(p.documents.uploads)) p.documents.uploads = p.documents.uploads.filter(function (d) { return d.id !== file.id; });
+        showToast('Report file removed.', 'ok');
+        renderNeuroReferrals();
+      });
+    }).catch(function (e) { showToast('Could not remove the file: ' + ((e && e.message) || 'server error'), 'err'); });
+  }
+  // The chart's NeuraHealth Report pill: one file opens; several open the referral, where they are listed.
+  function nrReportPick(pid) {
+    var p = nrReportPatient(pid);
+    var files = nrReportFiles(p);
+    if (files.length === 1) nrReportOpen(pid, nrIdArg(files[0].id));
+    else if (files.length) nrlOpenReferral(pid);
+  }
+
   // Reschedule: the appointment date box, ready for the new date.
   function nrReschedule() {
     var box = document.getElementById('nrf_apptDate');
@@ -1423,6 +1556,10 @@
   window.nrSelect = nrSelect;
   window.nrItemKey = nrItemKey;
   window.nrPickToggle = nrPickToggle;
+  window.nrReportUpload = nrReportUpload;
+  window.nrReportOpen = nrReportOpen;
+  window.nrReportRemove = nrReportRemove;
+  window.nrReportPick = nrReportPick;
   window.nrField = nrField;
   window.nrTrack = nrTrack;
   window.nrSetStep = nrSetStep;

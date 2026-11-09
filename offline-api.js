@@ -243,6 +243,9 @@
     var u = currentUser()
     if (u && u.role === 'lawyer') throw httpError(403, 'Not permitted')
     var p = findPatient(id) || emptyPatient(id)
+    // The report files are the upload route's to change, never a save's (as on the server).
+    var keepFiles = p.neuroReferral && Array.isArray(p.neuroReferral.reportFiles) && p.neuroReferral.reportFiles.length ? p.neuroReferral.reportFiles : null
+    if (keepFiles && body && body.neuroReferral) body = Object.assign({}, body, { neuroReferral: Object.assign({}, body.neuroReferral, { reportFiles: keepFiles }) })
     Object.keys(body || {}).forEach(function (k) {
       if (CONTROL_KEYS[k]) return
       p[k] = clone(body[k])
@@ -382,6 +385,43 @@
         return docDel(gone.map(function (x) { return x.id })).then(function () { return { ok: true } }, function () { return { ok: true } })
       }
       if (P[2] === 'notes-form') throw httpError(503, 'The RecoverArc notes connection is not available in the offline version.', { error: OFFLINE_MSG, code: 'NOT_CONFIGURED' })
+      // The NeuraHealth report on Neurologist Referrals, as the server's own routes do it.
+      if (P[2] === 'neuro-report') {
+        if (!p) throw httpError(404, 'Patient not found')
+        if (u && u.role === 'lawyer') throw httpError(403, 'Not permitted')
+        var nref = p.neuroReferral
+        var nfiles = nref && Array.isArray(nref.reportFiles) ? nref.reportFiles : []
+        if (method === 'POST' && !P[3]) {
+          if (!nref) throw httpError(409, 'Save the referral first, then upload the report.')
+          if (nfiles.length >= 20) throw httpError(400, 'This referral already has 20 report files. Remove one first.')
+          var nrec = { id: newId('doc_'), documentType: 'Neurologist Report', name: body.name || 'report', type: body.contentType || '', blobKey: '', note: '', uploadedAt: now() }
+          var nfile = { id: nrec.id, name: nrec.name, type: nrec.type, at: nrec.uploadedAt, by: (u && (u.displayName || u.username)) || '' }
+          return docPut(nrec.id, 'data:' + (nrec.type || 'application/octet-stream') + ';base64,' + (body.data || '')).then(function () {
+            p.documents = p.documents || { uploads: [] }
+            if (!Array.isArray(p.documents.uploads)) p.documents.uploads = []
+            p.documents.uploads.push(nrec)
+            p.neuroReferral = Object.assign({}, nref, { reportFiles: nfiles.concat([nfile]) })
+            putPatient(p)
+            return { file: nfile, neuroReferral: clone(p.neuroReferral) }
+          })
+        }
+        var nf = nfiles.filter(function (x) { return x.id === P[3] })[0]
+        if (!nf) throw httpError(404, 'Report not found')
+        if (method === 'GET' && P[4] === 'content') {
+          return docGet(nf.id).then(function (v) {
+            if (!v) throw httpError(404, 'That report file is no longer on the chart.')
+            return { file: { id: nf.id, name: nf.name, type: nf.type }, dataUrl: v }
+          })
+        }
+        if (method === 'DELETE') {
+          return docDel([nf.id]).then(function () {
+            p.neuroReferral = Object.assign({}, nref, { reportFiles: nfiles.filter(function (x) { return x.id !== nf.id }) })
+            if (p.documents && Array.isArray(p.documents.uploads)) p.documents.uploads = p.documents.uploads.filter(function (x) { return x.id !== nf.id })
+            putPatient(p)
+            return { ok: true, neuroReferral: clone(p.neuroReferral) }
+          })
+        }
+      }
       if (P[2] === 'documents') {
         if (!p) throw httpError(404, 'Patient not found')
         if (method === 'POST' && P[3] === 'upload') {
