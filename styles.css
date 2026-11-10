@@ -14752,7 +14752,9 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .pl-pair .pl-wide{grid-column:1/-1}
 /* Billing Provider List v2 (10 Nov 2026): practice cards, physicians per practice */
 .nb-grid>.nb-span2{grid-column:span 2}
-@media(max-width:620px){.nb-grid>.nb-span2{grid-column:auto}}
+/* The long box 31 label keeps two columns; its dropdown is one column wide, like the other boxes (10 Nov 2026). */
+.nb-grid>.nb-span2 select{max-width:calc((100% - 18px) / 2)}
+@media(max-width:620px){.nb-grid>.nb-span2{grid-column:auto}.nb-grid>.nb-span2 select{max-width:none}}
 .bpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:18px;margin-bottom:18px}
 .bpl-card{position:relative;display:flex;flex-direction:column;min-width:0;background:#fff;border:1px solid #dfe8f5;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(15,47,102,.04),0 10px 26px rgba(15,47,102,.06);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
 .bpl-card::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#03045E,#0077B6 55%,#00B4D8)}

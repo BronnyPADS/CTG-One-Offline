@@ -495,8 +495,8 @@
         + '<option value="">— Select —</option>' + nbProv.practices.map(function (x) { return opt(x, pracAt, x.name); }).join('') + own(b.practiceName, pracAt) + '</select>'
         + (nbProv.practices.length ? '' : '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register a billing provider</button>')
       + '</div>';
-    // In the CMS-1500's words (box 31), as the user asked (10 Nov 2026).
-    var physician = '<div class="rf-f nb-span2"><label for="nbf_physician">Signature of Physician or Supplier Including Degrees or Credentials</label>'
+    // In the CMS-1500's words (box 31), without "Signature of": the signature has its own box below (10 Nov 2026).
+    var physician = '<div class="rf-f nb-span2"><label for="nbf_physician">Physician or Supplier Including Degrees or Credentials</label>'
         + '<select id="nbf_physician" data-onchange="nbPickPhysician(this.value)"><option value="">— Select —</option>' + docOpts + own(physName, physAt) + '</select>'
         + (pracAt && !pool.length ? '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register physicians for ' + esc(pracAt.name) + '</button>' : '')
       + '</div>';
