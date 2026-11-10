@@ -864,27 +864,37 @@
       if (!drawn) { f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w - 2)[0] || '', ML + w + 2, ky); }
       ky += 17;
     });
+    y = ky + 22;
+
+    // Who billed, last as on the CMS-1500 (box 33), when the bill says.
+    if (['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi'].some(function (k) { return b[k]; })) {
+      // Plain lines like Billing above, no table (10 Nov 2026, as the user asked).
+      var provRows = [['Billing Provider', b.practiceName], ['Address', b.practiceAddress], ['Phone', b.practicePhone],
+        ['Email', b.practiceEmail], ['Provider NPI', b.practiceNpi]];
+      heading('Billing Provider');
+      if (y + 16 + provRows.length * 17 > PH - BOTTOM) { newPage(); heading('Billing Provider'); }
+      var py = y + 16;
+      provRows.forEach(function (x) {
+        var label = x[0] + ': ';
+        f('bold', 9); doc.text(label, ML, py);
+        var w = doc.getTextWidth(label);
+        f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW - w - 2)[0] || '', ML + w + 2, py);
+        py += 17;
+      });
+      y = py + 22;
+    }
+
+    // The totals, under the billing provider (10 Nov 2026, as the user asked), on the right as before.
+    if (y + 62 > PH - BOTTOM) newPage();
+    var tTop = y - 12;
     [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)], ['Balance Owed', nbFmt(t.balance)]].forEach(function (s, i, all) {
-      var by = top + i * 20, last = i === all.length - 1;
+      var by = tTop + i * 20, last = i === all.length - 1;
       doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.7);
       if (last) { doc.setFillColor(241, 241, 241); doc.rect(rx, by, rw, 20, 'FD'); } else doc.rect(rx, by, rw, 20);
       f(last ? 'bold' : 'normal', 9.5); doc.text(s[0], rx + 6, by + 13.5);
       f('bold', 9.5); doc.text(s[1], rx + rw - 6, by + 13.5, { align: 'right' });
     });
-    y = Math.max(ky, top + 60) + 22;
-
-    // Who billed, last as on the CMS-1500 (box 33), when the bill says.
-    if (['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi'].some(function (k) { return b[k]; })) {
-      heading('Billing Provider');
-      if (y + rowH * 3 + 8 > PH - BOTTOM) { newPage(); heading('Billing Provider'); }
-      y += 4;
-      kvBox([
-        [['Billing Provider', b.practiceName], ['Provider NPI', b.practiceNpi]],
-        [['Address', b.practiceAddress], ['Phone', b.practicePhone]],
-        [['Email', b.practiceEmail], ['', '']]
-      ]);
-      y += 24;
-    }
+    y = tTop + 60 + 34;
 
     heading('Payments');
     var pays = ((b.payments) || []).slice().sort(function (a, c) { return String(a.date || '').localeCompare(String(c.date || '')); });
