@@ -722,9 +722,10 @@
      the billing provider with the totals, and the payments recorded. Unsaved changes are not in it, so the button asks for a save
      first. The PDF's fonts are Latin-1 only, hence nbPdfText. */
   var NB_PDF_SERVICES = [
-    ['from', 'Date of Service From', 60], ['to', 'Date of Service To', 60], ['pos', 'Place of Service', 48], ['emg', 'EMG', 34],
-    ['cpt', 'CPT/HCPCS', 56], ['mod', 'Modifier', 48], ['dxPtr', 'Diagnosis Pointer', 50], ['charge', '$ Charges', 64],
-    ['units', 'Days or Units', 40], ['npi', 'Rendering Provider ID. #', 72]
+    // "|" is where a heading breaks onto its second line, so the row reads evenly (10 Nov 2026).
+    ['from', 'Date of|Service From', 62], ['to', 'Date of|Service To', 58], ['pos', 'Place of|Service', 46], ['emg', 'EMG', 34],
+    ['cpt', 'CPT/HCPCS', 56], ['mod', 'Modifier', 46], ['dxPtr', 'Diagnosis|Pointer', 50], ['charge', '$ Charges', 64],
+    ['units', 'Days or|Units', 42], ['npi', 'Rendering|Provider ID. #', 74]
   ];
   var NB_PDF_PAYMENTS = [
     ['date', 'Date', 70], ['amount', 'Amount', 74], ['method', 'Method', 90], ['ref', 'Reference', 90],
@@ -771,16 +772,21 @@
       var X = [], cx = ML;
       cols.forEach(function (c) { X.push(cx); cx += c[2]; });
       var tx = function (i) { return right.indexOf(cols[i][0]) !== -1 ? [X[i] + cols[i][2] - 5, { align: 'right' }] : [X[i] + 5, {}]; };
+      // Each heading breaks where its "|" says, and sits centred in the row, so one- and two-line headings line up.
       function head() {
-        f('bold', 7, style === 'navy' ? [255, 255, 255] : MUTED);
-        var ls = cols.map(function (c) { return doc.splitTextToSize(style === 'navy' ? c[1] : c[1].toUpperCase(), c[2] - 9); });
-        var n = Math.max.apply(null, ls.map(function (l) { return l.length; })), h = n * 8.5 + 11;
+        var fs = style === 'navy' ? 7.5 : 7, lh = fs + 1.8;
+        f('bold', fs, style === 'navy' ? [255, 255, 255] : MUTED);
+        var ls = cols.map(function (c) {
+          var label = style === 'navy' ? c[1] : c[1].toUpperCase();
+          return [].concat.apply([], label.split('|').map(function (part) { return doc.splitTextToSize(part, c[2] - 9); }));
+        });
+        var n = Math.max.apply(null, ls.map(function (l) { return l.length; })), h = n * lh + 14;
         if (y + h + 24 > PH - BOTTOM) newPage();
         if (style === 'navy') { fill(NAVY); doc.rect(ML, y, CW, h, 'F'); }
-        f('bold', 7, style === 'navy' ? [255, 255, 255] : MUTED);
+        f('bold', fs, style === 'navy' ? [255, 255, 255] : MUTED);
         ls.forEach(function (l, i) {
-          var a = tx(i);
-          l.forEach(function (s, k) { doc.text(s, a[0], y + h - 6 - (l.length - 1 - k) * 8.5, a[1]); });
+          var a = tx(i), first = y + (h - l.length * lh) / 2 + fs * 0.8;
+          l.forEach(function (s, k) { doc.text(s, a[0], first + k * lh, a[1]); });
         });
         if (style !== 'navy') { stroke(NAVY, 1.1); doc.line(ML, y + h, ML + CW, y + h); }
         y += h;
