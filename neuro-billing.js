@@ -12,7 +12,8 @@
    Neurologist Payments (page neuroPayments): payments recorded against those
    bills, the balance still owed per patient, and the payment history.
    Billing Provider List (page neuroProviderList, a part of Neurologist Billing):
-   the billing providers registered once and picked on each bill (10 Nov 2026).
+   the billing providers registered once, each with its treating physicians,
+   and picked on each bill (10 Nov 2026).
 
    Saved on the patient as p.neuroBilling:
      { lines: [{ from, to, pos, emg, cpt, mod, dxPtr, charge, units, npi }],
@@ -25,8 +26,9 @@
        updatedAt, updatedBy }
 
    The practices and physicians to pick from are one list for the whole
-   practice, the shared document neuroProviders (6 Nov 2026). A bill keeps its
-   own copy of what was picked, so changing the list never rewrites a bill. */
+   practice, the shared document neuroProviders (6 Nov 2026); since 10 Nov each
+   physician names its practice (practiceId). A bill keeps its own copy of what
+   was picked, so changing the list never rewrites a bill. */
 (function () {
   'use strict';
 
@@ -36,6 +38,7 @@
     dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
     list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
@@ -99,8 +102,6 @@
      reached for a moment still shows what was there. */
   var NB_PROV_KEY = 'ctg_neuro_providers_v1';
   var nbProv = { practices: [], physicians: [] }, nbProvVersion = 0, nbProvLoadedAt = 0;
-  var nbAdding = null;          // 'practice' | 'physician' while a new one is being typed in
-  var nbAddPrev = null;         // what the bill said before, put back by Cancel
   function nbProvTake(d) {
     var ok = d && typeof d === 'object' && Array.isArray(d.practices) && Array.isArray(d.physicians);
     if (ok) nbProv = { practices: d.practices.slice(), physicians: d.physicians.slice() };
@@ -121,17 +122,6 @@
     }).catch(function () { /* offline: the browser's copy stands */ });
   }
   var nbSame = function (a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); };
-  /* Adds to the newest server copy (two people adding at once both keep theirs).
-     An entry with the same name is updated rather than added twice. */
-  function nbProvAdd(kind, entry) {
-    var key = kind === 'practice' ? 'practices' : 'physicians';
-    return nbProvWrite(function (list) {
-      var at = -1;
-      list[key].forEach(function (x, i) { if (nbSame(x.name, entry.name)) at = i; });
-      if (at >= 0) { entry.id = list[key][at].id; list[key][at] = entry; } else list[key].push(entry);
-      list[key].sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-    }, 'The saved list could not be updated', ' It is on this bill.');
-  }
   /* Applies a change to this browser's list and to the newest server copy (a
      clash with someone else's save is retried once). Resolves true when saved. */
   function nbProvWrite(change, failMsg, failTail) {
@@ -475,62 +465,63 @@
     return '<div class="nr-form card">' + head + body + foot + '</div>';
   }
 
-  /* Who billed and who treated. The billing provider is picked from the
-     Billing Provider List (10 Nov 2026), where providers are registered; the
-     treating physician is picked or added here. A pick copies the details onto
-     the bill, so a later change to the list does not rewrite a saved bill. */
+  /* Who billed and who treated, both picked from the Billing Provider List
+     (10 Nov 2026), where each practice is registered with its physicians. A
+     pick copies the details onto the bill, so a later change to the list does
+     not rewrite a saved bill. */
+  function nbPracticeOf(b) { return nbProv.practices.filter(function (x) { return nbSame(x.name, b.practiceName); })[0] || null; }
   function nbProvidersHTML(b) {
-    var input = function (k, label, ph, max) {
-      return '<div class="rf-f"><label for="nbf_' + k + '">' + label + '</label><input id="nbf_' + k + '" type="text" maxlength="' + (max || 200) + '" value="' + esc(b[k] || '') + '"'
-        + (ph ? ' placeholder="' + esc(ph) + '"' : '') + ' data-oninput="nbField(\'' + k + '\',this.value)"></div>';
-    };
-    // The pick: a saved entry with this bill's name, else this bill's own (typed before the list existed).
-    var pracAt = nbProv.practices.filter(function (x) { return nbSame(x.name, b.practiceName); })[0];
+    var pracAt = nbPracticeOf(b);
     var physName = nbPhysician(b);
-    var physAt = nbProv.physicians.filter(function (x) { return nbSame(x.name, b.physicianName) && nbSame(nbPhysicianOf(x), physName); })[0]
-      || nbProv.physicians.filter(function (x) { return nbSame(x.name, b.physicianName); })[0];
-    var opts = function (list, at, own, label) {
-      return '<option value="">\u2014 Select \u2014</option>'
-        + list.map(function (x) { return '<option value="' + esc(x.id) + '"' + (at && at.id === x.id ? ' selected' : '') + '>' + esc(label(x)) + '</option>'; }).join('')
-        + (own && !at ? '<option value="__bill" selected>' + esc(own) + ' (on this bill)</option>' : '')
-        + '<option value="__add">+ Type Here / Add new\u2026</option>';
-    };
-    /* Adding a new one (9 Nov 2026): its list becomes a box for the name, and the
-       details are typed in the boxes beside it, the same ones a pick fills in. */
-    var addBtns = function (kind) {
-      return nbAdding === kind
-        ? '<div class="nb-add-btns"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddCancel()">Cancel</button>'
-          + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'' + kind + '\')">' + nbIcon('plus') + 'Add to list and use</button></div>'
-        : '';
-    };
+    // The picked practice's own physicians; with none picked, everyone, under their practice.
+    var pool = pracAt ? nbProv.physicians.filter(function (x) { return x.practiceId === pracAt.id; }) : nbProv.physicians;
+    var physAt = pool.filter(function (x) { return nbSame(x.name, b.physicianName) && nbSame(nbPhysicianOf(x), physName); })[0]
+      || pool.filter(function (x) { return nbSame(x.name, b.physicianName); })[0];
+    var opt = function (x, at, label) { return '<option value="' + esc(x.id) + '"' + (at && at.id === x.id ? ' selected' : '') + '>' + esc(label) + '</option>'; };
+    var own = function (text, at) { return text && !at ? '<option value="__bill" selected>' + esc(text) + ' (on this bill)</option>' : ''; };
+    var docLabel = function (x) { return nbPhysicianOf(x) + (x.npi ? ' · NPI ' + x.npi : ''); };
+    var byName = function (a, c) { return String(a.name).localeCompare(String(c.name)); };
+    var docOpts;
+    if (pracAt) docOpts = pool.slice().sort(byName).map(function (x) { return opt(x, physAt, docLabel(x)); }).join('');
+    else {
+      docOpts = nbProv.practices.map(function (pr) {
+        var list = nbProv.physicians.filter(function (x) { return x.practiceId === pr.id; }).sort(byName);
+        return list.length ? '<optgroup label="' + esc(pr.name) + '">' + list.map(function (x) { return opt(x, physAt, docLabel(x)); }).join('') + '</optgroup>' : '';
+      }).join('');
+      var loose = nbProv.physicians.filter(function (x) { return !nbProv.practices.some(function (pr) { return pr.id === x.practiceId; }); }).sort(byName);
+      if (loose.length) docOpts += '<optgroup label="Not linked to a practice">' + loose.map(function (x) { return opt(x, physAt, docLabel(x)); }).join('') + '</optgroup>';
+    }
     var practice = '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
-        + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }).replace(/<option value="__add">[^<]*<\/option>$/, '') + '</select>'
+        + '<option value="">— Select —</option>' + nbProv.practices.map(function (x) { return opt(x, pracAt, x.name); }).join('') + own(b.practiceName, pracAt) + '</select>'
         + (nbProv.practices.length ? '' : '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register a billing provider</button>')
       + '</div>';
-    var physician = nbAdding === 'physician'
-      ? '<div class="rf-f nb-new"><label for="nba_name">Physician Name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Jane Doe"></div>'
-        + '<div class="rf-f"><label for="nba_cred">Credentials</label><select id="nba_cred" data-onchange="nbAddCred(this.value)"><option value="">\u2014 Select \u2014</option>'
-          + NB_CREDENTIALS.map(function (c) { return '<option>' + c + '</option>'; }).join('') + '</select>'
-          + '<input id="nba_credOther" class="nb-cred-other" type="text" maxlength="40" placeholder="Type the credential, e.g. DO" aria-label="Other credential" hidden></div>'
-      : '<div class="rf-f"><label for="nbf_physician">Treating Physician</label><select id="nbf_physician" data-onchange="nbPickPhysician(this.value)">'
-        + opts(nbProv.physicians, physAt, physName, nbPhysicianOf) + '</select></div>';
+    // In the CMS-1500's words (box 31), as the user asked (10 Nov 2026).
+    var physician = '<div class="rf-f nb-span2"><label for="nbf_physician">Signature of Physician or Supplier Including Degrees or Credentials</label>'
+        + '<select id="nbf_physician" data-onchange="nbPickPhysician(this.value)"><option value="">— Select —</option>' + docOpts + own(physName, physAt) + '</select>'
+        + (pracAt && !pool.length ? '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register physicians for ' + esc(pracAt.name) + '</button>' : '')
+      + '</div>';
     /* In the CMS-1500's places (10 Nov 2026): the federal tax ID opens Billing (box 25), the treating
        physician goes with the signature (box 31), and the billing provider comes last (box 33). */
     return {
       // From the billing provider picked below (box 25 is the billing provider's).
-      taxId: '<div class="rf-f"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
-      physician: physician + input('physicianNpi', 'Physician NPI', '', 40) + addBtns('physician'),
+      taxId: '<div class="rf-f"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
+      physician: physician,
       practice: '<h3 class="nr-sec"><span>Billing Provider</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
     };
+  }
+  function nbUsePractice(b, x) {
+    b.practiceName = x.name || ''; b.practiceAddress = x.address || ''; b.practicePhone = x.phone || ''; b.practiceEmail = x.email || '';
+    b.practiceNpi = x.npi || ''; b.practiceTaxId = x.taxId || '';
   }
   function nbPickPractice(v) {
     var p = nbCurrent(); if (!p) return;
     if (v === '__bill') return;
     var b = nbDraftFor(p), x = nbProv.practices.filter(function (e) { return e.id === v; })[0] || {};
-    b.practiceName = x.name || ''; b.practiceAddress = x.address || ''; b.practicePhone = x.phone || ''; b.practiceEmail = x.email || '';
-    b.practiceNpi = x.npi || ''; b.practiceTaxId = x.taxId || '';
-    nbAdding = null; nbAddPrev = null;
+    nbUsePractice(b, x);
+    // A physician from another practice does not stay on the bill.
+    var doc = nbProv.physicians.filter(function (d) { return nbSame(d.name, b.physicianName); });
+    if (x.id && b.physicianName && !doc.some(function (d) { return d.practiceId === x.id; })) nbUsePhysician(b, {});
     renderNeuroBilling();
   }
   // A physician's NPI also goes on the service lines that have none yet (each line's rendering NPI).
@@ -541,45 +532,13 @@
   }
   function nbPickPhysician(v) {
     var p = nbCurrent(); if (!p) return;
-    if (v === '__add') { nbStartAdd(p, 'physician'); return; }
     if (v === '__bill') return;
-    var b = nbDraftFor(p);
-    if (!v) { nbUsePhysician(b, {}); } else nbUsePhysician(b, nbProv.physicians.filter(function (e) { return e.id === v; })[0] || {});
-    nbAdding = null; nbAddPrev = null;
+    var b = nbDraftFor(p), x = nbProv.physicians.filter(function (e) { return e.id === v; })[0] || {};
+    nbUsePhysician(b, x);
+    // Picked before the practice: the physician's practice becomes the billing provider.
+    var pr = x.practiceId && nbProv.practices.filter(function (e) { return e.id === x.practiceId; })[0];
+    if (pr && !nbPracticeOf(b)) nbUsePractice(b, pr);
     renderNeuroBilling();
-  }
-  function nbAddCred(v) { var o = document.getElementById('nba_credOther'); if (o) { o.hidden = v !== 'Other'; if (v === 'Other') o.focus(); } }
-  var NB_ADD_KEYS = {
-    physician: ['physicianName', 'physicianCred', 'physicianCredOther', 'physicianNpi']
-  };
-  function nbStartAdd(p, kind) {
-    var b = nbDraftFor(p);
-    nbAddPrev = { kind: kind, values: {} };
-    NB_ADD_KEYS[kind].forEach(function (k) { nbAddPrev.values[k] = b[k] || ''; b[k] = ''; });
-    nbAdding = kind;
-    renderNeuroBilling();
-    var f = document.getElementById('nba_name'); if (f) f.focus();
-  }
-  // Cancel: the bill says what it said before.
-  function nbAddCancel() {
-    var p = nbCurrent();
-    if (p && nbAddPrev) { var b = nbDraftFor(p); Object.keys(nbAddPrev.values).forEach(function (k) { b[k] = nbAddPrev.values[k]; }); }
-    nbAdding = null; nbAddPrev = null;
-    renderNeuroBilling();
-  }
-  function nbAddSave(kind) {
-    var p = nbCurrent(); if (!p) return;
-    var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
-    var name = val('nba_name');
-    if (!name) { showToast('Enter the physician\u2019s name.', 'err'); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
-    var b = nbDraftFor(p);
-    var cred = val('nba_cred');
-    var entry = { id: nbNewId(), name: name, cred: NB_CREDENTIALS.indexOf(cred) !== -1 ? cred : '', credOther: cred === 'Other' ? val('nba_credOther') : '', npi: String(b.physicianNpi || '').trim() };
-    nbUsePhysician(b, entry);
-    nbAdding = null; nbAddPrev = null;
-    nbProvAdd('physician', entry).then(function () { renderNeuroBilling(); });
-    renderNeuroBilling();
-    showToast('Physician added to the saved list and put on this bill. Click Save Bill to keep it.', 'ok');
   }
 
   // Typing does not repaint the form (that would lose the cursor): totals and flags are updated in place.
@@ -889,7 +848,7 @@
       ['Patient Account No.', b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
-      ['Physician', nbPhysician(b)],
+      ['Physician or Supplier', nbPhysician(b)],
       ['Physician NPI', b.physicianNpi],
       ['Signature of Provider', b.signature, sig],
       ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
@@ -966,9 +925,11 @@
   }
 
   /* ========================= Billing Provider List ========================= */
-  /* The billing providers (practices) registered once, each picked on a bill by
-     name. Stored in the shared document neuroProviders with the physicians. */
-  var plModal = null;           // { id } while the Register / Edit window is open ('' for a new one)
+  /* The billing providers (practices), each with its treating physicians, as
+     cards. A practice's name opens it with its physicians; Edit is where the
+     practice and its physicians are registered (10 Nov 2026). */
+  var plModal = null;           // { mode: 'view' | 'edit', id } while a window is open (id '' = a new practice)
+  var plQuery = '';
   var PL_FIELDS = [
     ['name', 'Practice Name', 200, 'e.g. Northern Virginia Neurology'],
     ['address', 'Provider Address', 300, 'Street, city, state ZIP'],
@@ -977,56 +938,147 @@
     ['npi', 'Provider NPI', 40, ''],
     ['taxId', 'Federal Tax ID', 40, '']
   ];
-  function plFind(id) { return nbProv.practices.filter(function (x) { return N().idArg(x.id) === id; })[0] || null; }
+  function plFind(id) { return nbProv.practices.filter(function (x) { return N().idArg(x.id) === id || x.id === id; })[0] || null; }
+  function plDocs(prId) {
+    return nbProv.physicians.filter(function (x) { return x.practiceId === prId; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  }
+  function plInitials(name) {
+    var w = String(name || '').replace(/[^A-Za-z0-9 ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+    return ((w[0] || '?').charAt(0) + (w[1] ? w[1].charAt(0) : (w[0] || '').charAt(1))).toUpperCase();
+  }
+  function plFact(label, v) {
+    return '<div class="bpl-fact"><dt>' + label + '</dt><dd>' + (v ? esc(v) : '<span class="bpl-none">—</span>') + '</dd></div>';
+  }
 
   function renderNeuroProviderList() {
     var mount = document.getElementById('neuroProviderListMount');
     if (!mount || !N()) return;
     nbProvLoad();
-    var list = nbProv.practices.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    var all = nbProv.practices.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    var q = plQuery.trim().toLowerCase();
+    var list = all.filter(function (x) {
+      return !q || [x.name, x.address, x.phone, x.email, x.npi, x.taxId].concat(plDocs(x.id).map(function (d) { return nbPhysicianOf(d) + ' ' + (d.npi || ''); }))
+        .join(' ').toLowerCase().indexOf(q) !== -1;
+    });
     var h = nbHead('Billing Provider List',
-      'Register each billing provider once, then pick it by name on any neurologist bill.',
-      '<button type="button" class="btn btn-primary" data-onclick="plOpen(\'\')">' + nbIcon('plus') + 'Register a Provider</button>'
+      'Register each billing provider and its treating physicians once, then pick them on any neurologist bill.',
+      '<button type="button" class="btn btn-primary" data-onclick="plEdit(\'\')">' + nbIcon('plus') + 'Register a Provider</button>'
       + '<button type="button" class="btn btn-ghost" data-onclick="showPage(\'neuroBilling\')">' + nbIcon('dollar') + 'Neurologist Billing</button>');
-    if (!list.length) {
-      h += '<div class="card"><div class="card-body rf-empty">' + nbIcon('list', 'rf-empty-i') + '<b>No billing providers yet</b>'
-        + '<p>Register a provider here and it can be picked on every neurologist bill.</p></div></div>';
+    if (all.length) {
+      h += '<div class="rf-toolbar"><div class="rf-tabs"><span class="rf-tab active"><span class="nr-tl">Billing Providers <span class="rf-badge">' + all.length + '</span></span></span></div>'
+        + '<div class="rf-search">' + nbIcon('search')
+        + '<input id="plSearch" type="search" autocomplete="off" placeholder="Search practice, physician or NPI" value="' + esc(plQuery) + '" data-oninput="plSearch(this.value)">'
+        + '</div></div>';
+    }
+    if (!all.length) {
+      h += '<div class="card"><div class="card-body rf-empty">' + nbIcon('building', 'rf-empty-i') + '<b>No billing providers yet</b>'
+        + '<p>Register a practice and its physicians, and they can be picked on every neurologist bill.</p>'
+        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plEdit(\'\')">' + nbIcon('plus') + 'Register a Provider</button></div></div>';
+    } else if (!list.length) {
+      h += '<div class="card"><div class="card-body rf-empty">' + nbIcon('search', 'rf-empty-i') + '<b>Nothing matches “' + esc(plQuery) + '”</b>'
+        + '<p>Try a practice name, a physician’s name or an NPI.</p></div></div>';
     } else {
-      h += '<div class="card nb-table-card"><div class="nb-table-scroll"><table class="nb-table pl-table"><thead><tr>'
-        + '<th>Practice Name</th><th>Address</th><th>Phone</th><th>Email</th><th>NPI</th><th>Federal Tax ID</th>'
-        + '<th><span class="nb-sr">Actions</span></th></tr></thead><tbody>';
-      list.forEach(function (x) {
-        var id = N().idArg(x.id), dash = '<span class="nb-muted">\u2014</span>';
-        var cell = function (v) { return v ? esc(v) : dash; };
-        h += '<tr><td><b>' + esc(x.name) + '</b></td><td>' + cell(x.address) + '</td><td>' + cell(x.phone) + '</td><td>' + cell(x.email) + '</td>'
-          + '<td>' + cell(x.npi) + '</td><td>' + cell(x.taxId) + '</td>'
-          + '<td class="nb-act"><button type="button" class="rf-btn rf-btn-quiet nb-btn-sm" data-onclick="plOpen(\'' + id + '\')" aria-label="Edit ' + esc(x.name) + '">' + nbIcon('edit') + 'Edit</button>'
-          + '<button type="button" class="rf-btn rf-btn-quiet nb-btn-sm pl-del" data-onclick="plDelete(\'' + id + '\')" aria-label="Delete ' + esc(x.name) + '">' + nbIcon('x') + 'Delete</button></td></tr>';
-      });
-      h += '</tbody></table></div></div>';
+      h += '<div class="bpl-grid">' + list.map(plCardHTML).join('') + '</div>';
     }
     N().paint(mount, 'page-neuroProviderList', h, []);
   }
-  function plOpen(id) {
+  function plCardHTML(x) {
+    var docs = plDocs(x.id), id = N().idArg(x.id);
+    return '<article class="bpl-card">'
+      + '<div class="bpl-top"><span class="bpl-mono" aria-hidden="true">' + esc(plInitials(x.name)) + '</span>'
+        + '<div class="bpl-id"><button type="button" class="bpl-name" data-onclick="plView(\'' + id + '\')">' + esc(x.name) + '</button>'
+          + '<span class="bpl-addr">' + (x.address ? esc(x.address) : '<span class="bpl-none">No address</span>') + '</span></div>'
+        + '<div class="bpl-acts">'
+          + '<button type="button" class="bpl-ic" title="Edit" aria-label="Edit ' + esc(x.name) + '" data-onclick="plEdit(\'' + id + '\')">' + nbIcon('edit') + '</button>'
+          + '<button type="button" class="bpl-ic bpl-ic-del" title="Delete" aria-label="Delete ' + esc(x.name) + '" data-onclick="plDelete(\'' + id + '\')">' + nbIcon('trash') + '</button>'
+        + '</div></div>'
+      + '<dl class="bpl-facts">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('NPI', x.npi) + plFact('Federal Tax ID', x.taxId) + '</dl>'
+      + '<button type="button" class="bpl-foot" data-onclick="plView(\'' + id + '\')">'
+        + (docs.length ? '<span class="bpl-stack" aria-hidden="true">' + docs.slice(0, 3).map(function (d) { return '<span class="bpl-av">' + esc(plInitials(d.name)) + '</span>'; }).join('') + '</span>'
+                       : '<span class="bpl-av bpl-av-empty" aria-hidden="true">' + nbIcon('user') + '</span>')
+        + '<span class="bpl-count">' + (docs.length ? docs.length + (docs.length === 1 ? ' Treating Physician' : ' Treating Physicians') : 'No physicians yet') + '</span>'
+        + nbIcon('chevron', 'bpl-chev') + '</button>'
+      + '</article>';
+  }
+  function plShow(html) {
+    npModalHost().innerHTML = '<div class="rf-modal-back" data-onclick="plBackdrop(event)">'
+      + '<div class="rf-modal nb-modal bpl-modal" role="dialog" aria-modal="true" aria-labelledby="plTitle">' + html + '</div></div>';
+    document.body.classList.add('rf-modal-open');
+  }
+  // A practice and its physicians, read-only, with the details the CMS-1500 prints.
+  function plView(id) {
+    var x = plFind(id); if (!x) return;
+    plModal = { mode: 'view', id: x.id };
+    var docs = plDocs(x.id), aid = N().idArg(x.id);
+    plShow('<div class="rf-modal-hd"><div class="bpl-hd"><span class="bpl-mono" aria-hidden="true">' + esc(plInitials(x.name)) + '</span>'
+        + '<div><h2 id="plTitle">' + esc(x.name) + '</h2>' + (x.address ? '<p>' + esc(x.address) + '</p>' : '') + '</div></div>'
+        + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
+      + '<div class="rf-modal-body">'
+        + '<dl class="bpl-facts bpl-facts-lg">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax ID', x.taxId) + '</dl>'
+        + '<div class="bpl-sec-hd"><h3>Treating Physicians <span class="bpl-badge">' + docs.length + '</span></h3></div>'
+        + (docs.length
+          ? '<div class="bpl-docs"><div class="bpl-docs-hd"><span>Physician or Supplier, Degrees or Credentials</span><span>NPI</span></div>'
+            + docs.map(function (d) {
+                return '<div class="bpl-doc"><div class="bpl-doc-who"><span class="bpl-av">' + esc(plInitials(d.name)) + '</span><b>' + esc(nbPhysicianOf(d)) + '</b></div>'
+                  + '<span class="bpl-doc-npi">' + (d.npi ? esc(d.npi) : '<span class="bpl-none">—</span>') + '</span></div>';
+              }).join('') + '</div>'
+          : '<div class="bpl-empty">No physicians registered for this practice yet. Click Edit to add them.</div>')
+      + '</div>'
+      + '<div class="rf-modal-ft"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="plClose()">Close</button>'
+        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plEdit(\'' + aid + '\')">' + nbIcon('edit') + 'Edit Provider &amp; Physicians</button></div>');
+  }
+  function plDocRow(d) {
+    d = d || {};
+    return '<div class="bpl-row" data-id="' + esc(d.id || '') + '">'
+      + '<div class="rf-f bpl-cell bpl-cell-name"><input class="bpl-d-name" type="text" maxlength="200" placeholder="e.g. Jane Doe" aria-label="Physician name" value="' + esc(d.name || '') + '"></div>'
+      + '<div class="rf-f bpl-cell"><select class="bpl-d-cred" aria-label="Degree or credential" data-onchange="plCred(this)"><option value="">— Select —</option>'
+        + NB_CREDENTIALS.map(function (c) { return '<option' + (d.cred === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
+        + '<input class="bpl-d-other" type="text" maxlength="40" placeholder="Type it, e.g. DO" aria-label="Other degree or credential" value="' + esc(d.credOther || '') + '"' + (d.cred === 'Other' ? '' : ' hidden') + '></div>'
+      + '<div class="rf-f bpl-cell"><input class="bpl-d-npi" type="text" maxlength="40" placeholder="NPI" aria-label="Physician NPI" value="' + esc(d.npi || '') + '"></div>'
+      + '<button type="button" class="bpl-ic bpl-ic-del" title="Remove" aria-label="Remove this physician" data-onclick="plRemoveDoc(this)">' + nbIcon('trash') + '</button>'
+      + '</div>';
+  }
+  // Register or edit a practice and its physicians in one window.
+  function plEdit(id) {
     var x = id ? plFind(id) : null;
     if (id && !x) return;
-    plModal = { id: x ? x.id : '' };
-    var f = function (k, label, max, ph) {
-      return '<div class="rf-f' + (k === 'address' || k === 'name' ? ' pl-wide' : '') + '"><label for="pl_' + k + '">' + label + (k === 'name' ? '<span class="req-star" aria-hidden="true">*</span>' : '') + '</label>'
-        + '<input id="pl_' + k + '" type="' + (k === 'email' ? 'email' : 'text') + '" maxlength="' + max + '" value="' + esc(x ? x[k] || '' : '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (k === 'name' ? ' required' : '') + '></div>';
+    plModal = { mode: 'edit', id: x ? x.id : '' };
+    var docs = x ? plDocs(x.id) : [];
+    var f = function (d) {
+      var k = d[0];
+      return '<div class="rf-f' + (k === 'address' || k === 'name' ? ' pl-wide' : '') + '"><label for="pl_' + k + '">' + d[1] + (k === 'name' ? '<span class="req-star" aria-hidden="true">*</span>' : '') + '</label>'
+        + '<input id="pl_' + k + '" type="' + (k === 'email' ? 'email' : 'text') + '" maxlength="' + d[2] + '" value="' + esc(x ? x[k] || '' : '') + '"' + (d[3] ? ' placeholder="' + esc(d[3]) + '"' : '') + (k === 'name' ? ' required' : '') + '></div>';
     };
-    npModalHost().innerHTML = '<div class="rf-modal-back" data-onclick="plBackdrop(event)">'
-      + '<div class="rf-modal nb-modal" role="dialog" aria-modal="true" aria-labelledby="plTitle">'
-      + '<div class="rf-modal-hd"><div><h2 id="plTitle">' + (x ? 'Edit Billing Provider' : 'Register a Billing Provider') + '</h2></div>'
+    plShow('<div class="rf-modal-hd"><div><h2 id="plTitle">' + (x ? 'Edit Billing Provider' : 'Register a Billing Provider') + '</h2></div>'
         + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
-      + '<div class="rf-modal-body"><div class="rf-pair pl-pair">'
-        + PL_FIELDS.map(function (d) { return f(d[0], d[1], d[2], d[3]); }).join('')
-      + '</div><div class="nr-err" id="plErr" role="alert" hidden></div></div>'
+      + '<div class="rf-modal-body">'
+        + '<div class="bpl-sec-hd bpl-sec-first"><h3>' + nbIcon('building') + 'Practice</h3></div>'
+        + '<div class="rf-pair pl-pair">' + PL_FIELDS.map(f).join('') + '</div>'
+        + '<div class="bpl-sec-hd"><h3>' + nbIcon('user') + 'Treating Physicians</h3>'
+          + '<button type="button" class="rf-btn rf-btn-quiet nb-btn-sm" data-onclick="plAddDoc()">' + nbIcon('plus') + 'Add Physician</button></div>'
+        + '<div class="bpl-rows-hd" aria-hidden="true"><span>Physician Name</span><span>Degree or Credential</span><span>NPI</span><span></span></div>'
+        + '<div id="plDocs">' + (docs.length ? docs.map(plDocRow).join('') : plDocRow()) + '</div>'
+        + '<div class="nr-err" id="plErr" role="alert" hidden></div>'
+      + '</div>'
       + '<div class="rf-modal-ft"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="plClose()">Cancel</button>'
-        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plSave()">' + nbIcon('check') + (x ? 'Save Changes' : 'Register Provider') + '</button></div>'
-      + '</div></div>';
-    document.body.classList.add('rf-modal-open');
+        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plSave()">' + nbIcon('check') + (x ? 'Save Changes' : 'Register Provider') + '</button></div>');
     var first = document.getElementById('pl_name'); if (first) first.focus();
+  }
+  function plAddDoc() {
+    var box = document.getElementById('plDocs'); if (!box) return;
+    box.insertAdjacentHTML('beforeend', plDocRow());
+    var rows = box.querySelectorAll('.bpl-row');
+    var n = rows[rows.length - 1].querySelector('.bpl-d-name'); if (n) n.focus();
+  }
+  function plRemoveDoc(btn) {
+    var row = btn && btn.closest ? btn.closest('.bpl-row') : null; if (!row) return;
+    var box = row.parentNode; row.remove();
+    if (box && !box.querySelector('.bpl-row')) box.insertAdjacentHTML('beforeend', plDocRow());
+  }
+  function plCred(sel) {
+    var other = sel && sel.parentNode ? sel.parentNode.querySelector('.bpl-d-other') : null;
+    if (other) { other.hidden = sel.value !== 'Other'; if (sel.value === 'Other') other.focus(); }
   }
   function plClose() {
     plModal = null;
@@ -1035,27 +1087,47 @@
   }
   function plBackdrop(ev) { if (ev && ev.target === ev.currentTarget) plClose(); }
   function plSave() {
-    if (!plModal) return;
+    if (!plModal || plModal.mode !== 'edit') return;
     var val = function (k) { var el = document.getElementById('pl_' + k); return el ? String(el.value || '').trim() : ''; };
+    var err = document.getElementById('plErr');
+    var fail = function (msg, el) {
+      if (err) { err.hidden = false; err.innerHTML = nbIcon('alert') + esc(msg); }
+      if (typeof el === 'string') el = document.getElementById('pl_' + el);
+      if (el) el.focus();
+    };
     var entry = {};
     PL_FIELDS.forEach(function (d) { entry[d[0]] = val(d[0]); });
-    var err = document.getElementById('plErr');
-    var fail = function (msg, k) {
-      if (err) { err.hidden = false; err.innerHTML = nbIcon('alert') + esc(msg); }
-      var el = document.getElementById('pl_' + k); if (el) el.focus();
-    };
     if (!entry.name) return fail('Enter the practice name.', 'name');
     if (entry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entry.email)) return fail('Enter the email as name@example.com.', 'email');
     var id = plModal.id;
-    if (nbProv.practices.some(function (x) { return x.id !== id && nbSame(x.name, entry.name); })) return fail('A provider named \u201c' + entry.name + '\u201d is already on the list.', 'name');
+    if (nbProv.practices.some(function (x) { return x.id !== id && nbSame(x.name, entry.name); })) return fail('A provider named “' + entry.name + '” is already on the list.', 'name');
     entry.id = id || nbNewId();
+    // The physicians: rows left empty are skipped; a row with anything in it needs a name.
+    var docs = [], bad = null;
+    Array.prototype.forEach.call(document.querySelectorAll('#plDocs .bpl-row'), function (row) {
+      if (bad) return;
+      var get = function (c) { var el = row.querySelector(c); return el ? String(el.value || '').trim() : ''; };
+      var d = { name: get('.bpl-d-name'), cred: get('.bpl-d-cred'), credOther: get('.bpl-d-other'), npi: get('.bpl-d-npi') };
+      if (d.cred !== 'Other') d.credOther = '';
+      if (!d.name && !d.cred && !d.npi && !d.credOther) return;
+      if (!d.name) { bad = ['Enter the physician’s name, or remove the row.', row.querySelector('.bpl-d-name')]; return; }
+      if (docs.some(function (o) { return nbSame(nbPhysicianOf(o), nbPhysicianOf(d)); })) { bad = ['“' + nbPhysicianOf(d) + '” is listed twice.', row.querySelector('.bpl-d-name')]; return; }
+      d.id = row.getAttribute('data-id') || nbNewId();
+      d.practiceId = entry.id;
+      if (NB_CREDENTIALS.indexOf(d.cred) === -1) d.cred = '';
+      Object.keys(d).forEach(function (k) { if (!d[k] && k !== 'cred') delete d[k]; });
+      docs.push(d);
+    });
+    if (bad) return fail(bad[0], bad[1]);
     Object.keys(entry).forEach(function (k) { if (k !== 'id' && k !== 'name' && !entry[k]) delete entry[k]; });
     plClose();
+    var byName = function (a, b) { return String(a.name).localeCompare(String(b.name)); };
     nbProvWrite(function (list) {
       var at = -1;
       list.practices.forEach(function (x, i) { if (x.id === entry.id) at = i; });
       if (at >= 0) list.practices[at] = entry; else list.practices.push(entry);
-      list.practices.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      list.practices.sort(byName);
+      list.physicians = list.physicians.filter(function (d) { return d.practiceId !== entry.id; }).concat(docs).sort(byName);
     }, 'The billing provider could not be saved').then(function (ok) {
       renderNeuroProviderList();
       if (ok) showToast(id ? 'Billing provider updated. Bills already saved keep the details they were saved with.' : 'Billing provider registered. It can now be picked on any neurologist bill.', 'ok');
@@ -1064,13 +1136,23 @@
   }
   function plDelete(id) {
     var x = plFind(id); if (!x) return;
-    ctgConfirm('Remove \u201c' + x.name + '\u201d from the Billing Provider List? Bills already saved with this provider keep its details.',
+    var n = plDocs(x.id).length;
+    ctgConfirm('Remove “' + x.name + '”' + (n ? ' and its ' + (n === 1 ? 'physician' : n + ' physicians') : '') + ' from the Billing Provider List? Bills already saved with them keep their details.',
       { title: 'Remove billing provider', okLabel: 'Remove', danger: true }).then(function (ok) {
       if (!ok) return;
-      nbProvWrite(function (list) { list.practices = list.practices.filter(function (y) { return y.id !== x.id; }); }, 'The billing provider could not be removed')
+      nbProvWrite(function (list) {
+        list.practices = list.practices.filter(function (y) { return y.id !== x.id; });
+        list.physicians = list.physicians.filter(function (d) { return d.practiceId !== x.id; });
+      }, 'The billing provider could not be removed')
         .then(function (done) { renderNeuroProviderList(); if (done) showToast('Billing provider removed from the list.', 'ok'); });
       renderNeuroProviderList();
     });
+  }
+  function plSearch(v) {
+    plQuery = String(v || '');
+    renderNeuroProviderList();
+    var box = document.getElementById('plSearch');
+    if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
   }
 
   /* =========================== Neurologist Payments ========================= */
@@ -1310,16 +1392,18 @@
   window.renderNeuroBilling = renderNeuroBilling;
   window.nbPickPractice = nbPickPractice;
   window.nbPickPhysician = nbPickPhysician;
-  window.nbAddCred = nbAddCred;
-  window.nbAddCancel = nbAddCancel;
-  window.nbAddSave = nbAddSave;
   window.renderNeuroPayments = renderNeuroPayments;
   window.renderNeuroProviderList = renderNeuroProviderList;
-  window.plOpen = plOpen;
+  window.plView = plView;
+  window.plEdit = plEdit;
   window.plClose = plClose;
   window.plBackdrop = plBackdrop;
   window.plSave = plSave;
   window.plDelete = plDelete;
+  window.plSearch = plSearch;
+  window.plAddDoc = plAddDoc;
+  window.plRemoveDoc = plRemoveDoc;
+  window.plCred = plCred;
   window.nbSelect = nbSelect;
   window.nbItemKey = nbItemKey;
   window.nbPickToggle = nbPickToggle;
