@@ -421,7 +421,6 @@
       + nbLinesHTML(b)
       + '<div class="nb-svc-foot"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddLine()">' + nbIcon('plus') + 'Add service line</button>'
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
-      + nbProvidersHTML(b)
       + '<h3 class="nr-sec"><span>Billing</span></h3>'
       + '<div class="nb-grid">'
         + '<div class="rf-f"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
@@ -446,7 +445,10 @@
         + '<div class="rf-f"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
         + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
-      + '</div></div>';
+      + '</div>'
+      // Last, as on the CMS-1500, where the billing provider is box 33 (10 Nov 2026).
+      + nbProvidersHTML(b)
+      + '</div>';
 
     var meta = saved && saved.updatedAt
       ? 'Last updated ' + esc(us(String(saved.updatedAt).slice(0, 10))) + (saved.updatedBy ? ' by ' + esc(saved.updatedBy) : '')
@@ -836,6 +838,7 @@
       box.forEach(function (row, i) {
         if (i) doc.line(ML, y + rowH * i, ML + CW, y + rowH * i);
         row.forEach(function (c, j) {
+          if (!c[0]) return;
           var x = ML + j * half + 6, ty = y + rowH * i + 12.5;
           f('bold', 9); doc.text(c[0] + ': ', x, ty);
           var w = doc.getTextWidth(c[0] + ': ');
@@ -851,16 +854,6 @@
       [['Account No.', b.accountNo], ['Partner', (r.form || {}).partner || '']],
       [['Referral', N().step(N().status(p)).label], ['Appointment', nbPdfDate(r.apptDate)]]
     ]);
-    y += 12;
-    // Who billed and who treated (6 Nov 2026), when the bill says.
-    if (NB_PROV_FIELDS.some(function (k) { return b[k]; }) || nbPhysician(b)) {
-      kvBox([
-        [['Billing Provider', b.practiceName], ['Provider NPI', b.practiceNpi]],
-        [['Address', b.practiceAddress], ['Tax ID', b.practiceTaxId]],
-        [['Phone', b.practicePhone], ['Email', b.practiceEmail]],
-        [['Treating Physician', nbPhysician(b)], ['Physician NPI', b.physicianNpi]]
-      ]);
-    }
     y += 24;
 
     heading('Services');
@@ -887,12 +880,15 @@
         if (s > 0 && isFinite(s)) sig = { w: ip.width * s, h: ip.height * s };
       } catch (e) { sig = null; }
     }
-    if (y + 91 + (sig ? sig.h : 0) > PH - BOTTOM) { newPage(); heading('Billing'); }
+    if (y + 125 + (sig ? sig.h : 0) > PH - BOTTOM) { newPage(); heading('Billing'); }
     var top = y + 4, rx = ML + CW * 0.6, rw = CW * 0.4, ky = top + 12;
-    [['Patient Account No.', b.accountNo],
+    // In the CMS-1500's order (10 Nov 2026): federal tax ID, account, assignment, then the physician's signature and date.
+    [['Federal Tax ID', b.practiceTaxId],
+      ['Patient Account No.', b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
       ['Physician', nbPhysician(b)],
+      ['Physician NPI', b.physicianNpi],
       ['Signature of Provider', b.signature, sig],
       ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
       var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';
@@ -903,7 +899,8 @@
       if (pic) {
         try { doc.addImage(b.signatureImage, 'PNG', ML + w + 2, ky - pic.h + 4, pic.w, pic.h); drawn = true; } catch (e) { drawn = false; }
       }
-      if (!drawn) { f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w)[0] || '', ML + w, ky); }
+      // 2pt after the label: jsPDF measures some bold labels a hair short ("Federal Tax ID:99-...").
+      if (!drawn) { f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w - 2)[0] || '', ML + w + 2, ky); }
       ky += 17;
     });
     [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)], ['Balance Owed', nbFmt(t.balance)]].forEach(function (s, i, all) {
@@ -914,6 +911,19 @@
       f('bold', 9.5); doc.text(s[1], rx + rw - 6, by + 13.5, { align: 'right' });
     });
     y = Math.max(ky, top + 60) + 22;
+
+    // Who billed, last as on the CMS-1500 (box 33), when the bill says.
+    if (['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi'].some(function (k) { return b[k]; })) {
+      heading('Billing Provider');
+      if (y + rowH * 3 + 8 > PH - BOTTOM) { newPage(); heading('Billing Provider'); }
+      y += 4;
+      kvBox([
+        [['Billing Provider', b.practiceName], ['Provider NPI', b.practiceNpi]],
+        [['Address', b.practiceAddress], ['Phone', b.practicePhone]],
+        [['Email', b.practiceEmail], ['', '']]
+      ]);
+      y += 24;
+    }
 
     heading('Payments');
     var pays = ((b.payments) || []).slice().sort(function (a, c) { return String(a.date || '').localeCompare(String(c.date || '')); });
