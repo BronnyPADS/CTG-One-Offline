@@ -717,18 +717,18 @@
   }
 
   /* ---------------------------- the bill as a PDF ---------------------------- */
-  /* The saved bill on the practice letterhead, laid out as on the page: the
-     service lines, the billing details with the totals, and the payments
-     recorded. Unsaved changes are not in it, so the button asks for a save
+  /* The saved bill on the practice letterhead, laid out as an invoice (the
+     approved draft of 10 Nov 2026): the service lines, the billing details and
+     the billing provider with the totals, and the payments recorded. Unsaved changes are not in it, so the button asks for a save
      first. The PDF's fonts are Latin-1 only, hence nbPdfText. */
   var NB_PDF_SERVICES = [
-    ['from', 'Date of Service From', 54], ['to', 'Date of Service To', 54], ['pos', 'Place of Service', 62], ['emg', 'EMG', 52],
-    ['cpt', 'CPT/HCPCS', 52], ['mod', 'Modifier', 50], ['dxPtr', 'Diagnosis Pointer', 48], ['charge', '$ Charges', 62],
-    ['units', 'Days or Units', 40], ['npi', 'Rendering Provider ID. #', 58]
+    ['from', 'Date of Service From', 60], ['to', 'Date of Service To', 60], ['pos', 'Place of Service', 48], ['emg', 'EMG', 34],
+    ['cpt', 'CPT/HCPCS', 56], ['mod', 'Modifier', 48], ['dxPtr', 'Diagnosis Pointer', 50], ['charge', '$ Charges', 64],
+    ['units', 'Days or Units', 40], ['npi', 'Rendering Provider ID. #', 72]
   ];
   var NB_PDF_PAYMENTS = [
-    ['date', 'Date', 66], ['amount', 'Amount', 76], ['method', 'Method', 96], ['ref', 'Reference', 92],
-    ['note', 'Note', 132], ['by', 'Recorded by', 70]
+    ['date', 'Date', 70], ['amount', 'Amount', 74], ['method', 'Method', 90], ['ref', 'Reference', 90],
+    ['note', 'Note', 128], ['by', 'Recorded by', 80]
   ];
   function nbPdfText(v) {
     return String(v == null ? '' : v).replace(/[\r\n\t]+/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
@@ -736,187 +736,199 @@
   }
   function nbPdfDate(v) { var s = String(v || ''); return /^\d{4}-\d{2}-\d{2}/.test(s) ? us(s.slice(0, 10)) : s; }
   function nbBuildBillPdf(p) {
+    /* Laid out as the approved invoice draft (Neurologist-Bill-Draft, 10 Nov 2026): letterhead with a
+       navy rule, Patient and Referral boxes, the service lines under a navy header, Billing and the
+       signature beside the Billing Provider with the totals under it, then the payments. No status
+       badge (the user asked it off). */
     var b = nbBill(p), t = nbTotals(b), r = N().saved(p), chart = N().chart(p), T = nbPdfText;
     var name = (typeof naturalPatientName === 'function' ? naturalPatientName(p) : '') || nbName(p);
     var doc = new window.jspdf.jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-    var PW = 612, PH = 792, ML = 40, MR = 40, CW = PW - ML - MR, BOTTOM = 46, y = 0;
-    function f(style, size) { doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size || 9); doc.setTextColor(0, 0, 0); }
-    // The letterhead every CTG document carries (as on the Case Discharge Summary).
+    var PW = 612, PH = 792, ML = 40, MR = 40, CW = PW - ML - MR, BOTTOM = 52, y = 0;
+    var NAVY = [15, 47, 102], INK = [17, 24, 39], MUTED = [91, 100, 116], LINE = [213, 218, 227], SOFT = [243, 245, 249], ZEBRA = [250, 251, 253];
+    function f(style, size, color) { doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size || 9); doc.setTextColor.apply(doc, color || INK); }
+    function stroke(c, w) { doc.setDrawColor.apply(doc, c); doc.setLineWidth(w); }
+    function fill(c) { doc.setFillColor.apply(doc, c); }
+    function one(text, width) { return doc.splitTextToSize(T(text), width)[0] || ''; }
+    // The letterhead every CTG document carries, with a navy rule under it.
     function letterhead() {
       doc.setTextColor(0, 0, 0); doc.setFont('times', 'bold'); doc.setFontSize(12);
-      doc.text('CONCUSSION THERAPY GROUP', ML, 52);
+      doc.text('CONCUSSION THERAPY GROUP', ML, 56);
       doc.setFont('times', 'normal'); doc.setFontSize(10);
       ['2411 Crofton Lane, Suite 13A', 'Crofton, MD, 21114-1336', 'Phone: 410-451-9870', 'Fax: 410-451-9872'].forEach(function (l, i) {
-        doc.text(l, PW - MR, 36 + i * 13, { align: 'right' });
+        doc.text(l, PW - MR, 40 + i * 13, { align: 'right' });
       });
-      y = 112;
+      stroke(NAVY, 1.5); doc.line(ML, 94, PW - MR, 94);
+      y = 124;
     }
     function newPage() { doc.addPage(); letterhead(); }
-    function heading(text) { if (y + 50 > PH - BOTTOM) newPage(); f('bold', 11); doc.text(text, ML, y); y += 8; }
-    // A bordered table with a grey header row, repeated on each new page; money columns align right.
-    function table(cols, rows, money) {
+    // A section title in spaced navy capitals over a thin rule.
+    function sec(text, x, w) {
+      f('bold', 8.5, NAVY); doc.text(text.toUpperCase(), x, y, { charSpace: 1.1 });
+      stroke(LINE, 0.6); doc.line(x, y + 6, x + w, y + 6);
+    }
+    // A table: header labels (wrapped, bottom-aligned), rows with a rule under each; right-aligned columns named in `right`.
+    function table(cols, rows, right, style) {
       var X = [], cx = ML;
       cols.forEach(function (c) { X.push(cx); cx += c[2]; });
-      var at = function (i) { return money.indexOf(cols[i][0]) !== -1 ? [X[i] + cols[i][2] - 3, { align: 'right' }] : [X[i] + 3, {}]; };
-      var grid = function (top, h) { doc.rect(ML, top, CW, h); X.forEach(function (x, i) { if (i) doc.line(x, top, x, top + h); }); };
-      var cells = function (ls, top, step) {
-        ls.forEach(function (l, i) { var a = at(i); l.forEach(function (s, k) { doc.text(s, a[0], top + k * step, a[1]); }); });
-      };
+      var tx = function (i) { return right.indexOf(cols[i][0]) !== -1 ? [X[i] + cols[i][2] - 5, { align: 'right' }] : [X[i] + 5, {}]; };
       function head() {
-        f('bold', 7.5);
-        var ls = cols.map(function (c) { return doc.splitTextToSize(c[1], c[2] - 6); });
-        var h = Math.max.apply(null, ls.map(function (l) { return l.length; })) * 9 + 7;
-        if (y + h + 20 > PH - BOTTOM) newPage();
-        f('bold', 7.5);
-        doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.6); doc.setFillColor(241, 241, 241);
-        doc.rect(ML, y, CW, h, 'F'); grid(y, h); cells(ls, y + 10, 9);
+        f('bold', 7, style === 'navy' ? [255, 255, 255] : MUTED);
+        var ls = cols.map(function (c) { return doc.splitTextToSize(style === 'navy' ? c[1] : c[1].toUpperCase(), c[2] - 9); });
+        var n = Math.max.apply(null, ls.map(function (l) { return l.length; })), h = n * 8.5 + 11;
+        if (y + h + 24 > PH - BOTTOM) newPage();
+        if (style === 'navy') { fill(NAVY); doc.rect(ML, y, CW, h, 'F'); }
+        f('bold', 7, style === 'navy' ? [255, 255, 255] : MUTED);
+        ls.forEach(function (l, i) {
+          var a = tx(i);
+          l.forEach(function (s, k) { doc.text(s, a[0], y + h - 6 - (l.length - 1 - k) * 8.5, a[1]); });
+        });
+        if (style !== 'navy') { stroke(NAVY, 1.1); doc.line(ML, y + h, ML + CW, y + h); }
         y += h;
       }
       head();
-      rows.forEach(function (row) {
-        f('normal', 8.5);
-        var ls = cols.map(function (c) { return doc.splitTextToSize(T(row[c[0]]), c[2] - 6); });
-        var h = Math.max.apply(null, ls.map(function (l) { return l.length || 1; })) * 10 + 6;
-        if (y + h > PH - BOTTOM) { newPage(); head(); f('normal', 8.5); }
-        doc.setLineWidth(0.5); grid(y, h); cells(ls, y + 11, 10);
+      rows.forEach(function (row, ri) {
+        f('normal', 8.5, row._muted ? MUTED : INK);
+        var ls = row._muted ? [[row._muted]] : cols.map(function (c) { return doc.splitTextToSize(T(row[c[0]]), c[2] - 9); });
+        var h = Math.max.apply(null, ls.map(function (l) { return l.length || 1; })) * 10.5 + 10;
+        if (y + h > PH - BOTTOM) { newPage(); head(); f('normal', 8.5, row._muted ? MUTED : INK); }
+        if (style === 'navy' && ri % 2 === 1) { fill(ZEBRA); doc.rect(ML, y, CW, h, 'F'); }
+        if (row._muted) doc.text(row._muted, ML + 5, y + 14);
+        else ls.forEach(function (l, i) { var a = tx(i); l.forEach(function (s, k) { doc.text(s, a[0], y + 14 + k * 10.5, a[1]); }); });
+        stroke(LINE, 0.6); doc.line(ML, y + h, ML + CW, y + h);
         y += h;
       });
       return X;
     }
+    // Label / value lines; values may wrap to `lines` lines. Returns the y under the last one.
+    function pairs(list, x, w, labelW, lines) {
+      var ly = y;
+      list.forEach(function (pr) {
+        f('normal', 8.5, MUTED); doc.text(pr[0], x, ly);
+        f('bold', 8.5, INK);
+        var v = doc.splitTextToSize(T(pr[1]), w - labelW).slice(0, pr[2] || lines || 1);
+        if (!v.length) v = [''];
+        v.forEach(function (s, k) { doc.text(s, x + labelW, ly + k * 11); });
+        ly += 15 + (v.length - 1) * 11;
+      });
+      return ly;
+    }
 
     letterhead();
-    f('bold', 14); doc.text('NEUROLOGIST BILL', ML, y);
-    f('bold', 9); doc.text('Status: ' + NB_STAGES[nbStage(b)].label, PW - MR, y, { align: 'right' });
-    y += 14;
-    f('normal', 8.5); doc.setTextColor(70, 70, 70);
-    doc.text("Concussion Therapy Group's own record of what the neurologist billed for this referred patient and what has been paid.", ML, y);
-    y += 14;
+    f('bold', 17, NAVY); doc.text('NEUROLOGIST BILL', ML, y, { charSpace: 0.4 });
+    y += 16;
+    var made = us(N().today());
+    f('bold', 8.5, INK); doc.text(made, PW - MR, y, { align: 'right' });
+    var mw = doc.getTextWidth(made);
+    f('normal', 8.5, MUTED); doc.text('Printed', PW - MR - mw - 8, y, { align: 'right' });
+    f('normal', 8, MUTED);
+    doc.text(one("Concussion Therapy Group's own record of what the neurologist billed for this referred patient and what has been paid.", CW - mw - 60), ML, y);
+    y += 20;
 
-    // A box of label: value pairs, two to a row.
-    var half = CW / 2, rowH = 18;
-    var kvBox = function (box) {
-      doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.7); doc.rect(ML, y, CW, rowH * box.length);
-      box.forEach(function (row, i) {
-        if (i) doc.line(ML, y + rowH * i, ML + CW, y + rowH * i);
-        row.forEach(function (c, j) {
-          if (!c[0]) return;
-          var x = ML + j * half + 6, ty = y + rowH * i + 12.5;
-          f('bold', 9); doc.text(c[0] + ': ', x, ty);
-          var w = doc.getTextWidth(c[0] + ': ');
-          f('normal', 9); doc.text(doc.splitTextToSize(T(c[1]), half - 12 - w)[0] || '', x + w, ty);
-        });
+    // Patient and Referral, side by side.
+    var gap = 12, bw = (CW - gap) / 2;
+    var card = function (x, title, list) {
+      var h = 18 + 12 + list.length * 14 + 2;
+      fill(SOFT); doc.roundedRect(x, y, bw, 18, 4, 4, 'F'); doc.rect(x, y + 9, bw, 9, 'F');
+      stroke(LINE, 0.7); doc.roundedRect(x, y, bw, h, 4, 4, 'S'); doc.line(x, y + 18, x + bw, y + 18);
+      f('bold', 7, NAVY); doc.text(title.toUpperCase(), x + 10, y + 12, { charSpace: 1.1 });
+      list.forEach(function (pr, i) {
+        var ty = y + 18 + 15 + i * 14;
+        f('normal', 8.5, MUTED); doc.text(pr[0], x + 10, ty);
+        f('bold', 8.5, INK); doc.text(one(pr[1], bw - 104), x + 96, ty);
       });
-      doc.line(ML + half, y, ML + half, y + rowH * box.length);
-      y += rowH * box.length;
+      return h;
     };
-    // Who the bill is for.
-    kvBox([
-      [['Patient', name], ['Date of Birth', chart.dob]],
-      [['Account No.', b.accountNo], ['Partner', (r.form || {}).partner || '']],
-      [['Referral', N().step(N().status(p)).label], ['Appointment', nbPdfDate(r.apptDate)]]
-    ]);
-    y += 24;
+    var hc = Math.max(
+      card(ML, 'Patient', [['Name', name], ['Date of Birth', chart.dob], ['Referred On', nbPdfDate(r.referredOn)]]),
+      card(ML + bw + gap, 'Referral', [['Partner', (r.form || {}).partner || ''], ['Status', N().step(N().status(p)).label], ['Appointment', nbPdfDate(r.apptDate)]]));
+    y += hc + 28;
 
-    heading('Services');
+    // Services
+    if (y + 80 > PH - BOTTOM) newPage();
+    sec('Services', ML, CW); y += 14;
     var X = table(NB_PDF_SERVICES, (b.lines || []).map(function (l) {
       return { from: nbPdfDate(l.from), to: nbPdfDate(l.to), pos: l.pos, emg: l.emg, cpt: l.cpt, mod: l.mod, dxPtr: l.dxPtr,
         charge: nbFmt(nbMoney(l.charge)), units: l.units, npi: l.npi };
-    }), ['charge']);
-    if (y + 18 > PH - BOTTOM) newPage();
-    var ci = 7;   // the Charges column
-    doc.setLineWidth(0.5); doc.rect(ML, y, CW, 18); doc.line(X[ci], y, X[ci], y + 18); doc.line(X[ci + 1], y, X[ci + 1], y + 18);
-    f('bold', 9); doc.text('Total charge', X[ci] - 6, y + 12.5, { align: 'right' });
-    doc.text(nbFmt(t.billed), X[ci] + NB_PDF_SERVICES[ci][2] - 3, y + 12.5, { align: 'right' });
-    y += 36;
+    }), ['charge', 'units'], 'navy');
+    if (y + 22 > PH - BOTTOM) newPage();
+    var ci = 7;   // the $ Charges column
+    f('bold', 8.5, MUTED); doc.text('Total Charge', X[ci] - 12, y + 15, { align: 'right' });
+    f('bold', 8.5, INK); doc.text(nbFmt(t.billed), X[ci] + NB_PDF_SERVICES[ci][2] - 5, y + 15, { align: 'right' });
+    y += 46;
 
-    heading('Billing');
-    // An uploaded signature picture (5 Nov 2026) prints on its line, up to 34pt tall, in place of the typed one.
-    var sig = null;
+    // Billing (left) and the Billing Provider with the totals (right).
+    var sig = null, colW = (CW - 20) / 2, LX = ML, RX = ML + colW + 20;
     if (nbSigOk(b.signatureImage)) {
       try {
         var ip = doc.getImageProperties(b.signatureImage);
-        f('bold', 9);
-        var room = CW * 0.56 - doc.getTextWidth('Signature of Provider: ') - 4;
-        var s = Math.min(34 / ip.height, room / ip.width);
+        var s = Math.min(30 / ip.height, (colW * 0.7) / ip.width);
         if (s > 0 && isFinite(s)) sig = { w: ip.width * s, h: ip.height * s };
       } catch (e) { sig = null; }
     }
-    if (y + 125 + (sig ? sig.h : 0) > PH - BOTTOM) { newPage(); heading('Billing'); }
-    var top = y + 4, rx = ML + CW * 0.6, rw = CW * 0.4, ky = top + 12;
-    // In the CMS-1500's order (10 Nov 2026): federal tax ID, account, assignment, then the physician's signature and date.
-    [['Federal Tax ID', b.practiceTaxId],
+    if (y + 215 > PH - BOTTOM) newPage();
+    var top = y;
+    sec('Billing', LX, colW); sec('Billing Provider', RX, colW);
+    y = top + 24;
+    var leftEnd = pairs([
+      ['Federal Tax ID', b.practiceTaxId],
       ['Patient Account No.', b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
-      // Right above the signature, as "Jane Doe, MD" (5 Nov 2026).
       ['Physician or Supplier', nbPhysician(b)],
-      ['Physician NPI', b.physicianNpi],
-      ['Signature of Provider', b.signature, sig],
-      ['Date Signed', nbPdfDate(b.signDate)]].forEach(function (x) {
-      var label = /\?$/.test(x[0]) ? x[0] + ' ' : x[0] + ': ';
-      var pic = x[2];
-      if (pic) ky += Math.max(0, pic.h - 10);   // room above the line for the picture
-      f('bold', 9); doc.text(label, ML, ky);
-      var w = doc.getTextWidth(label), drawn = false;
-      if (pic) {
-        try { doc.addImage(b.signatureImage, 'PNG', ML + w + 2, ky - pic.h + 4, pic.w, pic.h); drawn = true; } catch (e) { drawn = false; }
-      }
-      // 2pt after the label: jsPDF measures some bold labels a hair short ("Federal Tax ID:99-...").
-      if (!drawn) { f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW * 0.56 - w - 2)[0] || '', ML + w + 2, ky); }
-      ky += 17;
+      ['Physician NPI', b.physicianNpi]], LX, colW, 104);
+    // The signature on its line: the uploaded picture, else the typed name.
+    var lineY = leftEnd + 26;
+    var drawn = false;
+    if (sig) { try { doc.addImage(b.signatureImage, 'PNG', LX + 2, lineY - sig.h - 2, sig.w, sig.h); drawn = true; } catch (e) { drawn = false; } }
+    if (!drawn && b.signature) { doc.setFont('times', 'italic'); doc.setFontSize(15); doc.setTextColor.apply(doc, INK); doc.text(one(b.signature, colW - 8), LX + 2, lineY - 5); }
+    stroke(INK, 0.8); doc.line(LX, lineY, LX + colW, lineY);
+    f('normal', 7.5, MUTED); doc.text('Signature of Provider', LX, lineY + 11);
+    var sd = nbPdfDate(b.signDate) || '';
+    f('bold', 7.5, MUTED); doc.text(sd, LX + colW, lineY + 11, { align: 'right' });
+    var sdw = doc.getTextWidth(sd);
+    f('normal', 7.5, MUTED); doc.text('Date Signed:' + (sd ? ' ' : ''), LX + colW - sdw, lineY + 11, { align: 'right' });
+    leftEnd = lineY + 14;
+
+    var rightEnd = pairs([
+      ['Billing Provider', b.practiceName],
+      ['Address', b.practiceAddress, 2],
+      ['Phone', b.practicePhone],
+      ['Email', b.practiceEmail],
+      ['Provider NPI', b.practiceNpi]], RX, colW, 104);
+    var tb = rightEnd + 4, rh = 21;
+    stroke(LINE, 0.7);
+    fill(NAVY); doc.roundedRect(RX, tb + rh * 2, colW, rh + 3, 4, 4, 'F'); doc.rect(RX, tb + rh * 2, colW, 8, 'F');
+    doc.roundedRect(RX, tb, colW, rh * 3 + 3, 4, 4, 'S'); doc.line(RX, tb + rh, RX + colW, tb + rh);
+    [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)]].forEach(function (s2, i) {
+      f('normal', 9, INK); doc.text(s2[0], RX + 11, tb + rh * i + 14);
+      f('bold', 9, INK); doc.text(s2[1], RX + colW - 11, tb + rh * i + 14, { align: 'right' });
     });
-    y = ky + 22;
+    f('bold', 10.5, [255, 255, 255]); doc.text('Balance Owed', RX + 11, tb + rh * 2 + 15.5);
+    doc.text(nbFmt(t.balance), RX + colW - 11, tb + rh * 2 + 15.5, { align: 'right' });
+    rightEnd = tb + rh * 3 + 3;
+    y = Math.max(leftEnd, rightEnd) + 32;
 
-    // Who billed, last as on the CMS-1500 (box 33), when the bill says.
-    if (['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi'].some(function (k) { return b[k]; })) {
-      // Plain lines like Billing above, no table (10 Nov 2026, as the user asked).
-      var provRows = [['Billing Provider', b.practiceName], ['Address', b.practiceAddress], ['Phone', b.practicePhone],
-        ['Email', b.practiceEmail], ['Provider NPI', b.practiceNpi]];
-      heading('Billing Provider');
-      if (y + 16 + provRows.length * 17 > PH - BOTTOM) { newPage(); heading('Billing Provider'); }
-      var py = y + 16;
-      provRows.forEach(function (x) {
-        var label = x[0] + ': ';
-        f('bold', 9); doc.text(label, ML, py);
-        var w = doc.getTextWidth(label);
-        f('normal', 9); doc.text(doc.splitTextToSize(T(x[1]), CW - w - 2)[0] || '', ML + w + 2, py);
-        py += 17;
-      });
-      y = py + 22;
-    }
-
-    // The totals, under the billing provider (10 Nov 2026, as the user asked), on the right as before.
-    if (y + 62 > PH - BOTTOM) newPage();
-    var tTop = y - 12;
-    [['Total Charge', nbFmt(t.billed)], ['Amount Paid', nbFmt(t.paid)], ['Balance Owed', nbFmt(t.balance)]].forEach(function (s, i, all) {
-      var by = tTop + i * 20, last = i === all.length - 1;
-      doc.setDrawColor(0, 0, 0); doc.setLineWidth(0.7);
-      if (last) { doc.setFillColor(241, 241, 241); doc.rect(rx, by, rw, 20, 'FD'); } else doc.rect(rx, by, rw, 20);
-      f(last ? 'bold' : 'normal', 9.5); doc.text(s[0], rx + 6, by + 13.5);
-      f('bold', 9.5); doc.text(s[1], rx + rw - 6, by + 13.5, { align: 'right' });
-    });
-    y = tTop + 60 + 34;
-
-    heading('Payments');
+    // Payments
+    if (y + 60 > PH - BOTTOM) newPage();
+    sec('Payments', ML, CW); y += 12;
     var pays = ((b.payments) || []).slice().sort(function (a, c) { return String(a.date || '').localeCompare(String(c.date || '')); });
-    if (!pays.length) {
-      f('normal', 9); doc.setTextColor(70, 70, 70); doc.text('No payments recorded yet.', ML, y + 10); y += 20;
-    } else {
-      table(NB_PDF_PAYMENTS, pays.map(function (x) {
-        return { date: nbPdfDate(x.date), amount: nbFmt(nbMoney(x.amount)), method: x.method, ref: x.ref, note: x.note, by: x.by };
-      }), ['amount']);
-    }
+    table(NB_PDF_PAYMENTS, pays.length ? pays.map(function (x) {
+      return { date: nbPdfDate(x.date), amount: nbFmt(nbMoney(x.amount)), method: x.method, ref: x.ref, note: x.note, by: x.by };
+    }) : [{ _muted: 'No payments recorded yet.' }], ['amount'], 'plain');
 
     // Footer on every page: who and what, the day it was made, and the page count.
-    var total = doc.internal.getNumberOfPages(), made = us(N().today());
+    var total = doc.internal.getNumberOfPages();
     var left = T(['Concussion Therapy Group', 'Neurologist Bill', name, chart.dob].filter(Boolean).join(' / '));
     for (var i = 1; i <= total; i++) {
-      doc.setPage(i); f('normal', 8);
-      var right = 'Printed ' + made + '   Page ' + i + ' of ' + total;
-      doc.text(doc.splitTextToSize(left, CW - doc.getTextWidth(right) - 18)[0], ML, PH - 20);
-      doc.text(right, PW - MR, PH - 20, { align: 'right' });
+      doc.setPage(i);
+      stroke(LINE, 0.6); doc.line(ML, PH - 36, PW - MR, PH - 36);
+      f('normal', 7.5, MUTED);
+      var rt = 'Printed ' + made + '   Page ' + i + ' of ' + total;
+      doc.text(doc.splitTextToSize(left, CW - doc.getTextWidth(rt) - 18)[0], ML, PH - 22);
+      doc.text(rt, PW - MR, PH - 22, { align: 'right' });
     }
     return doc;
   }
+
   function nbDownloadPdf() {
     var p = nbCurrent(); if (!p) return;
     if (nbIsDirty(p)) { showToast('Save the bill first. The PDF is made from the saved bill.', 'err'); return; }
