@@ -418,7 +418,9 @@
 
     var prov = nbProvidersHTML(b);
     var body = '<div class="nr-form-body">'
-      + '<h3 class="nr-sec nr-sec-first"><span>Services</span></h3>'
+      // First on the form (10 Nov 2026, as the user asked); the PDF keeps it last, as box 33.
+      + prov.practice
+      + '<h3 class="nr-sec"><span>Services</span></h3>'
       + nbLinesHTML(b)
       + '<div class="nb-svc-foot"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddLine()">' + nbIcon('plus') + 'Add service line</button>'
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
@@ -449,8 +451,6 @@
         + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
       + '</div>'
-      // Last, as on the CMS-1500, where the billing provider is box 33 (10 Nov 2026).
-      + prov.practice
       + '</div>';
 
     var meta = saved && saved.updatedAt
@@ -501,12 +501,12 @@
         + (pracAt && !pool.length ? '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register physicians for ' + esc(pracAt.name) + '</button>' : '')
       + '</div>';
     /* In the CMS-1500's places (10 Nov 2026): the federal tax ID opens Billing (box 25), the treating
-       physician goes with the signature (box 31), and the billing provider comes last (box 33). */
+       physician goes with the signature (box 31), and the billing provider comes last on the PDF (box 33); the form shows it first. */
     return {
       // From the billing provider picked below (box 25 is the billing provider's).
       taxId: '<div class="rf-f"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician,
-      practice: '<h3 class="nr-sec"><span>Billing Provider</span></h3>'
+      practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
     };
   }
