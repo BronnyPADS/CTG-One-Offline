@@ -416,6 +416,7 @@
       + '<div class="nr-form-hd-r">' + nbPill(nbStage(saved))
       + '<button type="button" class="nr-link" data-onclick="nbOpenReferral(\'' + id + '\')">' + nbIcon('file') + 'Open Referral</button></div></div>';
 
+    var prov = nbProvidersHTML(b);
     var body = '<div class="nr-form-body">'
       + '<h3 class="nr-sec nr-sec-first"><span>Services</span></h3>'
       + nbLinesHTML(b)
@@ -423,6 +424,7 @@
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
       + '<h3 class="nr-sec"><span>Billing</span></h3>'
       + '<div class="nb-grid">'
+        + prov.taxId
         + '<div class="rf-f"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
         + '<div class="rf-f"><span class="nb-lbl" id="nbAssignLbl">Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
           + ['yes', 'no'].map(function (v) {
@@ -432,6 +434,7 @@
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
         + '<div class="rf-f"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
           + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
+        + prov.physician
         + '<div class="rf-f"><label for="nbf_signature">Signature of Provider</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
           // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
           + '<div class="nb-sig">'
@@ -447,7 +450,7 @@
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
       + '</div>'
       // Last, as on the CMS-1500, where the billing provider is box 33 (10 Nov 2026).
-      + nbProvidersHTML(b)
+      + prov.practice
       + '</div>';
 
     var meta = saved && saved.updatedAt
@@ -500,19 +503,20 @@
           + '<input id="nba_credOther" class="nb-cred-other" type="text" maxlength="40" placeholder="Type the credential, e.g. DO" aria-label="Other credential" hidden></div>'
       : '<div class="rf-f"><label for="nbf_physician">Treating Physician</label><select id="nbf_physician" data-onchange="nbPickPhysician(this.value)">'
         + opts(nbProv.physicians, physAt, physName, nbPhysicianOf) + '</select></div>';
-    return '<h3 class="nr-sec"><span>Billing Provider &amp; Treating Physician</span></h3>'
-      + '<div class="nb-grid">'
-        + practice
-        + input('practiceAddress', 'Provider Address', 'Street, city, state ZIP', 300)
-        + input('practicePhone', 'Provider Phone', '', 60)
-        + input('practiceEmail', 'Provider Email', 'name@example.com', 200)
-        + input('practiceNpi', 'Provider NPI', '', 40)
-        + input('practiceTaxId', 'Tax ID', '', 40)
-      + '</div>' + addBtns('practice')
-      + '<div class="nb-grid">'
-        + physician
-        + input('physicianNpi', 'Physician NPI', '', 40)
-      + '</div>' + addBtns('physician');
+    /* In the CMS-1500's places (10 Nov 2026): the federal tax ID opens Billing (box 25), the treating
+       physician goes with the signature (box 31), and the billing provider comes last (box 33). */
+    return {
+      taxId: input('practiceTaxId', 'Federal Tax ID', '', 40),
+      physician: physician + input('physicianNpi', 'Physician NPI', '', 40) + addBtns('physician'),
+      practice: '<h3 class="nr-sec"><span>Billing Provider</span></h3>'
+        + '<div class="nb-grid">'
+          + practice
+          + input('practiceAddress', 'Provider Address', 'Street, city, state ZIP', 300)
+          + input('practicePhone', 'Provider Phone', '', 60)
+          + input('practiceEmail', 'Provider Email', 'name@example.com', 200)
+          + input('practiceNpi', 'Provider NPI', '', 40)
+        + '</div>' + addBtns('practice')
+    };
   }
   function nbPickPractice(v) {
     var p = nbCurrent(); if (!p) return;
