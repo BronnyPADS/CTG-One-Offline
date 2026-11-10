@@ -126,7 +126,7 @@
     'nbAddLine', 'nbClearAssign', 'nbDownloadPdf', 'nbAddCancel', 'nbAddCred', 'nbAddSave', 'nbField', 'nbGoPay', 'nbItemKey', 'nbPickToggle', 'nbPickPhysician', 'nbPickPractice', 'nbLine', 'nbOpenReferral',
     'nbRefresh', 'nbRemoveLine', 'nbSaveBill', 'nbSearch', 'nbSelect', 'nbSetFilter', 'nbSigRemove', 'nbSigUpload', 'nfCheckToken',
     'nfLoadStatus', 'nfProbe', 'nfProbeFake', 'nfProbeKey', 'nfToggleRaw', 'notesFormEditLink', 'notesFormLoad',
-    'notifSetActive', 'notifSetMedium', 'npBackdrop', 'npClosePay', 'npDeletePay', 'npOpenPay', 'npSavePay',
+    'notifSetActive', 'notifSetMedium', 'npBackdrop', 'npClosePay', 'npDeletePay', 'npOpenPay', 'npSavePay', 'plBackdrop', 'plClose', 'plDelete', 'plOpen', 'plSave',
     'npSearch', 'npSetTab', 'npToggle', 'nrField', 'nrItemKey', 'nrNoShow', 'nrPickToggle', 'nrOpenChart', 'nrReportDownload', 'nrReportOpen', 'nrReportPick', 'nrReportRemove', 'nrReportUpload', 'nrRefresh', 'nrReschedule', 'nrSave', 'nrSearch',
     'nrSearchClear', 'nrSelect', 'nrSetFilter', 'nrSetStep', 'nrTrack', 'nrlCellClick', 'nrlDownload',
     'nrlOpenReferral', 'nrlSearch', 'nrlSetTab', 'nrlSortBy', 'openApptModal', 'openArChargeModal',

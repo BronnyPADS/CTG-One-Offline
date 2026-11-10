@@ -52,6 +52,7 @@ function showPage(name){
   else if(name==='neuroReferralLog'&&typeof renderNeuroReferralLog==='function')renderNeuroReferralLog()
   else if(name==='neuroBilling'&&typeof renderNeuroBilling==='function')renderNeuroBilling()
   else if(name==='neuroPayments'&&typeof renderNeuroPayments==='function')renderNeuroPayments()
+  else if(name==='neuroProviderList'&&typeof renderNeuroProviderList==='function')renderNeuroProviderList()
   else if(name==='patientChart')renderPatientChart()
   else if(name==='registrationList')renderRegistrationList()
   else if(name==='arSummary')renderArSummary()

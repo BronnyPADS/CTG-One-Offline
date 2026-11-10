@@ -11,6 +11,8 @@
    paid and still owed.
    Neurologist Payments (page neuroPayments): payments recorded against those
    bills, the balance still owed per patient, and the payment history.
+   Billing Provider List (page neuroProviderList, a part of Neurologist Billing):
+   the billing providers registered once and picked on each bill (10 Nov 2026).
 
    Saved on the patient as p.neuroBilling:
      { lines: [{ from, to, pos, emg, cpt, mod, dxPtr, charge, units, npi }],
@@ -33,6 +35,8 @@
   var NB_ICONS = {
     dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     wallet: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/>',
+    list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
     x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     check: '<polyline points="20 6 9 17 4 12"/>',
@@ -113,7 +117,7 @@
     window.ctgApiFetch('/api/shared/doc/neuroProviders').then(function (r) {
       nbProvVersion = (r && r.version) || 0;
       if (r && r.data && nbProvTake(r.data)) nbProvKeep();
-      if (JSON.stringify(nbProv) !== before) { renderNeuroBilling(); }
+      if (JSON.stringify(nbProv) !== before) { renderNeuroBilling(); renderNeuroProviderList(); }
     }).catch(function () { /* offline: the browser's copy stands */ });
   }
   var nbSame = function (a, b) { return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase(); };
@@ -121,23 +125,28 @@
      An entry with the same name is updated rather than added twice. */
   function nbProvAdd(kind, entry) {
     var key = kind === 'practice' ? 'practices' : 'physicians';
-    var put = function (list) {
+    return nbProvWrite(function (list) {
       var at = -1;
       list[key].forEach(function (x, i) { if (nbSame(x.name, entry.name)) at = i; });
       if (at >= 0) { entry.id = list[key][at].id; list[key][at] = entry; } else list[key].push(entry);
       list[key].sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-    };
-    put(nbProv); nbProvKeep();
-    if (typeof window.ctgApiFetch !== 'function') return Promise.resolve();
+    }, 'The saved list could not be updated', ' It is on this bill.');
+  }
+  /* Applies a change to this browser's list and to the newest server copy (a
+     clash with someone else's save is retried once). Resolves true when saved. */
+  function nbProvWrite(change, failMsg, failTail) {
+    change(nbProv); nbProvKeep();
+    if (typeof window.ctgApiFetch !== 'function') return Promise.resolve(true);
     var attempt = function (retried) {
       return window.ctgApiFetch('/api/shared/doc/neuroProviders').then(function (r) {
         var list = r && r.data && Array.isArray(r.data.practices) ? { practices: r.data.practices, physicians: r.data.physicians || [] } : { practices: [], physicians: [] };
-        put(list);
+        change(list);
         return window.ctgApiFetch('/api/shared/doc/neuroProviders', { method: 'PUT', body: JSON.stringify({ data: list, version: (r && r.version) || 0 }) })
-          .then(function (w) { nbProvVersion = w.version; nbProvTake(list); nbProvKeep(); });
+          .then(function (w) { nbProvVersion = w.version; nbProvTake(list); nbProvKeep(); return true; });
       }).catch(function (e) {
         if (e && e.status === 409 && !retried) return attempt(true);
-        if (e && e.status) showToast('The saved list could not be updated: ' + (e.message || 'try again') + '. It is on this bill.', 'err');
+        if (e && e.status) showToast(failMsg + ': ' + (e.message || 'try again') + '.' + (failTail || ''), 'err');
+        return false;
       });
     };
     return attempt(false);
@@ -259,6 +268,7 @@
     var h = nbHead('Neurologist Billing',
       'What the neurologist billed for each referred patient, laid out as on their claim. For CTG One’s own tracking of what is owed to them.',
       '<button type="button" class="btn btn-primary" data-onclick="showPage(\'neuroPayments\')">' + nbIcon('wallet') + 'Neurologist Payments</button>'
+      + '<button type="button" class="btn btn-ghost" data-onclick="showPage(\'neuroProviderList\')">' + nbIcon('list') + 'Billing Provider List</button>'
       + '<button type="button" class="btn btn-ghost" data-onclick="nbRefresh()">' + nbIcon('refresh') + 'Refresh</button>');
     h += nbBillingKpis(all) + nbBillingToolbar(all);
     if (!all.length) {
@@ -383,13 +393,13 @@
   }
 
   /* The service lines, in the order of the claim's service section (the box
-     numbers themselves are not shown - the user asked for them off). Charges
-     are each line's total. */
+     numbers themselves are not shown - the user asked for them off), headed in
+     the claim's own words (10 Nov 2026). Charges are each line's total. */
   var NB_COLS = [
-    ['from', 'Date from', 'date'], ['to', 'Date to', 'date'], ['pos', 'Place of service', 'text'],
-    ['emg', 'Emergency', 'text'], ['cpt', 'Procedure code', 'text'], ['mod', 'Modifiers', 'text'],
-    ['dxPtr', 'Diagnosis pointer', 'text'], ['charge', 'Charges', 'money'], ['units', 'Days or units', 'text'],
-    ['npi', 'Rendering provider NPI', 'text']
+    ['from', 'Date of Service From', 'date'], ['to', 'Date of Service To', 'date'], ['pos', 'Place of Service', 'text'],
+    ['emg', 'EMG', 'text'], ['cpt', 'CPT/HCPCS', 'text'], ['mod', 'Modifier', 'text'],
+    ['dxPtr', 'Diagnosis Pointer', 'text'], ['charge', '$ Charges', 'money'], ['units', 'Days or Units', 'text'],
+    ['npi', 'Rendering Provider ID. #', 'text']
   ];
   function nbLinesHTML(b) {
     var head = '<div class="nb-svc-row nb-svc-head"><span></span>' + NB_COLS.map(function (c) {
@@ -465,9 +475,10 @@
     return '<div class="nr-form card">' + head + body + foot + '</div>';
   }
 
-  /* Who billed and who treated, each picked from the saved list or added to it.
-     The details under each pick are this bill's copy: corrected here, they
-     change this bill only. */
+  /* Who billed and who treated. The billing provider is picked from the
+     Billing Provider List (10 Nov 2026), where providers are registered; the
+     treating physician is picked or added here. A pick copies the details onto
+     the bill, so a later change to the list does not rewrite a saved bill. */
   function nbProvidersHTML(b) {
     var input = function (k, label, ph, max) {
       return '<div class="rf-f"><label for="nbf_' + k + '">' + label + '</label><input id="nbf_' + k + '" type="text" maxlength="' + (max || 200) + '" value="' + esc(b[k] || '') + '"'
@@ -492,10 +503,10 @@
           + '<button type="button" class="rf-btn rf-btn-go" data-onclick="nbAddSave(\'' + kind + '\')">' + nbIcon('plus') + 'Add to list and use</button></div>'
         : '';
     };
-    var practice = nbAdding === 'practice'
-      ? '<div class="rf-f nb-new"><label for="nba_name">Practice Name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Northern Virginia Neurology"></div>'
-      : '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
-        + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }) + '</select></div>';
+    var practice = '<div class="rf-f"><label for="nbf_practice">Billing Provider</label><select id="nbf_practice" data-onchange="nbPickPractice(this.value)">'
+        + opts(nbProv.practices, pracAt, b.practiceName, function (x) { return x.name; }).replace(/<option value="__add">[^<]*<\/option>$/, '') + '</select>'
+        + (nbProv.practices.length ? '' : '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register a billing provider</button>')
+      + '</div>';
     var physician = nbAdding === 'physician'
       ? '<div class="rf-f nb-new"><label for="nba_name">Physician Name<span class="req-star" aria-hidden="true">*</span></label><input id="nba_name" type="text" maxlength="200" placeholder="e.g. Jane Doe"></div>'
         + '<div class="rf-f"><label for="nba_cred">Credentials</label><select id="nba_cred" data-onchange="nbAddCred(this.value)"><option value="">\u2014 Select \u2014</option>'
@@ -506,21 +517,15 @@
     /* In the CMS-1500's places (10 Nov 2026): the federal tax ID opens Billing (box 25), the treating
        physician goes with the signature (box 31), and the billing provider comes last (box 33). */
     return {
-      taxId: input('practiceTaxId', 'Federal Tax ID', '', 40),
+      // From the billing provider picked below (box 25 is the billing provider's).
+      taxId: '<div class="rf-f"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician + input('physicianNpi', 'Physician NPI', '', 40) + addBtns('physician'),
       practice: '<h3 class="nr-sec"><span>Billing Provider</span></h3>'
-        + '<div class="nb-grid">'
-          + practice
-          + input('practiceAddress', 'Provider Address', 'Street, city, state ZIP', 300)
-          + input('practicePhone', 'Provider Phone', '', 60)
-          + input('practiceEmail', 'Provider Email', 'name@example.com', 200)
-          + input('practiceNpi', 'Provider NPI', '', 40)
-        + '</div>' + addBtns('practice')
+        + '<div class="nb-grid">' + practice + '</div>'
     };
   }
   function nbPickPractice(v) {
     var p = nbCurrent(); if (!p) return;
-    if (v === '__add') { nbStartAdd(p, 'practice'); return; }
     if (v === '__bill') return;
     var b = nbDraftFor(p), x = nbProv.practices.filter(function (e) { return e.id === v; })[0] || {};
     b.practiceName = x.name || ''; b.practiceAddress = x.address || ''; b.practicePhone = x.phone || ''; b.practiceEmail = x.email || '';
@@ -545,7 +550,6 @@
   }
   function nbAddCred(v) { var o = document.getElementById('nba_credOther'); if (o) { o.hidden = v !== 'Other'; if (v === 'Other') o.focus(); } }
   var NB_ADD_KEYS = {
-    practice: ['practiceName', 'practiceAddress', 'practicePhone', 'practiceEmail', 'practiceNpi', 'practiceTaxId'],
     physician: ['physicianName', 'physicianCred', 'physicianCredOther', 'physicianNpi']
   };
   function nbStartAdd(p, kind) {
@@ -567,21 +571,15 @@
     var p = nbCurrent(); if (!p) return;
     var val = function (id) { var el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
     var name = val('nba_name');
-    if (!name) { showToast(kind === 'practice' ? 'Enter the practice name.' : 'Enter the physician\u2019s name.', 'err'); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
-    var b = nbDraftFor(p), entry;
-    var got = function (k) { return String(b[k] || '').trim(); };
-    if (kind === 'practice') {
-      entry = { id: nbNewId(), name: name, address: got('practiceAddress'), phone: got('practicePhone'), email: got('practiceEmail'), npi: got('practiceNpi'), taxId: got('practiceTaxId') };
-      b.practiceName = entry.name;
-    } else {
-      var cred = val('nba_cred');
-      entry = { id: nbNewId(), name: name, cred: NB_CREDENTIALS.indexOf(cred) !== -1 ? cred : '', credOther: cred === 'Other' ? val('nba_credOther') : '', npi: got('physicianNpi') };
-      nbUsePhysician(b, entry);
-    }
+    if (!name) { showToast('Enter the physician\u2019s name.', 'err'); var f = document.getElementById('nba_name'); if (f) f.focus(); return; }
+    var b = nbDraftFor(p);
+    var cred = val('nba_cred');
+    var entry = { id: nbNewId(), name: name, cred: NB_CREDENTIALS.indexOf(cred) !== -1 ? cred : '', credOther: cred === 'Other' ? val('nba_credOther') : '', npi: String(b.physicianNpi || '').trim() };
+    nbUsePhysician(b, entry);
     nbAdding = null; nbAddPrev = null;
-    nbProvAdd(kind, entry).then(function () { renderNeuroBilling(); });
+    nbProvAdd('physician', entry).then(function () { renderNeuroBilling(); });
     renderNeuroBilling();
-    showToast((kind === 'practice' ? 'Billing provider' : 'Physician') + ' added to the saved list and put on this bill. Click Save Bill to keep it.', 'ok');
+    showToast('Physician added to the saved list and put on this bill. Click Save Bill to keep it.', 'ok');
   }
 
   // Typing does not repaint the form (that would lose the cursor): totals and flags are updated in place.
@@ -765,9 +763,9 @@
      recorded. Unsaved changes are not in it, so the button asks for a save
      first. The PDF's fonts are Latin-1 only, hence nbPdfText. */
   var NB_PDF_SERVICES = [
-    ['from', 'Date from', 54], ['to', 'Date to', 54], ['pos', 'Place of service', 62], ['emg', 'Emergency', 52],
-    ['cpt', 'Procedure code', 52], ['mod', 'Modifiers', 50], ['dxPtr', 'Diagnosis pointer', 48], ['charge', 'Charges', 62],
-    ['units', 'Days or units', 40], ['npi', 'Rendering provider NPI', 58]
+    ['from', 'Date of Service From', 54], ['to', 'Date of Service To', 54], ['pos', 'Place of Service', 62], ['emg', 'EMG', 52],
+    ['cpt', 'CPT/HCPCS', 52], ['mod', 'Modifier', 50], ['dxPtr', 'Diagnosis Pointer', 48], ['charge', '$ Charges', 62],
+    ['units', 'Days or Units', 40], ['npi', 'Rendering Provider ID. #', 58]
   ];
   var NB_PDF_PAYMENTS = [
     ['date', 'Date', 66], ['amount', 'Amount', 76], ['method', 'Method', 96], ['ref', 'Reference', 92],
@@ -964,6 +962,114 @@
         console.error('Neurologist bill PDF', e);
         showToast('Could not make the PDF: ' + e.message, 'err');
       }
+    });
+  }
+
+  /* ========================= Billing Provider List ========================= */
+  /* The billing providers (practices) registered once, each picked on a bill by
+     name. Stored in the shared document neuroProviders with the physicians. */
+  var plModal = null;           // { id } while the Register / Edit window is open ('' for a new one)
+  var PL_FIELDS = [
+    ['name', 'Practice Name', 200, 'e.g. Northern Virginia Neurology'],
+    ['address', 'Provider Address', 300, 'Street, city, state ZIP'],
+    ['phone', 'Provider Phone', 60, ''],
+    ['email', 'Provider Email', 200, 'name@example.com'],
+    ['npi', 'Provider NPI', 40, ''],
+    ['taxId', 'Federal Tax ID', 40, '']
+  ];
+  function plFind(id) { return nbProv.practices.filter(function (x) { return N().idArg(x.id) === id; })[0] || null; }
+
+  function renderNeuroProviderList() {
+    var mount = document.getElementById('neuroProviderListMount');
+    if (!mount || !N()) return;
+    nbProvLoad();
+    var list = nbProv.practices.slice().sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    var h = nbHead('Billing Provider List',
+      'Register each billing provider once, then pick it by name on any neurologist bill.',
+      '<button type="button" class="btn btn-primary" data-onclick="plOpen(\'\')">' + nbIcon('plus') + 'Register a Provider</button>'
+      + '<button type="button" class="btn btn-ghost" data-onclick="showPage(\'neuroBilling\')">' + nbIcon('dollar') + 'Neurologist Billing</button>');
+    if (!list.length) {
+      h += '<div class="card"><div class="card-body rf-empty">' + nbIcon('list', 'rf-empty-i') + '<b>No billing providers yet</b>'
+        + '<p>Register a provider here and it can be picked on every neurologist bill.</p></div></div>';
+    } else {
+      h += '<div class="card nb-table-card"><div class="nb-table-scroll"><table class="nb-table pl-table"><thead><tr>'
+        + '<th>Practice Name</th><th>Address</th><th>Phone</th><th>Email</th><th>NPI</th><th>Federal Tax ID</th>'
+        + '<th><span class="nb-sr">Actions</span></th></tr></thead><tbody>';
+      list.forEach(function (x) {
+        var id = N().idArg(x.id), dash = '<span class="nb-muted">\u2014</span>';
+        var cell = function (v) { return v ? esc(v) : dash; };
+        h += '<tr><td><b>' + esc(x.name) + '</b></td><td>' + cell(x.address) + '</td><td>' + cell(x.phone) + '</td><td>' + cell(x.email) + '</td>'
+          + '<td>' + cell(x.npi) + '</td><td>' + cell(x.taxId) + '</td>'
+          + '<td class="nb-act"><button type="button" class="rf-btn rf-btn-quiet nb-btn-sm" data-onclick="plOpen(\'' + id + '\')" aria-label="Edit ' + esc(x.name) + '">' + nbIcon('edit') + 'Edit</button>'
+          + '<button type="button" class="rf-btn rf-btn-quiet nb-btn-sm pl-del" data-onclick="plDelete(\'' + id + '\')" aria-label="Delete ' + esc(x.name) + '">' + nbIcon('x') + 'Delete</button></td></tr>';
+      });
+      h += '</tbody></table></div></div>';
+    }
+    N().paint(mount, 'page-neuroProviderList', h, []);
+  }
+  function plOpen(id) {
+    var x = id ? plFind(id) : null;
+    if (id && !x) return;
+    plModal = { id: x ? x.id : '' };
+    var f = function (k, label, max, ph) {
+      return '<div class="rf-f' + (k === 'address' || k === 'name' ? ' pl-wide' : '') + '"><label for="pl_' + k + '">' + label + (k === 'name' ? '<span class="req-star" aria-hidden="true">*</span>' : '') + '</label>'
+        + '<input id="pl_' + k + '" type="' + (k === 'email' ? 'email' : 'text') + '" maxlength="' + max + '" value="' + esc(x ? x[k] || '' : '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + (k === 'name' ? ' required' : '') + '></div>';
+    };
+    npModalHost().innerHTML = '<div class="rf-modal-back" data-onclick="plBackdrop(event)">'
+      + '<div class="rf-modal nb-modal" role="dialog" aria-modal="true" aria-labelledby="plTitle">'
+      + '<div class="rf-modal-hd"><div><h2 id="plTitle">' + (x ? 'Edit Billing Provider' : 'Register a Billing Provider') + '</h2></div>'
+        + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
+      + '<div class="rf-modal-body"><div class="rf-pair pl-pair">'
+        + PL_FIELDS.map(function (d) { return f(d[0], d[1], d[2], d[3]); }).join('')
+      + '</div><div class="nr-err" id="plErr" role="alert" hidden></div></div>'
+      + '<div class="rf-modal-ft"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="plClose()">Cancel</button>'
+        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plSave()">' + nbIcon('check') + (x ? 'Save Changes' : 'Register Provider') + '</button></div>'
+      + '</div></div>';
+    document.body.classList.add('rf-modal-open');
+    var first = document.getElementById('pl_name'); if (first) first.focus();
+  }
+  function plClose() {
+    plModal = null;
+    npModalHost().innerHTML = '';
+    document.body.classList.remove('rf-modal-open');
+  }
+  function plBackdrop(ev) { if (ev && ev.target === ev.currentTarget) plClose(); }
+  function plSave() {
+    if (!plModal) return;
+    var val = function (k) { var el = document.getElementById('pl_' + k); return el ? String(el.value || '').trim() : ''; };
+    var entry = {};
+    PL_FIELDS.forEach(function (d) { entry[d[0]] = val(d[0]); });
+    var err = document.getElementById('plErr');
+    var fail = function (msg, k) {
+      if (err) { err.hidden = false; err.innerHTML = nbIcon('alert') + esc(msg); }
+      var el = document.getElementById('pl_' + k); if (el) el.focus();
+    };
+    if (!entry.name) return fail('Enter the practice name.', 'name');
+    if (entry.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entry.email)) return fail('Enter the email as name@example.com.', 'email');
+    var id = plModal.id;
+    if (nbProv.practices.some(function (x) { return x.id !== id && nbSame(x.name, entry.name); })) return fail('A provider named \u201c' + entry.name + '\u201d is already on the list.', 'name');
+    entry.id = id || nbNewId();
+    Object.keys(entry).forEach(function (k) { if (k !== 'id' && k !== 'name' && !entry[k]) delete entry[k]; });
+    plClose();
+    nbProvWrite(function (list) {
+      var at = -1;
+      list.practices.forEach(function (x, i) { if (x.id === entry.id) at = i; });
+      if (at >= 0) list.practices[at] = entry; else list.practices.push(entry);
+      list.practices.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+    }, 'The billing provider could not be saved').then(function (ok) {
+      renderNeuroProviderList();
+      if (ok) showToast(id ? 'Billing provider updated. Bills already saved keep the details they were saved with.' : 'Billing provider registered. It can now be picked on any neurologist bill.', 'ok');
+    });
+    renderNeuroProviderList();
+  }
+  function plDelete(id) {
+    var x = plFind(id); if (!x) return;
+    ctgConfirm('Remove \u201c' + x.name + '\u201d from the Billing Provider List? Bills already saved with this provider keep its details.',
+      { title: 'Remove billing provider', okLabel: 'Remove', danger: true }).then(function (ok) {
+      if (!ok) return;
+      nbProvWrite(function (list) { list.practices = list.practices.filter(function (y) { return y.id !== x.id; }); }, 'The billing provider could not be removed')
+        .then(function (done) { renderNeuroProviderList(); if (done) showToast('Billing provider removed from the list.', 'ok'); });
+      renderNeuroProviderList();
     });
   }
 
@@ -1196,7 +1302,10 @@
     var box = document.getElementById('npSearch');
     if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
   }
-  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && npModal) npClosePay(); });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    if (npModal) npClosePay(); else if (plModal) plClose();
+  });
 
   window.renderNeuroBilling = renderNeuroBilling;
   window.nbPickPractice = nbPickPractice;
@@ -1205,6 +1314,12 @@
   window.nbAddCancel = nbAddCancel;
   window.nbAddSave = nbAddSave;
   window.renderNeuroPayments = renderNeuroPayments;
+  window.renderNeuroProviderList = renderNeuroProviderList;
+  window.plOpen = plOpen;
+  window.plClose = plClose;
+  window.plBackdrop = plBackdrop;
+  window.plSave = plSave;
+  window.plDelete = plDelete;
   window.nbSelect = nbSelect;
   window.nbItemKey = nbItemKey;
   window.nbPickToggle = nbPickToggle;

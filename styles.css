@@ -14748,6 +14748,12 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .nb-add-btns .rf-btn{min-height:40px}
 .nb-grid+.nb-add-btns{margin:-4px 0 16px}
 .nb-grid>.nb-add-btns{grid-column:1/-1;margin:-4px 0 12px}
+/* Billing Provider List (10 Nov 2026) */
+.pl-table td{vertical-align:middle}
+.pl-table .nb-act .rf-btn+.rf-btn{margin-left:6px}
+.pl-table .pl-del{color:var(--red)}
+.pl-pair .pl-wide{grid-column:1/-1}
+#nbf_practiceTaxId[readonly]{background:#f3f6fa;cursor:default}
 .nb-new input{border-color:#0077B6;box-shadow:0 0 0 3px rgba(0,119,182,.12)}
 
 /* Provider's Dashboard: the status Filter and, for those who see every provider, the Provider filter (6 Nov 2026). */

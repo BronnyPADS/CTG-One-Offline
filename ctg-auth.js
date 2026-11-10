@@ -242,7 +242,8 @@
     patientExamEdit: 'day2',
     patientExamDetail: 'day2',
     patientDailyNote: 'dailyNotes',
-    neuroReferralLog: 'neuroReferrals'
+    neuroReferralLog: 'neuroReferrals',
+    neuroProviderList: 'neuroBilling'
   };
 
   var ROLE_LABELS = {
@@ -822,6 +823,9 @@
     /* Command Center and Rooms are sub-pages of Appointment, so they don't
        appear in PAGE_KEYS. Gate their sidebar links by their own Access-Control
        sections so each can be shared independently of the calendar itself. */
+    // Billing Provider List is a part of Neurologist Billing: shown with it.
+    var plLink = $('sideNeuroProviderList');
+    if (plLink) plLink.style.display = canAccess(user, 'neuroBilling') ? '' : 'none';
     [['sideCommandCenter', 'appt.commandCenter'], ['sideApptRooms', 'appt.rooms']].forEach(function (pair) {
       var el = $(pair[0]);
       if (el) el.style.display = (canAccess(user, 'appointment') && canAccessSection(user, 'appointment', pair[1])) ? '' : 'none';

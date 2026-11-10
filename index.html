@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261110a">
+<link rel="stylesheet" href="styles.css?v=20261110b">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261109c"></script>
+<script src="ctg-actions.js?v=20261110a"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -191,6 +191,11 @@
   <a class="side-sublink" id="sideNeuroBilling" data-page="neuroBilling" data-onclick="showPage('neuroBilling')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     Neurologist Billing
+  </a>
+  <!-- The billing providers picked on each bill; part of Neurologist Billing (no Access Control tick of its own). -->
+  <a class="side-sublink" id="sideNeuroProviderList" data-page="neuroProviderList" data-onclick="showPage('neuroProviderList')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    Billing Provider List
   </a>
   <a class="side-sublink" id="sideNeuroPayments" data-page="neuroPayments" data-onclick="showPage('neuroPayments')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
@@ -2407,6 +2412,9 @@
 <div class="page" id="page-neuroBilling">
   <div id="neuroBillingMount"></div>
 </div><!-- /page-neuroBilling -->
+<div class="page" id="page-neuroProviderList">
+  <div id="neuroProviderListMount"></div>
+</div><!-- /page-neuroProviderList -->
 <div class="page" id="page-neuroPayments">
   <div id="neuroPaymentsMount"></div>
 </div><!-- /page-neuroPayments -->
@@ -2787,7 +2795,7 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261109d"></script>
+<script src="app.js?v=20261110a"></script>
 <!-- Appointment scheduling (week grid) -->
 <script src="appointments.js?v=20261106a"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
@@ -2830,7 +2838,7 @@
 <script src="claimform.js?v=20261105a"></script>
 <script src="referrals.js?v=20261005e"></script>
 <script src="neuro-referrals.js?v=20261109e"></script>
-<script src="neuro-billing.js?v=20261110b"></script>
+<script src="neuro-billing.js?v=20261110c"></script>
 <!-- Authentication & role-based access control (static localStorage version) -->
 <script src="input-limits.js?v=20260916d"></script>
 <script src="backup-ui.js?v=20261005e"></script>
@@ -2850,7 +2858,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261109a"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261106b"></script>
+<script src="ctg-auth.js?v=20261110a"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>
