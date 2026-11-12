@@ -365,7 +365,7 @@
       + NR_STEPS.map(function (s) { return tab(s.key, s.tab, n[s.key]); }).join('')
       + tab('all', 'All', all.length)
       + '</div>' + nrPickHTML(nrRows(all)) + '<div class="rf-search">' + nrIcon('search')
-      + '<input id="nrSearch" type="search" autocomplete="off" placeholder="Search patient, account # or firm" value="' + nrEsc(nrQuery) + '" data-oninput="nrSearch(this.value)">'
+      + '<input id="nrSearch" type="search" autocomplete="off" placeholder="Search patient, account number or firm" value="' + nrEsc(nrQuery) + '" data-oninput="nrSearch(this.value)">'
       + (nrQuery ? '<button type="button" class="rf-search-x" data-onclick="nrSearchClear()" aria-label="Clear search">&times;</button>' : '')
       + '</div></div>';
   }
@@ -1040,7 +1040,7 @@
     { key: 'day1', label: 'Day 1 Date', w: 130, date: true },
     { key: 'injury', label: 'Injury Type', w: 210 },
     { key: 'lawFirm', label: 'Law Firm', w: 170 },
-    { key: 'mrn', label: 'Acct #', w: 90 },
+    { key: 'mrn', label: 'Acct Number', w: 90 },
     { key: 'notes', label: 'Notes', w: 260 },
     { key: 'updated', label: 'Last Updated', w: 210 }
   ];

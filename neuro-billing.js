@@ -200,12 +200,12 @@
      from the source (tools/actions-codemod.js), so it cannot come from a variable. */
   function nbSearchBox() {
     return '<div class="rf-search">' + nbIcon('search')
-      + '<input id="nbSearch" type="search" autocomplete="off" placeholder="Search patient, account # or code" value="' + esc(nbQuery) + '" data-oninput="nbSearch(this.value)">'
+      + '<input id="nbSearch" type="search" autocomplete="off" placeholder="Search patient, account number or code" value="' + esc(nbQuery) + '" data-oninput="nbSearch(this.value)">'
       + '</div>';
   }
   function npSearchBox() {
     return '<div class="rf-search">' + nbIcon('search')
-      + '<input id="npSearch" type="search" autocomplete="off" placeholder="Search patient or account #" value="' + esc(npQuery) + '" data-oninput="npSearch(this.value)">'
+      + '<input id="npSearch" type="search" autocomplete="off" placeholder="Search patient or account number" value="' + esc(npQuery) + '" data-oninput="npSearch(this.value)">'
       + '</div>';
   }
   function nbSave(p, b) {
@@ -376,7 +376,7 @@
         + ' data-onclick="nbSelect(\'' + id + '\')" data-onkeydown="nbItemKey(event,\'' + id + '\')">'
         + '<span class="nr-av">' + esc(initials) + '</span>'
         + '<span class="nr-item-main"><b>' + esc(nbName(p)) + '</b>'
-        + '<span class="nr-item-sub">' + esc(N().step(N().status(p)).label) + (d.mrn ? ' · Acct # ' + esc(d.mrn) : '') + '</span>'
+        + '<span class="nr-item-sub">' + esc(N().step(N().status(p)).label) + (d.mrn ? ' · Acct Number ' + esc(d.mrn) : '') + '</span>'
         + '<span class="nb-item-when">' + esc(when) + '</span></span>'
         + (nbFilter === 'all' ? nbPill(st) : '') + '</div>';
     }).join('') + '</div>';
@@ -389,7 +389,7 @@
     ['from', 'Date of Service From', 'date'], ['to', 'Date of Service To', 'date'], ['pos', 'Place of Service', 'text'],
     ['emg', 'EMG', 'text'], ['cpt', 'CPT/HCPCS', 'text'], ['mod', 'Modifier', 'text'],
     ['dxPtr', 'Diagnosis Pointer', 'text'], ['charge', '$ Charges', 'money'], ['units', 'Days or Units', 'text'],
-    ['npi', 'Rendering Provider ID. #', 'text']
+    ['npi', 'Rendering Provider ID. Number', 'text']
   ];
   function nbLinesHTML(b) {
     var head = '<div class="nb-svc-row nb-svc-head"><span></span>' + NB_COLS.map(function (c) {
@@ -497,8 +497,8 @@
         + '<option value="">— Select —</option>' + nbProv.practices.map(function (x) { return opt(x, pracAt, x.name); }).join('') + own(b.practiceName, pracAt) + '</select>'
         + (nbProv.practices.length ? '' : '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register a billing provider</button>')
       + '</div>';
-    // In the CMS-1500's words (box 31), without "Signature of": the signature has its own box below (10 Nov 2026).
-    var physician = '<div class="rf-f nbg-doc"><label for="nbf_physician">Physician or Supplier Including Degrees or Credentials</label>'
+    // Just "Physician" (12 Nov 2026): the signature box beside it carries box 31's full words.
+    var physician = '<div class="rf-f nbg-doc"><label for="nbf_physician">Physician</label>'
         + '<select id="nbf_physician" data-onchange="nbPickPhysician(this.value)"><option value="">— Select —</option>' + docOpts + own(physName, physAt) + '</select>'
         + (pracAt && !pool.length ? '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register physicians for ' + esc(pracAt.name) + '</button>' : '')
       + '</div>';
@@ -508,7 +508,7 @@
       // From the billing provider picked below (box 25 is the billing provider's).
       taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax I.D. Number</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician,
-      practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider Info &amp; Ph #</span></h3>'
+      practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider Info &amp; Ph Number</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
     };
   }
@@ -727,7 +727,7 @@
     // "|" is where a heading breaks onto its second line, so the row reads evenly (10 Nov 2026).
     ['from', 'Date of|Service From', 62], ['to', 'Date of|Service To', 58], ['pos', 'Place of|Service', 46], ['emg', 'EMG', 34],
     ['cpt', 'CPT/HCPCS', 56], ['mod', 'Modifier', 46], ['dxPtr', 'Diagnosis|Pointer', 50], ['charge', '$ Charges', 64],
-    ['units', 'Days or|Units', 42], ['npi', 'Rendering|Provider ID. #', 74]
+    ['units', 'Days or|Units', 42], ['npi', 'Rendering|Provider ID.|Number', 74]
   ];
   var NB_PDF_PAYMENTS = [
     ['date', 'Date', 70], ['amount', 'Amount', 74], ['method', 'Method', 90], ['ref', 'Reference', 90],
@@ -875,7 +875,7 @@
     }
     if (y + 215 > PH - BOTTOM) newPage();
     var top = y;
-    sec('Billing', LX, colW); sec('Billing Provider Info & Ph #', RX, colW);
+    sec('Billing', LX, colW); sec('Billing Provider Info & Ph Number', RX, colW);
     y = top + 24;
     var leftEnd = pairs([
       ['Federal Tax I.D. Number', b.practiceTaxId],
@@ -968,7 +968,7 @@
     ['phone', 'Provider Phone', 60, ''],
     ['email', 'Provider Email', 200, 'name@example.com'],
     ['npi', 'Provider NPI', 40, ''],
-    ['taxId', 'Federal Tax ID', 40, '']
+    ['taxId', 'Federal Tax I.D. Number', 40, '']
   ];
   function plFind(id) { return nbProv.practices.filter(function (x) { return N().idArg(x.id) === id || x.id === id; })[0] || null; }
   function plDocs(prId) {
@@ -1025,7 +1025,7 @@
           + '<button type="button" class="bpl-ic" title="Edit" aria-label="Edit ' + esc(x.name) + '" data-onclick="plEdit(\'' + id + '\')">' + nbIcon('edit') + '</button>'
           + '<button type="button" class="bpl-ic bpl-ic-del" title="Delete" aria-label="Delete ' + esc(x.name) + '" data-onclick="plDelete(\'' + id + '\')">' + nbIcon('trash') + '</button>'
         + '</div></div>'
-      + '<dl class="bpl-facts">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('NPI', x.npi) + plFact('Federal Tax ID', x.taxId) + '</dl>'
+      + '<dl class="bpl-facts">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('NPI', x.npi) + plFact('Federal Tax I.D. Number', x.taxId) + '</dl>'
       + '<button type="button" class="bpl-foot" data-onclick="plView(\'' + id + '\')">'
         + (docs.length ? '<span class="bpl-stack" aria-hidden="true">' + docs.slice(0, 3).map(function (d) { return '<span class="bpl-av">' + esc(plInitials(d.name)) + '</span>'; }).join('') + '</span>'
                        : '<span class="bpl-av bpl-av-empty" aria-hidden="true">' + nbIcon('user') + '</span>')
@@ -1050,7 +1050,7 @@
         + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
       + '<div class="rf-modal-body bpl-view">'
         + '<section class="bpl-side" aria-label="Practice details"><dl class="bpl-kv">'
-          + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax ID', x.taxId)
+          + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax I.D. Number', x.taxId)
         + '</dl></section>'
         + '<section class="bpl-main" aria-labelledby="plDocsHd">'
           + '<div class="bpl-main-hd"><h3 id="plDocsHd">Treating Physicians <span class="bpl-badge">' + docs.length + '</span></h3>'
@@ -1289,7 +1289,7 @@
       h += '<tr class="nb-row' + (open ? ' is-open' : '') + '">'
         + '<td><button type="button" class="nb-expand" aria-expanded="' + open + '" data-onclick="npToggle(\'' + id + '\')">'
           + nbIcon('chevron', 'nb-chev') + '<b>' + esc(nbName(p)) + '</b></button>'
-          + ((p.demographics || {}).mrn ? '<span class="nb-muted">Acct # ' + esc(p.demographics.mrn) + '</span>' : '') + '</td>'
+          + ((p.demographics || {}).mrn ? '<span class="nb-muted">Acct Number ' + esc(p.demographics.mrn) + '</span>' : '') + '</td>'
         + '<td>' + esc(span) + '</td>'
         + '<td class="nb-num">' + nbFmt(t.billed) + '</td>'
         + '<td class="nb-num">' + nbFmt(t.paid) + '</td>'
@@ -1324,7 +1324,7 @@
     }
     var total = list.reduce(function (s, e) { return s + nbMoney(e.x.amount); }, 0);
     return '<div class="card nb-table-card"><div class="nb-table-scroll"><table class="nb-table"><thead><tr>'
-      + '<th>Date paid</th><th>Patient</th><th class="nb-num">Amount</th><th>Method</th><th>Reference #</th><th>Note</th><th>Recorded by</th><th><span class="nb-sr">Delete</span></th></tr></thead><tbody>'
+      + '<th>Date paid</th><th>Patient</th><th class="nb-num">Amount</th><th>Method</th><th>Reference Number</th><th>Note</th><th>Recorded by</th><th><span class="nb-sr">Delete</span></th></tr></thead><tbody>'
       + list.map(function (e) {
           return '<tr><td>' + esc(us(e.x.date)) + '</td><td><b>' + esc(nbName(e.p)) + '</b></td><td class="nb-num">' + nbFmt(nbMoney(e.x.amount)) + '</td>'
             + '<td>' + esc(e.x.method || '') + '</td><td>' + esc(e.x.ref || '') + '</td><td>' + esc(e.x.note || '') + '</td>'
@@ -1353,7 +1353,7 @@
         + '<div class="rf-f"><label for="npDate">Date Paid</label><input id="npDate" type="date" value="' + esc(N().today()) + '"></div>'
         + '<div class="rf-f"><label for="npAmount">Amount Paid</label><input id="npAmount" type="text" inputmode="decimal" class="nb-money" value="' + esc(t.balance > 0 ? t.balance.toFixed(2) : '') + '"></div>'
         + '<div class="rf-f"><label for="npMethod">Method</label><select id="npMethod">' + NB_METHODS.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select></div>'
-        + '<div class="rf-f"><label for="npRef">Check or Reference # <i>(optional)</i></label><input id="npRef" type="text" maxlength="60"></div>'
+        + '<div class="rf-f"><label for="npRef">Check or Reference Number <i>(optional)</i></label><input id="npRef" type="text" maxlength="60"></div>'
       + '</div>'
       + '<div class="rf-f"><label for="npNote">Note <i>(optional)</i></label><textarea id="npNote" rows="2" maxlength="500" placeholder="e.g. Paid for the 10/28 consultation"></textarea></div>'
       + '<div class="nr-err" id="npErr" role="alert" hidden></div></div>'
