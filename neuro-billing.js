@@ -389,7 +389,7 @@
     ['from', 'Date of Service From', 'date'], ['to', 'Date of Service To', 'date'], ['pos', 'Place of Service', 'text'],
     ['emg', 'EMG', 'text'], ['cpt', 'CPT/HCPCS', 'text'], ['mod', 'Modifier', 'text'],
     ['dxPtr', 'Diagnosis Pointer', 'text'], ['charge', '$ Charges', 'money'], ['units', 'Days or Units', 'text'],
-    ['npi', 'Rendering Provider ID. Number', 'text']
+    ['npi', 'Rendering Provider ID Number', 'text']
   ];
   function nbLinesHTML(b) {
     var head = '<div class="nb-svc-row nb-svc-head"><span></span>' + NB_COLS.map(function (c) {
@@ -435,9 +435,9 @@
             }).join('')
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
         // One row for who signs (12 Nov 2026): physician, signature and date side by side.
-        // The signature label is box 31's own words (12 Nov 2026, as the user asked).
+        // "Signature of Physician" (12 Nov 2026, as the user asked).
         + prov.physician
-        + '<div class="rf-f nbg-sig"><label for="nbf_signature">Signature of Physician or Supplier Including Degrees or Credentials</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
+        + '<div class="rf-f nbg-sig"><label for="nbf_signature">Signature of Physician</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
           // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
           + '<div class="nb-sig">'
             + (nbSigOk(b.signatureImage) ? '<img class="nb-sig-img" alt="Uploaded signature" src="' + esc(b.signatureImage) + '">' : '')
@@ -506,7 +506,7 @@
        physician goes with the signature (box 31), and the billing provider comes last on the PDF (box 33); the form shows it first. */
     return {
       // From the billing provider picked below (box 25 is the billing provider's).
-      taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax I.D. Number</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
+      taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax ID Number</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician,
       practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider Info &amp; Ph Number</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
@@ -727,7 +727,7 @@
     // "|" is where a heading breaks onto its second line, so the row reads evenly (10 Nov 2026).
     ['from', 'Date of|Service From', 62], ['to', 'Date of|Service To', 58], ['pos', 'Place of|Service', 46], ['emg', 'EMG', 34],
     ['cpt', 'CPT/HCPCS', 56], ['mod', 'Modifier', 46], ['dxPtr', 'Diagnosis|Pointer', 50], ['charge', '$ Charges', 64],
-    ['units', 'Days or|Units', 42], ['npi', 'Rendering|Provider ID.|Number', 74]
+    ['units', 'Days or|Units', 42], ['npi', 'Rendering|Provider ID|Number', 74]
   ];
   var NB_PDF_PAYMENTS = [
     ['date', 'Date', 70], ['amount', 'Amount', 74], ['method', 'Method', 90], ['ref', 'Reference', 90],
@@ -878,7 +878,7 @@
     sec('Billing', LX, colW); sec('Billing Provider Info & Ph Number', RX, colW);
     y = top + 24;
     var leftEnd = pairs([
-      ['Federal Tax I.D. Number', b.practiceTaxId],
+      ['Federal Tax ID Number', b.practiceTaxId],
       ["Patient's Account No.", b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       ['Physician or Supplier', nbPhysician(b)],
@@ -968,7 +968,7 @@
     ['phone', 'Provider Phone', 60, ''],
     ['email', 'Provider Email', 200, 'name@example.com'],
     ['npi', 'Provider NPI', 40, ''],
-    ['taxId', 'Federal Tax I.D. Number', 40, '']
+    ['taxId', 'Federal Tax ID Number', 40, '']
   ];
   function plFind(id) { return nbProv.practices.filter(function (x) { return N().idArg(x.id) === id || x.id === id; })[0] || null; }
   function plDocs(prId) {
@@ -1025,7 +1025,7 @@
           + '<button type="button" class="bpl-ic" title="Edit" aria-label="Edit ' + esc(x.name) + '" data-onclick="plEdit(\'' + id + '\')">' + nbIcon('edit') + '</button>'
           + '<button type="button" class="bpl-ic bpl-ic-del" title="Delete" aria-label="Delete ' + esc(x.name) + '" data-onclick="plDelete(\'' + id + '\')">' + nbIcon('trash') + '</button>'
         + '</div></div>'
-      + '<dl class="bpl-facts">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('NPI', x.npi) + plFact('Federal Tax I.D. Number', x.taxId) + '</dl>'
+      + '<dl class="bpl-facts">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('NPI', x.npi) + plFact('Federal Tax ID Number', x.taxId) + '</dl>'
       + '<button type="button" class="bpl-foot" data-onclick="plView(\'' + id + '\')">'
         + (docs.length ? '<span class="bpl-stack" aria-hidden="true">' + docs.slice(0, 3).map(function (d) { return '<span class="bpl-av">' + esc(plInitials(d.name)) + '</span>'; }).join('') + '</span>'
                        : '<span class="bpl-av bpl-av-empty" aria-hidden="true">' + nbIcon('user') + '</span>')
@@ -1050,7 +1050,7 @@
         + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
       + '<div class="rf-modal-body bpl-view">'
         + '<section class="bpl-side" aria-label="Practice details"><dl class="bpl-kv">'
-          + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax I.D. Number', x.taxId)
+          + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax ID Number', x.taxId)
         + '</dl></section>'
         + '<section class="bpl-main" aria-labelledby="plDocsHd">'
           + '<div class="bpl-main-hd"><h3 id="plDocsHd">Treating Physicians <span class="bpl-badge">' + docs.length + '</span></h3>'

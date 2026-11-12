@@ -14799,9 +14799,6 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .nbg-date{grid-area:date}.nbg-paid{grid-area:paid}.nbg-sum{grid-area:sum}
 @media(max-width:1180px){.nb-bill-grid{grid-template-areas:"tax acct" "assign paid" "doc sig" "date sum"}}
 @media(max-width:620px){.nb-bill-grid{grid-template-areas:none}.nb-bill-grid>*{grid-area:auto}}
-/* The long box 31 labels wrap to two lines; side-by-side labels get the same two-line height, text at the bottom, so the boxes line up */
-@media(min-width:621px){.nb-bill-grid>.nbg-doc>label,.nb-bill-grid>.nbg-sig>label{display:flex;align-items:flex-end;line-height:1.35;min-height:calc(2em * 1.35)}}
-@media(min-width:1181px){.nb-bill-grid>.nbg-date>label{display:flex;align-items:flex-end;line-height:1.35;min-height:calc(2em * 1.35)}}
 /* Practice window, two columns (12 Nov 2026): details left, physicians right */
 .bpl-hd-id{min-width:0}
 .bpl-hd .bpl-hd-addr{margin:5px 0 0;font-size:13px;line-height:1.4;color:#5b6f94;overflow-wrap:anywhere}
