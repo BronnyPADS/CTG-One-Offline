@@ -1020,6 +1020,8 @@
      keeps its records in this browser on purpose. */
   var PHI_CACHE_KEYS = ['ctg_patient_charts_v1', 'ctg_patient_charts_owner', 'ctg_patient_messaging_v1', 'ctg_patient_contacts_v1',
     'ctg_internal_messaging_v1', 'ctg_internal_messaging_drafts_v1', 'ctg_contacts_v1', 'ctg_portal_patients_v1',
+    // The billing providers with their federal tax IDs (12 Nov 2026, CTG-SEC-111): not left on a shared PC.
+    'ctg_neuro_providers_v1',
     // No longer written, but left on PCs by the portal's earlier browser-only
     // version: patients and appointments, and account records with passwords.
     'ctg_appointments', 'ctg_break_blocks', 'ctg_auth_accounts_v1'];
