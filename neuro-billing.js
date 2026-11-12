@@ -427,7 +427,7 @@
       + '<h3 class="nr-sec"><span>Billing</span></h3>'
       + '<div class="nb-grid nb-bill-grid">'
         + prov.taxId
-        + '<div class="rf-f nbg-acct"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
+        + '<div class="rf-f nbg-acct"><label for="nbf_accountNo">Patient&#39;s Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
         + '<div class="rf-f nbg-assign"><span class="nb-lbl" id="nbAssignLbl">Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
           + ['yes', 'no'].map(function (v) {
               return '<label class="nb-radio"><input type="radio" name="nbAssign" value="' + v + '"' + (b.acceptAssignment === v ? ' checked' : '')
@@ -447,7 +447,7 @@
           + '</div>'
           + '<div class="nr-hint">' + nbIcon('info') + (nbSigOk(b.signatureImage) ? 'This picture prints on the bill as the signature.' : 'PNG or JPG. It prints on the bill as the signature.') + '</div>'
         + '</div>'
-        + '<div class="rf-f nbg-date"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
+        + '<div class="rf-f nbg-date"><label for="nbf_signDate">Date</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
         + '<div class="rf-f nbg-paid"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
           + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
         + '<div class="nb-sum nbg-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
@@ -506,9 +506,9 @@
        physician goes with the signature (box 31), and the billing provider comes last on the PDF (box 33); the form shows it first. */
     return {
       // From the billing provider picked below (box 25 is the billing provider's).
-      taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
+      taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax I.D. Number</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician,
-      practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider</span></h3>'
+      practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider Info &amp; Ph #</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
     };
   }
@@ -875,11 +875,11 @@
     }
     if (y + 215 > PH - BOTTOM) newPage();
     var top = y;
-    sec('Billing', LX, colW); sec('Billing Provider', RX, colW);
+    sec('Billing', LX, colW); sec('Billing Provider Info & Ph #', RX, colW);
     y = top + 24;
     var leftEnd = pairs([
-      ['Federal Tax ID', b.practiceTaxId],
-      ['Patient Account No.', b.accountNo],
+      ['Federal Tax I.D. Number', b.practiceTaxId],
+      ["Patient's Account No.", b.accountNo],
       ['Accept Assignment?', b.acceptAssignment === 'yes' ? 'Yes' : b.acceptAssignment === 'no' ? 'No' : ''],
       ['Physician or Supplier', nbPhysician(b)],
       ['Physician NPI', b.physicianNpi]], LX, colW, 104);
@@ -889,19 +889,21 @@
     if (sig) { try { doc.addImage(b.signatureImage, 'PNG', LX + 2, lineY - sig.h - 2, sig.w, sig.h); drawn = true; } catch (e) { drawn = false; } }
     if (!drawn && b.signature) { doc.setFont('times', 'italic'); doc.setFontSize(15); doc.setTextColor.apply(doc, INK); doc.text(one(b.signature, colW - 8), LX + 2, lineY - 5); }
     stroke(INK, 0.8); doc.line(LX, lineY, LX + colW, lineY);
-    f('normal', 7.5, MUTED); doc.text('Signature of Provider', LX, lineY + 11);
+    // Box 31's own words (12 Nov 2026), on two lines under the signature; the date on the right.
+    f('normal', 7.5, MUTED); doc.text('Signature of Physician or Supplier', LX, lineY + 11);
+    doc.text('Including Degrees or Credentials', LX, lineY + 20);
     var sd = nbPdfDate(b.signDate) || '';
     f('bold', 7.5, MUTED); doc.text(sd, LX + colW, lineY + 11, { align: 'right' });
     var sdw = doc.getTextWidth(sd);
-    f('normal', 7.5, MUTED); doc.text('Date Signed:' + (sd ? ' ' : ''), LX + colW - sdw, lineY + 11, { align: 'right' });
-    leftEnd = lineY + 14;
+    f('normal', 7.5, MUTED); doc.text('Date' + (sd ? ': ' : ''), LX + colW - sdw, lineY + 11, { align: 'right' });
+    leftEnd = lineY + 23;
 
     var rightEnd = pairs([
       ['Billing Provider', b.practiceName],
       ['Address', b.practiceAddress, 2],
       ['Phone', b.practicePhone],
       ['Email', b.practiceEmail],
-      ['Provider NPI', b.practiceNpi]], RX, colW, 104);
+      ['NPI', b.practiceNpi]], RX, colW, 104);
     var tb = rightEnd + 4, rh = 21;
     stroke(LINE, 0.7);
     fill(NAVY); doc.roundedRect(RX, tb + rh * 2, colW, rh + 3, 4, 4, 'F'); doc.rect(RX, tb + rh * 2, colW, 8, 'F');
