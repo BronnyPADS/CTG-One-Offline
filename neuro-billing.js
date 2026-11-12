@@ -435,8 +435,9 @@
             }).join('')
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
         // One row for who signs (12 Nov 2026): physician, signature and date side by side.
+        // The signature label is box 31's own words (12 Nov 2026, as the user asked).
         + prov.physician
-        + '<div class="rf-f nbg-sig"><label for="nbf_signature">Signature of Provider</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
+        + '<div class="rf-f nbg-sig"><label for="nbf_signature">Signature of Physician or Supplier Including Degrees or Credentials</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
           // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
           + '<div class="nb-sig">'
             + (nbSigOk(b.signatureImage) ? '<img class="nb-sig-img" alt="Uploaded signature" src="' + esc(b.signatureImage) + '">' : '')
