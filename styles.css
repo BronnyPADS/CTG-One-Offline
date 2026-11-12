@@ -14754,10 +14754,6 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 /* Billing Provider List (10 Nov 2026) */
 .pl-pair .pl-wide{grid-column:1/-1}
 /* Billing Provider List v2 (10 Nov 2026): practice cards, physicians per practice */
-.nb-grid>.nb-span2{grid-column:span 2}
-/* The long box 31 label keeps two columns; its dropdown is one column wide, like the other boxes (10 Nov 2026). */
-.nb-grid>.nb-span2 select{max-width:calc((100% - 18px) / 2)}
-@media(max-width:620px){.nb-grid>.nb-span2{grid-column:auto}.nb-grid>.nb-span2 select{max-width:none}}
 .bpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:18px;margin-bottom:18px}
 .bpl-card{position:relative;display:flex;flex-direction:column;min-width:0;background:#fff;border:1px solid #dfe8f5;border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(15,47,102,.04),0 10px 26px rgba(15,47,102,.06);transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
 .bpl-card::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#03045E,#0077B6 55%,#00B4D8)}
@@ -14792,20 +14788,37 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .bpl-modal{max-width:780px}
 .bpl-hd{display:flex;align-items:center;gap:14px;min-width:0}
 .bpl-hd h2{overflow-wrap:anywhere}
-.bpl-facts-lg{grid-template-columns:repeat(4,minmax(0,1fr));padding:16px 18px;background:#f7faff;border:1px solid #e6eef9;border-radius:14px}
 .bpl-sec-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 12px}
 .bpl-sec-first{margin-top:0}
 .bpl-sec-hd h3{margin:0;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;color:#123a7a}
 .bpl-sec-hd h3 svg{width:17px;height:17px;color:#0077B6}
 .bpl-badge{font-size:11px;font-weight:800;background:#e3f1fb;color:#03507e;border-radius:999px;padding:2px 8px}
-.bpl-docs{border:1px solid #e3ebf6;border-radius:14px;overflow:hidden}
-.bpl-docs-hd,.bpl-doc{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,auto);gap:14px;align-items:center;padding:10px 16px}
-.bpl-docs-hd{background:#f6f9fd;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6a7fa6}
-.bpl-docs-hd span:last-child,.bpl-doc-npi{text-align:right}
-.bpl-doc{border-top:1px solid #edf2f9}
-.bpl-doc-who{display:flex;align-items:center;gap:12px;min-width:0}
-.bpl-doc-who b{font-size:14px;color:#0f2f66;overflow-wrap:anywhere}
-.bpl-doc-npi{font-size:13px;font-weight:600;color:#35517f;font-variant-numeric:tabular-nums}
+/* Billing section places (12 Nov 2026): physician, signature and date signed side by side; totals bottom right */
+.nb-bill-grid{grid-template-areas:"tax acct assign" "doc sig date" "paid . sum"}
+.nbg-tax{grid-area:tax}.nbg-acct{grid-area:acct}.nbg-assign{grid-area:assign}.nbg-doc{grid-area:doc}.nbg-sig{grid-area:sig}
+.nbg-date{grid-area:date}.nbg-paid{grid-area:paid}.nbg-sum{grid-area:sum}
+@media(max-width:1180px){.nb-bill-grid{grid-template-areas:"tax acct" "assign paid" "doc sig" "date sum"}}
+@media(max-width:620px){.nb-bill-grid{grid-template-areas:none}.nb-bill-grid>*{grid-area:auto}}
+/* Practice window, two columns (12 Nov 2026): details left, physicians right */
+.bpl-hd-id{min-width:0}
+.bpl-hd .bpl-hd-addr{margin:5px 0 0;font-size:13px;line-height:1.4;color:#5b6f94;overflow-wrap:anywhere}
+.bpl-view{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr);gap:24px;align-items:start}
+.bpl-side{background:#f7faff;border:1px solid #e6eef9;border-radius:14px;padding:4px 18px}
+.bpl-kv{margin:0}
+.bpl-kv .bpl-fact{padding:12px 0;border-top:1px solid #e6eef9}
+.bpl-kv .bpl-fact:first-child{border-top:0}
+.bpl-kv .bpl-fact dd{font-size:13px;line-height:1.4}
+.bpl-main{min-width:0}
+.bpl-main-hd{margin:2px 0 12px}
+.bpl-main-hd h3{margin:0;display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;color:#123a7a}
+.bpl-main-hd p{margin:4px 0 0;font-size:11.5px;color:#7b8db0}
+.bpl-doclist{list-style:none;margin:0;padding:0;border:1px solid #e3ebf6;border-radius:14px;overflow:hidden}
+.bpl-doc2{display:flex;align-items:center;gap:12px;padding:11px 14px;border-top:1px solid #edf2f9}
+.bpl-doc2:first-child{border-top:0}
+.bpl-doc2 b{flex:1;min-width:0;font-size:14px;color:#0f2f66;overflow-wrap:anywhere}
+.bpl-npi{flex:none;font-size:12px;font-weight:700;color:#35517f;background:#eef4fb;border-radius:999px;padding:3px 10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bpl-ft{justify-content:flex-end}
+@media(max-width:640px){.bpl-view{grid-template-columns:minmax(0,1fr);gap:18px}}
 .bpl-empty{padding:22px 16px;text-align:center;font-size:13px;color:#6a7fa6;border:1px dashed #cfdcef;border-radius:14px;background:#fafcff}
 .bpl-rows-hd,.bpl-row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr) 34px;gap:10px;align-items:start}
 .bpl-rows-hd{padding:0 0 6px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6a7fa6}
@@ -14813,7 +14826,6 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 .bpl-row .bpl-cell{margin:0}
 .bpl-row .bpl-d-other{margin-top:6px}
 .bpl-row>.bpl-ic{margin-top:4px}
-@media(max-width:700px){.bpl-facts-lg{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.bpl-rows-hd{display:none}.bpl-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;padding:10px 0;border-top:1px solid #edf2f9}.bpl-row .bpl-cell-name{grid-column:1/-1}}
 @media(prefers-reduced-motion:reduce){.bpl-card,.bpl-chev,.bpl-foot,.bpl-ic{transition:none}.bpl-card:hover{transform:none}.bpl-foot:hover .bpl-chev{transform:none}}
 .nb-new input{border-color:#0077B6;box-shadow:0 0 0 3px rgba(0,119,182,.12)}

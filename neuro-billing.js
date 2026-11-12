@@ -425,19 +425,18 @@
       + '<div class="nb-svc-foot"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="nbAddLine()">' + nbIcon('plus') + 'Add service line</button>'
       + '<span class="nb-total">Total charge <b id="nbTotal">' + nbFmt(t.billed) + '</b></span></div>'
       + '<h3 class="nr-sec"><span>Billing</span></h3>'
-      + '<div class="nb-grid">'
+      + '<div class="nb-grid nb-bill-grid">'
         + prov.taxId
-        + '<div class="rf-f"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
-        + '<div class="rf-f"><span class="nb-lbl" id="nbAssignLbl">Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
+        + '<div class="rf-f nbg-acct"><label for="nbf_accountNo">Patient Account No.</label><input id="nbf_accountNo" type="text" value="' + esc(b.accountNo) + '" data-oninput="nbField(\'accountNo\',this.value)"></div>'
+        + '<div class="rf-f nbg-assign"><span class="nb-lbl" id="nbAssignLbl">Accept Assignment?</span><div class="nb-radios" role="radiogroup" aria-labelledby="nbAssignLbl">'
           + ['yes', 'no'].map(function (v) {
               return '<label class="nb-radio"><input type="radio" name="nbAssign" value="' + v + '"' + (b.acceptAssignment === v ? ' checked' : '')
                 + ' data-onchange="nbField(\'acceptAssignment\',this.value)">' + (v === 'yes' ? 'Yes' : 'No') + '</label>';
             }).join('')
           + '<button type="button" class="nb-clear" data-onclick="nbClearAssign()">Clear</button></div></div>'
-        + '<div class="rf-f"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
-          + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
+        // One row for who signs (12 Nov 2026): physician, signature and date side by side.
         + prov.physician
-        + '<div class="rf-f"><label for="nbf_signature">Signature of Provider</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
+        + '<div class="rf-f nbg-sig"><label for="nbf_signature">Signature of Provider</label><input id="nbf_signature" type="text" value="' + esc(b.signature) + '" data-oninput="nbField(\'signature\',this.value)">'
           // Or a picture of the signature (5 Nov 2026): it prints on the bill in place of the typed one.
           + '<div class="nb-sig">'
             + (nbSigOk(b.signatureImage) ? '<img class="nb-sig-img" alt="Uploaded signature" src="' + esc(b.signatureImage) + '">' : '')
@@ -447,8 +446,10 @@
           + '</div>'
           + '<div class="nr-hint">' + nbIcon('info') + (nbSigOk(b.signatureImage) ? 'This picture prints on the bill as the signature.' : 'PNG or JPG. It prints on the bill as the signature.') + '</div>'
         + '</div>'
-        + '<div class="rf-f"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
-        + '<div class="nb-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
+        + '<div class="rf-f nbg-date"><label for="nbf_signDate">Date Signed</label><input id="nbf_signDate" type="date" value="' + esc(b.signDate) + '" data-oninput="nbField(\'signDate\',this.value)"></div>'
+        + '<div class="rf-f nbg-paid"><label for="nbf_paid">Amount Paid</label><input id="nbf_paid" type="text" class="rf-auto" readonly value="' + esc(nbFmt(t.paid)) + '">'
+          + '<div class="nr-hint">' + nbIcon('info') + 'The payments recorded on Neurologist Payments</div></div>'
+        + '<div class="nb-sum nbg-sum"><span>Total Charge</span><b id="nbTotal2">' + nbFmt(t.billed) + '</b>'
           + '<span>Balance Owed</span><b id="nbBalance" class="' + (t.balance > 0 ? 'is-owed' : 'is-clear') + '">' + nbFmt(t.balance) + '</b></div>'
       + '</div>'
       + '</div>';
@@ -496,7 +497,7 @@
         + (nbProv.practices.length ? '' : '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register a billing provider</button>')
       + '</div>';
     // In the CMS-1500's words (box 31), without "Signature of": the signature has its own box below (10 Nov 2026).
-    var physician = '<div class="rf-f nb-span2"><label for="nbf_physician">Physician or Supplier Including Degrees or Credentials</label>'
+    var physician = '<div class="rf-f nbg-doc"><label for="nbf_physician">Physician or Supplier Including Degrees or Credentials</label>'
         + '<select id="nbf_physician" data-onchange="nbPickPhysician(this.value)"><option value="">— Select —</option>' + docOpts + own(physName, physAt) + '</select>'
         + (pracAt && !pool.length ? '<button type="button" class="nb-clear" data-onclick="showPage(\'neuroProviderList\')">Register physicians for ' + esc(pracAt.name) + '</button>' : '')
       + '</div>';
@@ -504,7 +505,7 @@
        physician goes with the signature (box 31), and the billing provider comes last on the PDF (box 33); the form shows it first. */
     return {
       // From the billing provider picked below (box 25 is the billing provider's).
-      taxId: '<div class="rf-f"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
+      taxId: '<div class="rf-f nbg-tax"><label for="nbf_practiceTaxId">Federal Tax ID</label><input id="nbf_practiceTaxId" type="text" class="rf-auto" readonly value="' + esc(b.practiceTaxId || '') + '" placeholder="From the billing provider"></div>',
       physician: physician,
       practice: '<h3 class="nr-sec nr-sec-first"><span>Billing Provider</span></h3>'
         + '<div class="nb-grid">' + practice + '</div>'
@@ -1039,22 +1040,29 @@
     var x = plFind(id); if (!x) return;
     plModal = { mode: 'view', id: x.id };
     var docs = plDocs(x.id), aid = N().idArg(x.id);
+    // Two columns (12 Nov 2026): practice details on the left, physicians on the right.
     plShow('<div class="rf-modal-hd"><div class="bpl-hd"><span class="bpl-mono" aria-hidden="true">' + esc(plInitials(x.name)) + '</span>'
-        + '<div><h2 id="plTitle">' + esc(x.name) + '</h2>' + (x.address ? '<p>' + esc(x.address) + '</p>' : '') + '</div></div>'
+        + '<div class="bpl-hd-id"><h2 id="plTitle">' + esc(x.name) + '</h2>'
+          + '<p class="bpl-hd-addr">' + (x.address ? esc(x.address) : '<span class="bpl-none">No address on file</span>') + '</p></div></div>'
         + '<button type="button" class="rf-x" aria-label="Close" data-onclick="plClose()">&times;</button></div>'
-      + '<div class="rf-modal-body">'
-        + '<dl class="bpl-facts bpl-facts-lg">' + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax ID', x.taxId) + '</dl>'
-        + '<div class="bpl-sec-hd"><h3>Treating Physicians <span class="bpl-badge">' + docs.length + '</span></h3></div>'
-        + (docs.length
-          ? '<div class="bpl-docs"><div class="bpl-docs-hd"><span>Physician or Supplier, Degrees or Credentials</span><span>NPI</span></div>'
-            + docs.map(function (d) {
-                return '<div class="bpl-doc"><div class="bpl-doc-who"><span class="bpl-av">' + esc(plInitials(d.name)) + '</span><b>' + esc(nbPhysicianOf(d)) + '</b></div>'
-                  + '<span class="bpl-doc-npi">' + (d.npi ? esc(d.npi) : '<span class="bpl-none">—</span>') + '</span></div>';
-              }).join('') + '</div>'
-          : '<div class="bpl-empty">No physicians registered for this practice yet. Click Edit to add them.</div>')
+      + '<div class="rf-modal-body bpl-view">'
+        + '<section class="bpl-side" aria-label="Practice details"><dl class="bpl-kv">'
+          + plFact('Phone', x.phone) + plFact('Email', x.email) + plFact('Provider NPI', x.npi) + plFact('Federal Tax ID', x.taxId)
+        + '</dl></section>'
+        + '<section class="bpl-main" aria-labelledby="plDocsHd">'
+          + '<div class="bpl-main-hd"><h3 id="plDocsHd">Treating Physicians <span class="bpl-badge">' + docs.length + '</span></h3>'
+            + '<p>Physician or Supplier Including Degrees or Credentials</p></div>'
+          + (docs.length
+            ? '<ul class="bpl-doclist">' + docs.map(function (d) {
+                return '<li class="bpl-doc2"><span class="bpl-av" aria-hidden="true">' + esc(plInitials(d.name)) + '</span>'
+                  + '<b>' + esc(nbPhysicianOf(d)) + '</b>'
+                  + '<span class="bpl-npi">' + (d.npi ? 'NPI ' + esc(d.npi) : 'No NPI') + '</span></li>';
+              }).join('') + '</ul>'
+            : '<div class="bpl-empty">No physicians registered for this practice yet. Click Edit to add them.</div>')
+        + '</section>'
       + '</div>'
-      + '<div class="rf-modal-ft"><button type="button" class="rf-btn rf-btn-quiet" data-onclick="plClose()">Close</button>'
-        + '<button type="button" class="rf-btn rf-btn-go" data-onclick="plEdit(\'' + aid + '\')">' + nbIcon('edit') + 'Edit Provider &amp; Physicians</button></div>');
+      + '<div class="rf-modal-ft bpl-ft"><button type="button" class="rf-btn rf-btn-quiet nb-btn-sm" data-onclick="plClose()">Close</button>'
+        + '<button type="button" class="rf-btn rf-btn-go nb-btn-sm" data-onclick="plEdit(\'' + aid + '\')">' + nbIcon('edit') + 'Edit</button></div>');
   }
   function plDocRow(d) {
     d = d || {};
