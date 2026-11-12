@@ -604,7 +604,7 @@
         var d = await apiFetch('/api/login', { method: 'POST', body: JSON.stringify({ username: username, password: password }) });
         // A two-factor account returns a challenge instead of a session - the
         // caller shows the code step rather than treating this as signed in.
-        if (d.mfaRequired) return { mfaRequired: true, challengeId: d.challengeId, emailHint: d.emailHint };
+        if (d.mfaRequired) return { mfaRequired: true, challengeId: d.challengeId, emailHint: d.emailHint, method: d.method || 'email', hasApp: !!d.hasApp };
         _csrfToken = d.csrfToken || '';
         /* Take the automatic-logoff window from the server here, not only in me().
            Without this a fresh sign-in kept the hardcoded 15-minute default while
@@ -630,8 +630,9 @@
       return d.user;
     },
 
-    async resendLoginCode(challengeId) {
-      return await apiFetch('/api/login/resend', { method: 'POST', body: JSON.stringify({ challengeId: challengeId }) });
+    // method: 'email' (send a code) or 'app' (switch to the authenticator app).
+    async resendLoginCode(challengeId, method) {
+      return await apiFetch('/api/login/resend', { method: 'POST', body: JSON.stringify({ challengeId: challengeId, method: method || 'email' }) });
     },
 
     async logout() {
@@ -885,6 +886,8 @@
     setText('userMenuName', name);
     setText('userMenuSub', roleLabel);
     var access = $('userMenuAccess'); if (access) access.style.display = user.role === 'admin' ? '' : 'none';
+    // The offline version has no server to hold an authenticator.
+    var authApp = $('userMenuAuthenticator'); if (authApp) authApp.style.display = REMOTE ? '' : 'none';
     // Sidebar account card mirrors the same top-bar chip data - one call
     // site, so the two can never drift out of sync with each other.
     setText('sideAccountAv', (name || '?').trim().charAt(0).toUpperCase());
@@ -1140,18 +1143,54 @@
   }
   function authClearError() { var err = $('authError'); if (err) err.classList.remove('show'); }
 
-  // Swaps the card between the password step and the emailed-code step.
-  function authShowMfaStep(on, emailHint) {
+  // Swaps the card between the password step and the code step. info.method is
+  // 'app' (code from the authenticator app) or 'email' (code was emailed);
+  // info.hasApp offers the switch between the two.
+  var _mfaHasApp = false;
+  function showEl(id, on) { var el = $(id); if (el) el.style.display = on ? '' : 'none'; }
+  function authSetMfaMode(info) {
+    var app = info && info.method === 'app';
+    _mfaHasApp = !!(info && info.hasApp);
+    showEl('authMfaLeadApp', app);
+    showEl('authMfaLeadEmail', !app);
+    showEl('authResendBtn', !app);
+    showEl('authUseEmailBtn', app);
+    showEl('authUseAppBtn', !app && _mfaHasApp);
+    if (!app) setText('authMfaHint', (info && info.emailHint) || 'your email');
+  }
+  function authShowMfaStep(on, info) {
     var pwForm = $('authForm'), codeForm = $('authMfaForm'), hint = $('authHint');
     if (pwForm) pwForm.style.display = on ? 'none' : '';
     if (codeForm) codeForm.style.display = on ? '' : 'none';
     if (hint) hint.style.display = on ? 'none' : '';
     if (on) {
-      setText('authMfaHint', emailHint || 'your email');
+      authSetMfaMode(typeof info === 'string' ? { method: 'email', emailHint: info } : info);
       setVal('authCode', '');
       var input = $('authCode'); if (input) setTimeout(function () { input.focus(); }, 50);
     }
   }
+
+  // Switch the code screen between an emailed code and the authenticator app.
+  async function authSwitchMethod(method, btnId, busyText, idleText) {
+    if (!_mfaChallengeId) return;
+    var btn = $(btnId);
+    if (btn) { btn.disabled = true; btn.textContent = busyText; }
+    authClearError();
+    try {
+      var d = await backend.resendLoginCode(_mfaChallengeId, method);
+      _mfaChallengeId = d.challengeId;
+      authSetMfaMode({ method: d.method || method, hasApp: d.hasApp, emailHint: d.emailHint });
+      setVal('authCode', '');
+      var input = $('authCode'); if (input) input.focus();
+      if (method === 'email') toast('A code is on its way to your email');
+    } catch (e) {
+      authShowError(e.message || 'Could not switch. Try signing in again.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = idleText; }
+    }
+  }
+  window.ctgUseEmailCode = function () { return authSwitchMethod('email', 'authUseEmailBtn', 'Sending…', 'Email me a code instead'); };
+  window.ctgUseAppCode = function () { return authSwitchMethod('app', 'authUseAppBtn', 'Switching…', 'Use my authenticator app'); };
 
   window.ctgCancelMfa = function () {
     _mfaChallengeId = null;
@@ -1167,9 +1206,9 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     authClearError();
     try {
-      var d = await backend.resendLoginCode(_mfaChallengeId);
+      var d = await backend.resendLoginCode(_mfaChallengeId, 'email');
       _mfaChallengeId = d.challengeId;
-      setText('authMfaHint', d.emailHint || 'your email');
+      authSetMfaMode({ method: 'email', hasApp: d.hasApp, emailHint: d.emailHint });
       setVal('authCode', '');
       toast('A new code is on its way');
     } catch (e) {
@@ -1218,6 +1257,128 @@
       pwFeedback('cpwFeedback', 'cpwFeedbackTag', e.message || 'Could not change the password.');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Save Password'; }
+    }
+  };
+
+  /* ---- Authenticator App (signed in): set up or remove the app that gives
+     sign-in codes without email. See /api/me/authenticator* in routes/auth.js.
+     The QR code arrives as rows of 0/1 and is drawn here as SVG rectangles -
+     no markup from the server is ever inserted. ---- */
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function drawQr(mount, rows) {
+    while (mount.firstChild) mount.removeChild(mount.firstChild);
+    var n = rows.length, q = 4, size = n + q * 2;
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+    svg.setAttribute('shape-rendering', 'crispEdges');
+    svg.setAttribute('aria-hidden', 'true');
+    var bg = document.createElementNS(SVG_NS, 'rect');
+    bg.setAttribute('width', size); bg.setAttribute('height', size); bg.setAttribute('fill', '#fff');
+    svg.appendChild(bg);
+    var d = '';
+    for (var r = 0; r < n; r++) {
+      var row = String(rows[r] || '');
+      for (var c = 0; c < row.length; c++) if (row.charAt(c) === '1') d += 'M' + (c + q) + ' ' + (r + q) + 'h1v1h-1z';
+    }
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d); path.setAttribute('fill', '#000');
+    svg.appendChild(path);
+    mount.appendChild(svg);
+  }
+
+  function totpFeedback(msg, cls) { pwFeedback('totpFeedback', 'totpFeedbackTag', msg, cls); }
+  function totpView(state, twoStepOn) {
+    // state: 'start' (not set up), 'setup' (scan + first code), 'on' (set up)
+    showEl('totpLead', state !== 'on');
+    showEl('totpTwoStepOff', state !== 'on' && twoStepOn === false);
+    showEl('totpStart', state === 'start');
+    showEl('totpSetup', state === 'setup');
+    showEl('totpOn', state === 'on');
+    showEl('totpStartBtn', state === 'start');
+    showEl('totpConfirmBtn', state === 'setup');
+    showEl('totpRemoveBtn', state === 'on');
+    var fb = $('totpFeedback'); if (fb) fb.style.display = 'none';
+  }
+  function totpClearSecrets() {
+    var qr = $('totpQr'); if (qr) while (qr.firstChild) qr.removeChild(qr.firstChild);
+    setText('totpKey', ''); setText('totpAccount', '');
+    setVal('totpCode', ''); setVal('totpStartPw', ''); setVal('totpRemovePw', '');
+  }
+
+  window.ctgTotpOpen = async function () {
+    if (!REMOTE) { toast('The authenticator app is set up in the online portal.', 'err'); return; }
+    totpClearSecrets();
+    totpView('start');
+    var modal = $('authenticatorModal');
+    if (modal) { modal.classList.add('show'); document.body.classList.add('modal-open'); }
+    try {
+      var d = await apiFetch('/api/me/authenticator');
+      totpView(d.enabled ? 'on' : 'start', !!d.twoStepOn);
+      var f = $(d.enabled ? 'totpRemovePw' : 'totpStartPw'); if (f) f.focus();
+    } catch (e) {
+      totpFeedback(e.message || 'Could not load your authenticator settings.');
+    }
+  };
+  window.ctgTotpClose = function () {
+    // The setup key is not left on screen once the window closes.
+    totpClearSecrets();
+    var modal = $('authenticatorModal');
+    if (modal) { modal.classList.remove('show'); document.body.classList.remove('modal-open'); }
+  };
+
+  window.ctgTotpStart = async function () {
+    var pw = val('totpStartPw');
+    if (!pw) { totpFeedback('Enter your current password.'); return; }
+    var btn = $('totpStartBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Starting…'; }
+    try {
+      var d = await apiFetch('/api/me/authenticator/setup', { method: 'POST', body: JSON.stringify({ currentPassword: pw }) });
+      setVal('totpStartPw', '');
+      drawQr($('totpQr'), d.qr || []);
+      setText('totpKey', d.key || '');
+      setText('totpAccount', (d.issuer || 'CTG One') + ' (' + (d.accountName || '') + ')');
+      totpView('setup');
+      var c = $('totpCode'); if (c) c.focus();
+    } catch (e) {
+      totpFeedback(e.message || 'Could not start the setup.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Set Up'; }
+    }
+  };
+
+  window.ctgTotpConfirm = async function () {
+    var code = String(val('totpCode') || '').replace(/\D/g, '');
+    if (code.length !== 6) { totpFeedback('Enter the 6-digit code the app shows.'); return; }
+    var btn = $('totpConfirmBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+    try {
+      await apiFetch('/api/me/authenticator/confirm', { method: 'POST', body: JSON.stringify({ code: code }) });
+      totpClearSecrets();
+      totpView('on');
+      totpFeedback('Done. Next time you sign in, use the code from the app.', 'tgn');
+      toast('Authenticator app turned on');
+    } catch (e) {
+      setVal('totpCode', '');
+      totpFeedback(e.message || 'That code did not work.');
+      if (/start again/i.test(e.message || '')) { totpClearSecrets(); totpView('start'); totpFeedback(e.message); }
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Turn On'; }
+    }
+  };
+
+  window.ctgTotpRemove = async function () {
+    var pw = val('totpRemovePw');
+    if (!pw) { totpFeedback('Enter your current password.'); return; }
+    var btn = $('totpRemoveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+    try {
+      await apiFetch('/api/me/authenticator/remove', { method: 'POST', body: JSON.stringify({ currentPassword: pw }) });
+      totpClearSecrets();
+      totpView('start');
+      totpFeedback('Removed. Sign-in codes will come by email until you set the app up again.', 'tgn');
+      toast('Authenticator app removed');
+    } catch (e) {
+      setVal('totpRemovePw', '');
+      totpFeedback(e.message || 'Could not remove the app.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Remove App'; }
     }
   };
 
@@ -1319,7 +1480,7 @@
       setVal('authPass', '');
       if (result && result.mfaRequired) {
         _mfaChallengeId = result.challengeId;
-        authShowMfaStep(true, result.emailHint);
+        authShowMfaStep(true, result);
         return;
       }
       showApp(result);
@@ -1334,7 +1495,7 @@
     if (!_mfaChallengeId) return;
     var btn = $('authCodeSubmit');
     var code = String(val('authCode') || '').trim();
-    if (!/^\d{6}$/.test(code)) { authShowError('Enter the 6-digit code from your email.'); return; }
+    if (!/^\d{6}$/.test(code)) { authShowError('Enter the 6-digit sign-in code.'); return; }
     authClearError();
     if (btn) { btn.disabled = true; btn.innerHTML = 'Verifying…'; }
     try {
@@ -1676,6 +1837,10 @@
       mfa_failed: 'Failed MFA',
       mfa_send_failed: 'MFA code send failed',
       mfa_unavailable: 'MFA unavailable',
+      authenticator_added: 'Authenticator app added',
+      authenticator_removed: 'Authenticator app removed',
+      authenticator_setup_failed: 'Authenticator setup code wrong',
+      authenticator_password_failed: 'Authenticator: wrong password',
       password_reset: 'Password reset',
       password_reset_blocked: 'Password reset blocked',
       password_reset_code_sent: 'Password reset code sent',
@@ -1697,7 +1862,7 @@
      attempt belongs here, not just the sign-in ones - a run of failed MFA or
      password-reset attempts is the same signal wearing a different name. */
   var AUDIT_ALERT = ['login_failed', 'login_blocked', 'delete', 'mfa_failed', 'mfa_blocked',
-    'change_password_failed', 'password_reset_failed', 'password_reset_blocked', 'export_burst', 'access_denied', 'access_denied_burst', 'signed_record_change_refused'];
+    'change_password_failed', 'authenticator_password_failed', 'authenticator_removed', 'password_reset_failed', 'password_reset_blocked', 'export_burst', 'access_denied', 'access_denied_burst', 'signed_record_change_refused'];
   function auditIsAlert(action) {
     return AUDIT_ALERT.indexOf(action) !== -1;
   }
@@ -2447,6 +2612,18 @@
       });
       codeInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); handleMfaSubmit(); } });
     }
+    var totpCode = $('totpCode');
+    if (totpCode) {
+      totpCode.addEventListener('input', function () {
+        var cleaned = totpCode.value.replace(/\D/g, '').slice(0, 6);
+        if (cleaned !== totpCode.value) totpCode.value = cleaned;
+      });
+      totpCode.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); window.ctgTotpConfirm(); } });
+    }
+    var totpStartPw = $('totpStartPw');
+    if (totpStartPw) totpStartPw.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); window.ctgTotpStart(); } });
+    var totpRemovePw = $('totpRemovePw');
+    if (totpRemovePw) totpRemovePw.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); window.ctgTotpRemove(); } });
     /* No role badge while the username is typed: answering "does this account
        exist, and is it an admin?" before a password is proven told that to
        anyone who asked. The role shows on the user chip once signed in. */

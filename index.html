@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261112c">
+<link rel="stylesheet" href="styles.css?v=20261112d">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261110b"></script>
+<script src="ctg-actions.js?v=20261112a"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -61,11 +61,14 @@
            if it is read before someone signs in. -->
       <button type="button" class="auth-phi-link" data-onclick="ctgShowPhiNotice()">Protected Health Information &amp; Access Notice</button>
       <form id="authMfaForm" autocomplete="off" data-onsubmit="return false" data-cs-boot="display:none">
-        <div class="auth-mfa-lead">We emailed a 6-digit code to <strong id="authMfaHint"></strong>. Enter it below to finish signing in.</div>
+        <div class="auth-mfa-lead" id="authMfaLeadEmail">We emailed a 6-digit code to <strong id="authMfaHint"></strong>. Enter it below to finish signing in.</div>
+        <div class="auth-mfa-lead" id="authMfaLeadApp" data-cs-boot="display:none">Open your authenticator app (Microsoft Authenticator or Google Authenticator) and enter the 6-digit code it shows for <strong>CTG One</strong>.</div>
         <div class="fg"><div class="auth-field"><label for="authCode">Sign-in code</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="auth-code-input"></div></div>
         <button type="submit" class="auth-btn" id="authCodeSubmit">Verify <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
         <div class="auth-mfa-actions">
           <button type="button" class="auth-linkbtn" id="authResendBtn" data-onclick="ctgResendCode()">Send a new code</button>
+          <button type="button" class="auth-linkbtn" id="authUseEmailBtn" data-onclick="ctgUseEmailCode()" data-cs-boot="display:none">Email me a code instead</button>
+          <button type="button" class="auth-linkbtn" id="authUseAppBtn" data-onclick="ctgUseAppCode()" data-cs-boot="display:none">Use my authenticator app</button>
           <button type="button" class="auth-linkbtn" data-onclick="ctgCancelMfa()">Use a different account</button>
         </div>
       </form>
@@ -120,6 +123,10 @@
         <button class="user-menu-item" data-onclick="openChangePassword();closeUserMenu()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           Change Password
+        </button>
+        <button class="user-menu-item" id="userMenuAuthenticator" data-onclick="ctgTotpOpen();closeUserMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="18" x2="14" y2="18"/><polyline points="9.5 10 11.5 12 15 8.5"/></svg>
+          Authenticator App
         </button>
         <button class="user-menu-item danger" data-onclick="logout()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -2752,6 +2759,62 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="authenticatorModal">
+  <div class="modal" data-cs-boot="width:min(460px,95%)">
+    <div class="modal-hd">
+      <div class="modal-title">Authenticator App</div>
+      <button class="modal-close" aria-label="Close" data-onclick="ctgTotpClose()">&#215;</button>
+    </div>
+    <div class="modal-body">
+      <p class="totp-lead" id="totpLead">Get your sign-in code from an app on your phone. It works even when email is down. You can still choose to have a code emailed.</p>
+      <p class="totp-note" id="totpTwoStepOff" data-cs-boot="display:none">Your account does not ask for a sign-in code yet. The app is used once an administrator turns on two-step sign-in for you.</p>
+      <!-- Not set up: confirm the password to begin -->
+      <form id="totpStart" autocomplete="off" data-onsubmit="return false" data-cs-boot="display:none">
+        <div class="fg">
+          <label for="totpStartPw">Current password</label>
+          <input type="password" id="totpStartPw" autocomplete="current-password">
+        </div>
+      </form>
+      <!-- Setting up: scan, then enter the first code -->
+      <div id="totpSetup" data-cs-boot="display:none">
+        <ol class="totp-steps">
+          <li>Install <strong>Microsoft Authenticator</strong> or <strong>Google Authenticator</strong> on your phone.</li>
+          <li>In the app, add an account and scan this code.</li>
+        </ol>
+        <div class="totp-qr" id="totpQr" role="img" aria-label="QR code to add CTG One to your authenticator app"></div>
+        <details class="totp-manual">
+          <summary>Can't scan? Enter a setup key instead</summary>
+          <div class="totp-manual-body">
+            <div>Account: <strong id="totpAccount"></strong></div>
+            <div>Key: <code class="totp-key" id="totpKey"></code></div>
+            <div class="small-muted">Choose "time based" if the app asks.</div>
+          </div>
+        </details>
+        <div class="fg">
+          <label for="totpCode">3. Enter the 6-digit code the app shows</label>
+          <input type="text" id="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="totp-code-input">
+        </div>
+      </div>
+      <!-- Set up: remove it (lost or new phone) -->
+      <div id="totpOn" data-cs-boot="display:none">
+        <div class="totp-status"><span class="tag tgn">On</span> Your authenticator app is set up. At sign-in you'll be asked for its code.</div>
+        <p class="small-muted">New or lost phone? Remove it here, then set it up again. You can sign in with an emailed code in the meantime.</p>
+        <div class="fg">
+          <label for="totpRemovePw">Current password</label>
+          <input type="password" id="totpRemovePw" autocomplete="current-password">
+        </div>
+      </div>
+      <div id="totpFeedback" data-cs-boot="margin-top:6px;display:none"><span class="tag" id="totpFeedbackTag"></span></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" data-onclick="ctgTotpClose()">Close</button>
+      <button class="btn btn-primary" id="totpStartBtn" data-onclick="ctgTotpStart()" data-cs-boot="display:none">Set Up</button>
+      <button class="btn btn-primary" id="totpConfirmBtn" data-onclick="ctgTotpConfirm()" data-cs-boot="display:none">Turn On</button>
+      <button class="btn btn-danger" id="totpRemoveBtn" data-onclick="ctgTotpRemove()" data-cs-boot="display:none">Remove App</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="forgotPasswordModal">
   <div class="modal" data-cs-boot="width:min(440px,95%)">
     <div class="modal-hd">
@@ -2858,7 +2921,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261109a"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261112a"></script>
+<script src="ctg-auth.js?v=20261112b"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>

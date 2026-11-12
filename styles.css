@@ -4833,6 +4833,20 @@ html[data-theme="dark"] #breakBlockModal textarea::placeholder{
 .auth-mfa-actions{display:flex;justify-content:space-between;gap:12px;margin-top:14px;flex-wrap:wrap}
 .auth-linkbtn{background:none;border:none;padding:0;font-size:12.5px;font-weight:700;color:var(--brand,#1f7ac4);cursor:pointer;text-decoration:underline}
 .auth-linkbtn:disabled{opacity:.5;cursor:not-allowed;text-decoration:none}
+/* Authenticator App window (12 Nov 2026) */
+.btn-danger{background:#b42318;color:#fff}.btn-danger:hover{background:#912018}
+.totp-lead{font-size:13.5px;line-height:1.55;color:var(--text);margin:0 0 12px}
+.totp-note{font-size:12.5px;line-height:1.5;color:var(--muted);background:#f4f7fb;border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin:0 0 12px}
+.totp-steps{margin:0 0 10px;padding-left:20px;font-size:13px;line-height:1.6;color:var(--text)}
+.totp-qr{display:flex;justify-content:center;margin:6px auto 10px;padding:10px;background:#fff;border:1px solid var(--border);border-radius:12px;width:max-content}
+.totp-qr svg{display:block;width:188px;height:188px}
+.totp-manual{font-size:12.5px;margin:0 0 12px}
+.totp-manual summary{cursor:pointer;font-weight:700;color:var(--brand,#1f7ac4)}
+.totp-manual-body{margin-top:8px;display:grid;gap:4px;line-height:1.5}
+.totp-key{font-family:Consolas,Menlo,monospace;font-size:13px;letter-spacing:.04em;word-break:break-all;user-select:all}
+.totp-code-input{font-family:Consolas,Menlo,monospace;font-size:18px;letter-spacing:.3em;text-align:center}
+.totp-status{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.5;margin-bottom:8px}
+#totpOn .small-muted{margin:0 0 12px;line-height:1.5}
 
 /* Automatic-logoff warning. Sits above everything, including the call
    overlay, because losing the session affects the whole app. */
