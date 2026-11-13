@@ -13601,9 +13601,16 @@ function reportCap(v){
   return s.charAt(0).toUpperCase()+s.slice(1)
 }
 function reportSentence(v){const s=reportCap(v);return !s||/[.!?]$/.test(s)?s:s+'.'}
+/* A comment after the answer's comma reads on in lower case: "Yes, decreased
+   appetite", not "Yes, Decreased appetite" (Bea, 13 Nov 2026). An abbreviation
+   keeps its capitals ("Yes, ER visit", "Yes, MVC 2"), as do "I" and a link. */
+function noteAfterComma(n){
+  if(!n||/^(https?:\/\/|www\.)/i.test(n)||/^[A-Z]{2}/.test(n)||/^I\b/.test(n))return n
+  return n.charAt(0).toLowerCase()+n.slice(1)
+}
 function answerWithNote(ans,note){
   const n=String(note==null?'':note).trim()
-  return n?reportSentence(ans+', '+n):ans
+  return n?reportSentence(ans+', '+noteAfterComma(n)):ans
 }
 function collectAll(containerId,items){
   const out=[]
