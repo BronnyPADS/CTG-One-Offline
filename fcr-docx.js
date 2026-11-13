@@ -1436,6 +1436,13 @@
     { re: /\bStrenuous exercise in last 3 hours/g, to: 'Strenuous exercise in the last 3 hours' },
     { re: /\borthopedic problem or injuries/g, to: 'orthopedic problems or injuries' },
     { re: /\?:\s*/g, to: '? ' },
+    // Mechanism of Injury, 13 Nov 2026: no comma after the date of injury ("On 09/03/2026 Tess Sample
+    // was the driver...") - not the ED visit date ("On 09/05/2026, Tess went to") - and none after
+    // "In the aftermath of the collision" / "incident" / "MVC 1 (and MVC 2)", also across a line break.
+    { re: /^(On (?:\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})),(?= (?!(?:[A-Z][\w.'-]* ){1,5}went to\b)[A-Z])/g, to: '$1' },
+    { re: /\b(In the aftermath of (?:the (?:collision|incident)|MVC \d+(?:(?:,? and|,) MVC \d+)*)),/g, to: '$1' },
+    { re: /^(collision|incident),/g, to: '$1', prev: /\bIn the aftermath of the$/ },
+    { re: /^(MVC \d+(?:(?:,? and|,) MVC \d+)*),/g, to: '$1', prev: /\bIn the aftermath of$/ },
     // Causation / Medical Necessity (Day 1, daily notes, discharge summary)
     { re: new RegExp('Based on review of the (' + NAME + ') complaints', 'g'), to: "Based on review of $1's complaints" },
     { re: /Based on review of the$/g, to: 'Based on review of' },

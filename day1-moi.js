@@ -74,15 +74,15 @@
 
   var TEMPLATES = {
     vehicle:
-      'On {doi}, {name} was the [[role]] of a [[dir]] [[u1]] (Unit 1) that was struck on the [[side]] (MVC 1) by a [[u2]] (Unit 2).\n\n' +
+      'On {doi} {name} was the [[role]] of a [[dir]] [[u1]] (Unit 1) that was struck on the [[side]] (MVC 1) by a [[u2]] (Unit 2).\n\n' +
       'Following impact {fname}\'s [[impact]]. {fname} [[loc]].\n\n' +
-      'In the aftermath of the collision, {fname} experienced [[symptoms]].\n\n' +
+      'In the aftermath of the collision {fname} experienced [[symptoms]].\n\n' +
       '[[police]]. Unit 1 was [[u1status]], {fname} [[transport]]. At home, {fname} tried to rest. On {blank}, {fname} went to ' +
       'the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
       'Since the DOI {fname}\'s symptoms [[trend]].',
     nonvehicle:
-      'On {doi}, {name} [[how]] and [[head]]. {fname} [[loc]].\n\n' +
-      'In the aftermath of the incident, {fname} experienced [[symptoms]].\n\n' +
+      'On {doi} {name} [[how]] and [[head]]. {fname} [[loc]].\n\n' +
+      'In the aftermath of the incident {fname} experienced [[symptoms]].\n\n' +
       'On {blank}, {fname} went to the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
       'Since the DOI {fname}\'s symptoms [[trend]].'
   }
@@ -143,7 +143,21 @@
     d.tokens.forEach(function (t) {
       if (t && t.k === 'c') { if (Array.isArray(t.o)) t.o = t.o.map(capsBack); if (Array.isArray(t.s)) t.s = t.s.map(capsBack) }
     })
+    dropOldCommas(d.tokens)
     return d
+  }
+  // 13 Nov 2026 (the practice): no comma after the date in "On <date of injury>
+  // <name> ..." and none after "In the aftermath of the collision/incident"
+  // (or "of MVC 1", "of MVC 1 and MVC 2", where staff typed it that way).
+  // A saved story keeps the words it was written with, so it is read without
+  // them; the record itself changes only when someone next edits the story.
+  function dropOldCommas(tokens) {
+    tokens.forEach(function (t, i) {
+      if (!t || t.k !== 't' || typeof t.s !== 'string') return
+      var a = tokens[i - 1], on = tokens[i - 2]
+      if (a && a.k === 'a' && a.f === 'doi' && on && on.k === 't' && /(^|\s)On\s*$/.test(String(on.s))) t.s = t.s.replace(/^\s*,/, '')
+      t.s = t.s.replace(/\b(In the aftermath of (?:the (?:collision|incident)|MVC \d+(?:(?:,? and|,) MVC \d+)*)),/g, '$1')
+    })
   }
 
   /* -------------------------------- editor ------------------------------- */
@@ -686,7 +700,7 @@
     if (kind === 'nonvehicle' && noVehicle) {
       var nv = fromTemplate('nonvehicle')
       var cut = nv.tokens.findIndex(function (t) { return t.k === 'br' })
-      var head = [{ k: 't', s: 'On ' }, { k: 'a', f: 'doi' }, { k: 't', s: ', ' }, { k: 'a', f: 'name' },
+      var head = [{ k: 't', s: 'On ' }, { k: 'a', f: 'doi' }, { k: 't', s: ' ' }, { k: 'a', f: 'name' },
         { k: 't', s: ' was injured when ' + noVehicle.replace(/\.+$/, '') + '.' }]
       return { v: 1, kind: 'nonvehicle', pristine: false, tokens: head.concat(cut === -1 ? [] : nv.tokens.slice(cut)) }
     }

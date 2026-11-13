@@ -14060,11 +14060,11 @@ function buildPDF(name,opts){
   const noVehicleText=itSelected==='No Vehicle Involved'?(document.getElementById('moiNoVehicleText')?.value||'').replace(/\s+/g,' ').trim():''
   if(noVehicleText){
     const noVehicleSentence=noVehicleText.replace(/\.+$/,'')
-    para([{t:'On '},{t:doiEv,b:true},{t:', '},{t:name,b:true},{t:' was injured when '},{t:noVehicleSentence},{t:'.'}])
+    para([{t:'On '},{t:doiEv,b:true},{t:' '},{t:name,b:true},{t:' was injured when '},{t:noVehicleSentence},{t:'.'}])
   }else{
     const ptRole=gv('ptRole'),u1=gv('unit1Type'),strikeDirV=gv('strikeDir'),u2=gv('unit2Type')
     para([
-      {t:'On '},{t:doiEv,b:true},{t:', '},{t:name,b:true},{t:' was the '},{t:ptRole,b:true},{t:' of a '},{t:u1,b:true},
+      {t:'On '},{t:doiEv,b:true},{t:' '},{t:name,b:true},{t:' was the '},{t:ptRole,b:true},{t:' of a '},{t:u1,b:true},
       {t:' that was struck on the '},{t:strikeDirV,b:true},{t:' (MVC 1) by a '},{t:u2,b:true},{t:' (Unit 2).'}
     ])
   }
@@ -14083,7 +14083,7 @@ function buildPDF(name,opts){
   ])
   if(!noVehicleText){
     const expTxt=immedExp.length>0?immedExp.join(', '):gv('immediateSyms')
-    para([{t:'In the aftermath of the collision, '},{t:name,b:true},{t:' experienced '},{t:expTxt,b:true},{t:'.'}])
+    para([{t:'In the aftermath of the collision '},{t:name,b:true},{t:' experienced '},{t:expTxt,b:true},{t:'.'}])
   }
   if(!noVehicleText){
     const erVal=document.getElementById('erVisit').value
