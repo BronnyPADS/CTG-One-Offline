@@ -72,13 +72,20 @@
     }
   }
 
-  var TEMPLATES = {
-    vehicle:
+  /* 13 Nov 2026 (the practice): a new vehicle story starts with only the collision
+     and "Since the DOI" - staff add the rest themselves. A record from before
+     the story is still turned into the full story (fromLegacy), so none of its old
+     answers (head impact, symptoms, hospital) is lost. */
+  var FULL_VEHICLE =
       'On {doi} {name} was the [[role]] of a [[dir]] [[u1]] (Unit 1) that was struck on the [[side]] (MVC 1) by a [[u2]] (Unit 2).\n\n' +
       'Following impact {fname}\'s [[impact]]. {fname} [[loc]].\n\n' +
       'In the aftermath of the collision {fname} experienced [[symptoms]].\n\n' +
       '[[police]]. Unit 1 was [[u1status]], {fname} [[transport]]. At home, {fname} tried to rest. On {blank}, {fname} went to ' +
       'the Emergency Department at [[hospital]] where {he} [[edOutcome]].\n\n' +
+      'Since the DOI {fname}\'s symptoms [[trend]].'
+  var TEMPLATES = {
+    vehicle:
+      'On {doi} {name} was the [[role]] of a [[dir]] [[u1]] (Unit 1) that was struck on the [[side]] (MVC 1) by a [[u2]] (Unit 2).\n\n' +
       'Since the DOI {fname}\'s symptoms [[trend]].',
     nonvehicle:
       'On {doi} {name} [[how]] and [[head]]. {fname} [[loc]].\n\n' +
@@ -91,10 +98,10 @@
     try { return (typeof aceNoVehicleSelected === 'function' && aceNoVehicleSelected()) ? 'nonvehicle' : 'vehicle' } catch (e) { return 'vehicle' }
   }
 
-  function fromTemplate(kind) {
+  function fromTemplate(kind, full) {
     var specs = chipSpecs()
     var tokens = []
-    String(TEMPLATES[kind] || TEMPLATES.vehicle).split(/(\{(?:doi|name|fname|he|his|him|blank)\}|\[\[\w+\]\]|\n)/).forEach(function (part) {
+    String(full && kind !== 'nonvehicle' ? FULL_VEHICLE : (TEMPLATES[kind] || TEMPLATES.vehicle)).split(/(\{(?:doi|name|fname|he|his|him|blank)\}|\[\[\w+\]\]|\n)/).forEach(function (part) {
       if (!part) return
       if (part === '\n') return tokens.push({ k: 'br' })
       var a = /^\{(\w+)\}$/.exec(part)
@@ -704,7 +711,7 @@
         { k: 't', s: ' was injured when ' + noVehicle.replace(/\.+$/, '') + '.' }]
       return { v: 1, kind: 'nonvehicle', pristine: false, tokens: head.concat(cut === -1 ? [] : nv.tokens.slice(cut)) }
     }
-    var d = fromTemplate(kind)
+    var d = fromTemplate(kind, true)
     var low = function (v) { return v ? lower(v) : v }
     var impacts = [domVal('dhi1'), domVal('ihi1')].filter(function (v) { return !blankish(v) })
     var symptoms = Array.prototype.map.call(document.querySelectorAll('#immedExperienceList label.checked'), function (l) {
@@ -741,7 +748,9 @@
     var post = domVal('otherPostTx')
     if (!blankish(post)) extra.push({ k: 't', s: 'Following the injury incident, ' }, name, { k: 't', s: ' received the following additional treatment: ' + post.replace(/\.+$/, '') + '.' })
     if (extra.length) { d.tokens.push({ k: 'br' }, { k: 'br' }); d.tokens = d.tokens.concat(extra); any = true }
-    if (any) d.pristine = false
+    // Nothing from the old fields (a new Day 1): the short story of 13 Nov 2026.
+    if (!any) return fromTemplate(kind)
+    d.pristine = false
     return d
   }
 
