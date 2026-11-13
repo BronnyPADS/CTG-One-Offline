@@ -801,19 +801,35 @@
         : Math.max(size + 1, Math.min(size * 1.15, baselineFromTop + desc - T))
       var before = Math.max(0, baselineFromTop + desc - lineH - T)
       T += before + p.lines.length * lineH
-      var parts = []
+      /* A paragraph the PDF wrapped flows as one in Word: its lines join with a
+         space (none after a hyphen or inside a web address), and its right edge
+         is where the PDF's text ends, so Word wraps where the PDF did. A forced
+         line end at every PDF line left "occurred on" with the date alone on the
+         next line in Google Docs, which sets the type a little wider, and a
+         search across two lines found nothing (13 Nov 2026). */
+      var parts = [], prevS = ''
       p.lines.forEach(function (ln, li) {
-        if (li) parts.push({ br: true })
+        if (li) {
+          var firstS = (ln.cols[0] && ln.cols[0].parts[0] && ln.cols[0].parts[0].s) || ''
+          var glued = /-$/.test(prevS) || /(:\/\/|www\.)\S*$/.test(prevS) || /\s$/.test(prevS) || /^\s/.test(firstS)
+          if (!glued) parts.push({ s: ' ', f: parts[parts.length - 1].f, size: parts[parts.length - 1].size })
+        }
         ln.cols.forEach(function (c, ci) {
           if (ci) parts.push({ tab: true })
           parts.push.apply(parts, c.parts)
         })
+        var lastPart = parts[parts.length - 1]
+        prevS = lastPart && lastPart.s ? lastPart.s : prevS
       })
       var tabs = first.cols.length > 1
         ? '<w:tabs>' + first.cols.slice(1).map(function (c) { return '<w:tab w:val="left" w:pos="' + tw(c.x - M_PT) + '"/>' }).join('') + '</w:tabs>'
         : ''
-      var rightInd = 0
-      out.push({ before: before, lineH: lineH, size: size, tabs: tabs, left: tw(first.left - M_PT), right: rightInd, runs: runsXml(parts) })
+      // The text's right edge on this page (the widest line), a point to spare against rounding.
+      var edge = Math.max(p.maxRight || 0, p.lines.reduce(function (m, l) { return Math.max(m, l.right) }, 0)) + 1
+      var wrapRight = Math.max(0, tw(tp.w - M_PT - edge))
+      var rightInd = p.lines.length > 1 ? wrapRight : 0
+      out.push({ before: before, lineH: lineH, size: size, tabs: tabs, left: tw(first.left - M_PT), right: rightInd, wrapRight: wrapRight,
+        nLines: p.lines.length, runs: runsXml(parts), text: parts.map(function (pt) { return pt.tab ? '\t' : pt.s || '' }).join(''), oneCol: first.cols.length === 1 })
     })
     /* Taller than the page: take it out of the gaps, never the text, starting
        from the bottom. What runs over is the page's last line - a report's
@@ -831,7 +847,7 @@
        An empty first line holds the gap instead (gapPPr). */
     var top = out.length ? out[0].before : 0
     if (out.length) out[0].before = 0
-    var res = [{ pPr: gapPPr(top), runs: '' }]
+    var res = [{ pPr: gapPPr(top), runs: '', gap: true }]
     out.forEach(function (p) {
       if (p.pic) {
         // A line of its own, as tall as the picture (the style's 1pt type adds nothing), at the picture's left edge.
@@ -845,21 +861,29 @@
       if (p.table) {
         /* A table has no room above it of its own: an empty line holds it,
            and keeps two tables in a row apart (Word joins them). */
-        res.push({ pPr: gapPPr(p.before), runs: '' })
+        res.push({ pPr: gapPPr(p.before), runs: '', gap: true })
         res.push({ raw: tableXml(p.table) })
         return
       }
-      res.push({
-        pPr: '<w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/>' + p.tabs +
+      var pprOf = function (right) {
+        return '<w:pStyle w:val="CTGPage"/><w:widowControl w:val="0"/>' + p.tabs +
           '<w:spacing w:before="' + tw(p.before) + '" w:after="0" w:line="' + lineMult(p.lineH, p.size) + '" w:lineRule="auto"/>' +
-          '<w:ind w:left="' + p.left + '" w:right="' + p.right + '"/>' +
+          '<w:ind w:left="' + p.left + '" w:right="' + right + '"/>' +
           // The paragraph's own size is its text's: Google Docs measures the line from it (9pt lines came out 3.5pt taller).
-          '<w:rPr><w:sz w:val="' + Math.round(p.size * 2) + '"/><w:szCs w:val="' + Math.round(p.size * 2) + '"/></w:rPr>',
-        runs: p.runs
+          '<w:rPr><w:sz w:val="' + Math.round(p.size * 2) + '"/><w:szCs w:val="' + Math.round(p.size * 2) + '"/></w:rPr>'
+      }
+      res.push({
+        pPr: pprOf(p.right),
+        runs: p.runs,
+        // For joining a sentence the page broke (joinAcrossPages).
+        flow: { text: p.text, left: p.left, oneCol: p.oneCol, wrapPPr: pprOf(p.wrapRight), height: p.before + p.lineH * p.nLines,
+          lineH: p.lineH, nLines: p.nLines, before: p.before }
       })
     })
     // A page cannot end on a table: its last paragraph carries the page break or section end.
-    if (res[res.length - 1].raw) res.push({ pPr: TINY_P, runs: '' })
+    if (res[res.length - 1].raw) res.push({ pPr: TINY_P, runs: '', gap: true })
+    // The room left at the foot of the page (joinAcrossPages may use it).
+    res.slack = Math.max(0, avail - top - out.reduce(function (s, o) { return s + o.before + (o.pic ? o.pic.h : o.table ? (o.table.top - o.table.bottom) : o.lineH * o.nLines) }, 0))
     return res
   }
 
@@ -1148,6 +1172,61 @@
 
   /* pdfBytes: the compiled FCR (buildFCRDoc), carrying ctgPageKinds - 'text' or
      'picture' per page. onProgress(done, total) runs after each page. */
+  /* A sentence the PDF carried over onto the next page ("... Previous TBI /",
+     then "concussion, History of MVC." at the top of the next) is one paragraph
+     again, ended on the first page, so it reads and searches as one; Google Docs
+     showed the carried-over words as a stray line (13 Nov 2026). Only within one
+     report, only when the first page's text stops mid-sentence and the next
+     page's starts in lower case at the same indent. The next page keeps its
+     layout: on a page drawn over its lines and boxes the space stays empty,
+     elsewhere what follows moves up. */
+  function joinAcrossPages(pages) {
+    for (var i = 0; i + 1 < pages.length; i++) {
+      var a = pages[i], b = pages[i + 1]
+      if (!a.paras || !b.paras || !a.sec || a.sec !== b.sec) continue
+      var ai = a.paras.length - 1
+      while (ai >= 0 && a.paras[ai].gap) ai--
+      var bi = 0
+      while (bi < b.paras.length && b.paras[bi].gap) bi++
+      var last = a.paras[ai], next = b.paras[bi]
+      if (!last || !next || !last.flow || !next.flow || !last.flow.oneCol || !next.flow.oneCol) continue
+      if (Math.abs(last.flow.left - next.flow.left) > 40) continue
+      var lt = last.flow.text.replace(/\s+$/, ''), nt = next.flow.text.replace(/^\s+/, '')
+      if (!lt || !nt || /[.:;?!)\]"\u201D]$/.test(lt) || !/^[a-z]/.test(nt)) continue
+      /* Only where the first page has room for the words it takes (as many
+         lines as they had, at its line height): a full page ran a line onto a
+         page of its own. The room is the page's foot, and on a page with
+         nothing drawn behind its text, the space between its paragraphs, taken
+         from the bottom up. */
+      var need = next.flow.nLines * last.flow.lineH, room = a.paras.slack || 0
+      var takes = []
+      if (room < need && !a.bg) {
+        // Blank-line gaps only (a list's even spacing stays even), the largest first, each keeping a little.
+        a.paras.slice(1, ai + 1).filter(function (g) { return g.flow && g.flow.before >= g.flow.lineH * 0.6 })
+          .sort(function (x, y) { return y.flow.before - x.flow.before })
+          .forEach(function (g) {
+            if (room >= need) return
+            var take = Math.min(g.flow.before - g.flow.lineH * 0.3, need - room)
+            if (take > 0) { takes.push({ p: g, take: take }); room += take }
+          })
+      }
+      if (room < need) continue
+      takes.forEach(function (tk) {
+        var nb = tk.p.flow.before - tk.take
+        var fix = function (ppr) { return ppr.replace(/w:before="\d+"/, 'w:before="' + tw(nb) + '"') }
+        tk.p.pPr = fix(tk.p.pPr); tk.p.flow.wrapPPr = fix(tk.p.flow.wrapPPr); tk.p.flow.before = nb
+      })
+      a.paras.slack = Math.max(0, (a.paras.slack || 0) - need)
+      var runs = next.runs
+      if (!/\s$/.test(last.flow.text)) runs = runs.replace('<w:t xml:space="preserve">', '<w:t xml:space="preserve"> ')
+      last.runs += runs
+      last.pPr = last.flow.wrapPPr
+      last.flow = Object.assign({}, last.flow, { text: lt + ' ' + nt })
+      if (b.bg) b.paras[bi] = { pPr: gapPPr(next.flow.height), runs: '', gap: true }
+      else b.paras.splice(bi, 1)
+    }
+  }
+
   async function build(pdfBytes, onProgress) {
     var kinds = (pdfBytes && pdfBytes.ctgPageKinds) || []
     // Uploaded pages that already print their own footer: leave them without one here too.
@@ -1220,7 +1299,7 @@
                 rels += '<Relationship Id="rIdB' + n + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/lines-' + n + '.png"/>'
                 jparas[0].runs = backgroundXml(n, jp.w, jp.h) + jparas[0].runs
               }
-              pages.push({ w: jp.w, h: jp.h, paras: jparas, sec: rep ? reportSection(src.doc, rep) : null }); done = true
+              pages.push({ w: jp.w, h: jp.h, paras: jparas, bg: !!bg, sec: rep ? reportSection(src.doc, rep) : null }); done = true
             }
           } catch (e) { console.error('FCR Word: page ' + n + ' could not be read from its report, trying the PDF', e) }
         }
@@ -1338,6 +1417,7 @@
     var hfPlain = function (land) { return '<w:headerReference w:type="default" r:id="rIdHE"/><w:footerReference w:type="default" r:id="' + (land ? 'rIdFNL' : 'rIdFN') + '"/>' }
     var key = function (pg) { return pg.ace ? 'ace' : pg.sec ? pg.sec.key : (wide(pg.w, pg.h) ? 'L' : 'P') }
     var sectFor = function (pg) { return pg.ace ? '<w:sectPr>' + ace.sectPrInner + '</w:sectPr>' : pg.sec ? pg.sec.sect : sectPr(wide(pg.w, pg.h), hfPlain(wide(pg.w, pg.h))) }
+    joinAcrossPages(pages)
     var body = ''
     for (var i = 0; i < pages.length; i++) {
       var pgi = pages[i]
