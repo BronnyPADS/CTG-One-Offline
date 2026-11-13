@@ -4825,6 +4825,14 @@ html[data-theme="dark"] #breakBlockModal textarea::placeholder{
 .ac-mfa-card:has(input:checked){border-color:var(--brand,#3b7cc4);background:var(--bl,rgba(59,124,196,.07))}
 .ac-mfa-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .ac-mfa-title{font-size:13px;font-weight:700;color:var(--text);line-height:1.3}
+/* Admin Center: authenticator app row (12 Nov 2026) */
+.g2.ac-totp-row{align-items:stretch;margin-bottom:13px}
+.ac-totp-row .ac-mfa-card,.ac-totp-row .ac-totp-card{height:100%}
+.ac-totp-row .fg{display:flex}
+.ac-totp-card{display:flex;flex-direction:column;gap:6px;padding:13px 15px;border:1px solid var(--border2);border-radius:10px;background:var(--s2);width:100%;box-sizing:border-box}
+.ac-totp-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ac-totp-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.ac-totp-actions .btn:empty{display:none}
 .ac-mfa-note{font-size:11.5px;color:var(--muted);line-height:1.45}
 
 /* Emailed sign-in code step */

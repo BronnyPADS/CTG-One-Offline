@@ -1088,6 +1088,11 @@
          old behaviour rather than leaving someone staring at a blank page. */
     }
     CURRENT = user;
+    if (REMOTE && user.authenticatorPending) {
+      var askedKey = 'ctg_totp_asked_' + user.id, asked = false;
+      try { asked = sessionStorage.getItem(askedKey) === '1'; sessionStorage.setItem(askedKey, '1'); } catch (e) {}
+      if (!asked) setTimeout(function () { if (CURRENT && CURRENT.authenticatorPending) window.ctgTotpOpen({ asked: true }); }, 1500);
+    }
 
     document.body.classList.remove('auth-active');
     var ov = $('authOverlay'); if (ov) ov.classList.add('hidden');
@@ -1305,10 +1310,11 @@
     setVal('totpCode', ''); setVal('totpStartPw', ''); setVal('totpRemovePw', '');
   }
 
-  window.ctgTotpOpen = async function () {
+  window.ctgTotpOpen = async function (opts) {
     if (!REMOTE) { toast('The authenticator app is set up in the online portal.', 'err'); return; }
     totpClearSecrets();
     totpView('start');
+    showEl('totpAsked', !!(opts && opts.asked));
     var modal = $('authenticatorModal');
     if (modal) { modal.classList.add('show'); document.body.classList.add('modal-open'); }
     try {
@@ -1355,6 +1361,9 @@
       totpView('on');
       totpFeedback('Done. Next time you sign in, use the code from the app.', 'tgn');
       toast('Authenticator app turned on');
+      if (CURRENT) CURRENT.authenticatorPending = false;
+      showEl('totpAsked', false);
+      if (typeof window.acAfterTotpChange === 'function') window.acAfterTotpChange();
     } catch (e) {
       setVal('totpCode', '');
       totpFeedback(e.message || 'That code did not work.');
@@ -1374,6 +1383,7 @@
       totpView('start');
       totpFeedback('Removed. Sign-in codes will come by email until you set the app up again.', 'tgn');
       toast('Authenticator app removed');
+      if (typeof window.acAfterTotpChange === 'function') window.acAfterTotpChange();
     } catch (e) {
       setVal('totpRemovePw', '');
       totpFeedback(e.message || 'Could not remove the app.');
@@ -2177,6 +2187,8 @@
     if (typeof window.ctgLoadProviders === 'function') window.ctgLoadProviders();
     if (typeof window.ctgApptReloadCalendars === 'function') window.ctgApptReloadCalendars();
     window.ctgRefreshLawFirmSelections();
+    // The authenticator row for a new account, unless an account is being edited.
+    if (!acEditingId) acShowTotp(null);
     renderAcMatrix();
     renderAcLawFirms();
     window.acSwitchTab(acActiveTab);
@@ -2430,6 +2442,7 @@
       email: val('acEmail').trim(),
       mfaEnabled: !!($('acMfaEnabled') && $('acMfaEnabled').checked)
     };
+    if (REMOTE && $('acTotpPrompt')) payload.authenticatorPrompt = !!$('acTotpPrompt').checked;
     if (payload.password) {
       var pwErr = passwordPolicyError(payload.password);
       if (pwErr) { toast(pwErr, 'err'); return; }
@@ -2475,6 +2488,7 @@
     acToggleLawFirm();
     setVal('acEmail', u.email || '');
     var mfa = $('acMfaEnabled'); if (mfa) mfa.checked = !!u.mfaEnabled;
+    acShowTotp(u);
     setVal('acPassword', '');
     acHidePassword();
     setText('acFormTitle', 'Edit Account');
@@ -2522,12 +2536,68 @@
     acToggleLawFirm();
     setVal('acEmail', '');
     var mfaReset = $('acMfaEnabled'); if (mfaReset) mfaReset.checked = false;
+    acShowTotp(null);
     setVal('acPassword', '');
     acHidePassword();
     setText('acFormTitle', 'Add Account');
     setText('acSaveBtn', 'Create Account');
     var rb = $('acResetFormBtn'); if (rb) rb.style.display = 'none';
     setText('acPassLabel', 'Password');
+  };
+
+  /* Admin Center's authenticator row. u = the account being edited, or null for
+     a new one. Status only: an administrator can ask someone to set the app up,
+     set up their OWN, or remove someone's for a lost phone - never scan the code
+     for another person, which would let them sign in as that person. */
+  function acShowTotp(u) {
+    var row = $('acTotpRow');
+    if (row) row.style.display = REMOTE ? '' : 'none';
+    if (!REMOTE) return;
+    var self = !!(u && CURRENT && CURRENT.id === u.id);
+    var on = !!(u && u.authenticator);
+    var prompt = $('acTotpPrompt'); if (prompt) prompt.checked = u ? !!u.authenticatorPrompt : true;
+    var tag = $('acTotpStatus');
+    if (tag) {
+      tag.textContent = !u ? 'New account' : on ? 'Set up' : 'Not set up';
+      tag.className = 'tag ' + (on ? 'tgn' : u ? 'ta' : 'tg');
+    }
+    setText('acTotpNote', !u
+      ? 'They set it up on their own phone after their first sign-in.'
+      : self
+        ? (on ? 'Your authenticator app is set up. Manage or remove it here.' : 'Scan a code with your phone to set up yours.')
+        : (on ? 'Lost or replaced phone? Remove it; they sign in with an emailed code and set it up again.'
+              : 'Only they can set it up, on their own phone. Tick the box on the left to ask them at sign-in.'));
+    var selfBtn = $('acTotpSelfBtn');
+    if (selfBtn) { selfBtn.style.display = self ? '' : 'none'; selfBtn.textContent = on ? 'Manage my authenticator app' : 'Set up my authenticator app'; }
+    var rm = $('acTotpRemoveBtn'); if (rm) rm.style.display = (u && !self && on) ? '' : 'none';
+  }
+
+  // After the setup window changes the signed-in account's own app.
+  window.acAfterTotpChange = async function () {
+    if (!acEditingId || !CURRENT || acEditingId !== CURRENT.id) return;
+    try {
+      var list = await backend.listAccounts();
+      var u = list.filter(function (x) { return x.id === acEditingId; })[0];
+      if (u) acShowTotp(u);
+    } catch (e) {}
+  };
+
+  window.acTotpSelf = function () { if (typeof window.ctgTotpOpen === 'function') window.ctgTotpOpen(); };
+
+  window.acTotpRemove = async function () {
+    var id = acEditingId;
+    if (!id || (CURRENT && CURRENT.id === id)) return;
+    var name = acAccountName(id);
+    if (!(await ctgConfirm('Remove the authenticator app from ' + name + '\'s account? They will sign in with an emailed code until they set it up again. They will be emailed about this.', { danger: true, okLabel: 'Remove' }))) return;
+    try {
+      await apiFetch('/api/accounts/' + id + '/authenticator/remove', { method: 'POST' });
+      toast('Authenticator app removed');
+      var list = await backend.listAccounts();
+      var u = list.filter(function (x) { return x.id === id; })[0];
+      if (u && acEditingId === id) acShowTotp(u);
+    } catch (e) {
+      toast(e.message || 'Could not remove the authenticator app', 'err');
+    }
   };
 
   window.acDeleteAccount = async function (id) {

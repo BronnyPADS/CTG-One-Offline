@@ -26,7 +26,7 @@
     '_closePdfModal', '_closeResultPreviewModal', 'acAddLawFirm', 'acDeleteAccount', 'acDeleteLawFirmByIndex',
     'acEditAccount', 'acRememberAccountOpen', 'acRememberPageOpen', 'acRenameLawFirmByIndex', 'acResetForm',
     'acResetPassword', 'acSaveAccount', 'acSwitchTab', 'acToggleActive', 'acToggleLawFirm', 'acUnlockAccount', 'acTogglePage',
-    'acTogglePassword', 'aceAmend', 'aceDecideAmendment', 'aceLocToggle', 'aceLocToggleOption', 'aceSignRecord',
+    'acTogglePassword', 'acTotpRemove', 'acTotpSelf', 'aceAmend', 'aceDecideAmendment', 'aceLocToggle', 'aceLocToggleOption', 'aceSignRecord',
     'applyPregnancyGate', 'apptBlankSlotClick', 'apptBlockCtxDelete', 'apptBlockCtxEdit',
     'apptBlockCtxPatientComment', 'apptBlockCtxRegistration', 'apptBlockCtxSetStatus',
     'apptCancelRegistrationLink', 'apptCfgAddOption', 'apptCfgApplyDefaultMinutes', 'apptCfgCancelBreakBlockEdit',

@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261112d">
+<link rel="stylesheet" href="styles.css?v=20261113a">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261112a"></script>
+<script src="ctg-actions.js?v=20261113a"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -452,6 +452,33 @@
                 <span class="ac-mfa-note">Require a one-time code emailed at each sign-in. Needs an email address above.</span>
               </span>
             </label>
+          </div>
+        </div>
+        <!-- Authenticator app (12 Nov 2026). The person always scans the code on
+             their own phone; an administrator can only ask them to, see whether
+             they have, and remove it for a lost phone. -->
+        <div class="g2 ac-totp-row" id="acTotpRow" data-cs-boot="display:none">
+          <div class="fg">
+            <label class="ac-mfa-card" for="acTotpPrompt">
+              <input type="checkbox" id="acTotpPrompt">
+              <span class="ac-mfa-copy">
+                <span class="ac-mfa-title">Ask to set up an authenticator app</span>
+                <span class="ac-mfa-note">After they sign in, CTG One asks them to scan a code with Microsoft or Google Authenticator on their own phone, so they can still sign in when email is down.</span>
+              </span>
+            </label>
+          </div>
+          <div class="fg">
+            <div class="ac-totp-card" id="acTotpCard">
+              <div class="ac-totp-head">
+                <span class="ac-mfa-title">Authenticator app</span>
+                <span class="tag" id="acTotpStatus">New account</span>
+              </div>
+              <div class="ac-mfa-note" id="acTotpNote">The person sets it up after their first sign-in.</div>
+              <div class="ac-totp-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="acTotpSelfBtn" data-onclick="acTotpSelf()" data-cs-boot="display:none">Set up my authenticator app</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="acTotpRemoveBtn" data-onclick="acTotpRemove()" data-cs-boot="display:none">Remove their authenticator app</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="g2 ac-form-actions">
@@ -2767,6 +2794,7 @@
     </div>
     <div class="modal-body">
       <p class="totp-lead" id="totpLead">Get your sign-in code from an app on your phone. It works even when email is down. You can still choose to have a code emailed.</p>
+      <p class="totp-note" id="totpAsked" data-cs-boot="display:none">Your administrator asked you to set this up. It takes about a minute: you need your phone.</p>
       <p class="totp-note" id="totpTwoStepOff" data-cs-boot="display:none">Your account does not ask for a sign-in code yet. The app is used once an administrator turns on two-step sign-in for you.</p>
       <!-- Not set up: confirm the password to begin -->
       <form id="totpStart" autocomplete="off" data-onsubmit="return false" data-cs-boot="display:none">
@@ -2858,7 +2886,7 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261110a"></script>
+<script src="app.js?v=20261113a"></script>
 <!-- Appointment scheduling (week grid) -->
 <script src="appointments.js?v=20261106a"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
@@ -2921,7 +2949,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261109a"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261112b"></script>
+<script src="ctg-auth.js?v=20261113a"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>

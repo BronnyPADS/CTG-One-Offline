@@ -376,6 +376,11 @@ function ctgAccountMenu(){
   if(typeof window.openChangePassword==='function'){
     item('Change Password',ICON('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),function(){ window.openChangePassword() })
   }
+  // Online only: the offline copy hides #userMenuAuthenticator (no server to hold the app).
+  const authApp=document.getElementById('userMenuAuthenticator')
+  if(typeof window.ctgTotpOpen==='function'&&authApp&&authApp.style.display!=='none'){
+    item('Authenticator App',ICON('<rect x="6" y="2" width="12" height="20" rx="2"/><line x1="10" y1="18" x2="14" y2="18"/><polyline points="9.5 10 11.5 12 15 8.5"/>'),function(){ window.ctgTotpOpen() })
+  }
   item('Log out',ICON('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>'),function(){ logout() },'is-out')
 
   ctgOpenFly(card,String(name).trim(),String(role).trim(),body)
