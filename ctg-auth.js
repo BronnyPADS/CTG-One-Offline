@@ -1394,6 +1394,8 @@
   window.ctgTotpRemove = async function () {
     var pw = val('totpRemovePw');
     if (!pw) { totpFeedback('Enter your current password.'); return; }
+    // Asked first (13 Nov 2026): removing it is easy to do by mistake right after setting it up.
+    if (typeof ctgConfirm === 'function' && !(await ctgConfirm('Remove the authenticator app from your account? Its codes will stop working, and your sign-in codes will come by email until you set the app up again.', { title: 'Remove Authenticator App?', danger: true, okLabel: 'Remove App' }))) return;
     var btn = $('totpRemoveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
     try {
       await apiFetch('/api/me/authenticator/remove', { method: 'POST', body: JSON.stringify({ currentPassword: pw }) });
