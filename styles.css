@@ -4855,6 +4855,14 @@ html[data-theme="dark"] #breakBlockModal textarea::placeholder{
 .totp-code-input{font-family:Consolas,Menlo,monospace;font-size:18px;letter-spacing:.3em;text-align:center}
 .totp-status{display:flex;align-items:center;gap:8px;font-size:13.5px;line-height:1.5;margin-bottom:8px}
 #totpOn .small-muted{margin:0 0 12px;line-height:1.5}
+/* Just turned on: a plain "all set" (13 Nov 2026). */
+.totp-done{text-align:center;padding:6px 4px 2px}
+.totp-done-mark{width:46px;height:46px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;background:rgba(16,185,129,.14);color:#047857;font-size:22px;font-weight:900}
+.totp-done-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:6px}
+.totp-done-text{font-size:13.5px;line-height:1.6;color:var(--muted);margin:0}
+.totp-remove-link{background:none;border:0;padding:4px 0;font:inherit;font-size:12.5px;font-weight:700;color:var(--brand,#1f7ac4);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.totp-remove-link:hover{color:#b42318}
+#totpRemoveBox{margin-top:10px}
 
 /* Automatic-logoff warning. Sits above everything, including the call
    overlay, because losing the session affects the whole app. */

@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261113a">
+<link rel="stylesheet" href="styles.css?v=20261113b">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261113a"></script>
+<script src="ctg-actions.js?v=20261113b"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -2823,19 +2823,30 @@
           <input type="text" id="totpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" class="totp-code-input">
         </div>
       </div>
-      <!-- Set up: remove it (lost or new phone) -->
+      <!-- Just turned on: nothing more to do -->
+      <div id="totpDone" class="totp-done" data-cs-boot="display:none">
+        <div class="totp-done-mark" aria-hidden="true">&#10003;</div>
+        <div class="totp-done-title">You're all set</div>
+        <p class="totp-done-text">Your authenticator app is on. Next time you sign in, open the app on your phone and type the 6-digit code it shows for CTG One.</p>
+      </div>
+      <!-- Set up: status; removing it (lost or new phone) only when asked for -->
       <div id="totpOn" data-cs-boot="display:none">
         <div class="totp-status"><span class="tag tgn">On</span> Your authenticator app is set up. At sign-in you'll be asked for its code.</div>
-        <p class="small-muted">New or lost phone? Remove it here, then set it up again. You can sign in with an emailed code in the meantime.</p>
-        <div class="fg">
-          <label for="totpRemovePw">Current password</label>
-          <input type="password" id="totpRemovePw" autocomplete="current-password">
+        <p class="small-muted" id="totpNothingMore">Nothing else to do here.</p>
+        <button type="button" class="totp-remove-link" id="totpShowRemoveBtn" data-onclick="ctgTotpShowRemove()">New or lost phone? Remove the app</button>
+        <div id="totpRemoveBox" data-cs-boot="display:none">
+          <p class="small-muted">Remove it, then set it up again on the new phone. You can sign in with an emailed code in the meantime. To remove it, confirm your password.</p>
+          <div class="fg">
+            <label for="totpRemovePw">Current password</label>
+            <input type="password" id="totpRemovePw" autocomplete="current-password">
+          </div>
         </div>
       </div>
       <div id="totpFeedback" data-cs-boot="margin-top:6px;display:none"><span class="tag" id="totpFeedbackTag"></span></div>
     </div>
     <div class="modal-ft">
-      <button class="btn btn-ghost" data-onclick="ctgTotpClose()">Close</button>
+      <button class="btn btn-ghost" id="totpCloseBtn" data-onclick="ctgTotpClose()">Close</button>
+      <button class="btn btn-primary" id="totpDoneBtn" data-onclick="ctgTotpClose()" data-cs-boot="display:none">Done</button>
       <button class="btn btn-primary" id="totpStartBtn" data-onclick="ctgTotpStart()" data-cs-boot="display:none">Set Up</button>
       <button class="btn btn-primary" id="totpConfirmBtn" data-onclick="ctgTotpConfirm()" data-cs-boot="display:none">Turn On</button>
       <button class="btn btn-danger" id="totpRemoveBtn" data-onclick="ctgTotpRemove()" data-cs-boot="display:none">Remove App</button>
@@ -2949,7 +2960,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261113b"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261113a"></script>
+<script src="ctg-auth.js?v=20261113b"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>

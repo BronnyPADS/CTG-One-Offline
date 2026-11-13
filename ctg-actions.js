@@ -71,7 +71,7 @@
     'ctgApptAlertDismiss', 'ctgApptAlertOpen', 'ctgCancelMfa', 'ctgClosePolicy', 'ctgConfirmResolve',
     'ctgHidePhiNotice', 'ctgOpenSpotlight', 'ctgPolicyAccept', 'ctgPolicyDecline', 'ctgPolicyToggle',
     'ctgPromptResolve', 'ctgPromptSubmit', 'ctgResendCode', 'ctgShowIf', 'ctgShowPhiNotice', 'ctgShowPolicy',
-    'ctgToggleSidebarRail', 'ctgTotpClose', 'ctgTotpConfirm', 'ctgTotpOpen', 'ctgTotpRemove', 'ctgTotpStart',
+    'ctgToggleSidebarRail', 'ctgTotpClose', 'ctgTotpConfirm', 'ctgTotpOpen', 'ctgTotpRemove', 'ctgTotpShowRemove', 'ctgTotpStart',
     'ctgUseAppCode', 'ctgUseEmailCode', 'deleteAppointment', 'deleteArCharge', 'deleteBreakBlock', 'deleteDailyNoteAtIndex',
     'deleteExamAttempt', 'deletePatient', 'deletePolicyLimit', 'deleteUploadedDocument', 'dlBasisChanged',
     'dlCloseAdd', 'dlExportCsv', 'dlOpenAdd', 'dlSubmitAdd', 'dnAmendNote', 'dnArcToggle', 'dnOnPatientSelect',

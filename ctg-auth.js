@@ -1293,17 +1293,35 @@
 
   function totpFeedback(msg, cls) { pwFeedback('totpFeedback', 'totpFeedbackTag', msg, cls); }
   function totpView(state, twoStepOn) {
-    // state: 'start' (not set up), 'setup' (scan + first code), 'on' (set up)
-    showEl('totpLead', state !== 'on');
-    showEl('totpTwoStepOff', state !== 'on' && twoStepOn === false);
+    /* state: 'start' (not set up), 'setup' (scan + first code), 'done' (just
+       turned on: a plain "all set", only Done to press), 'on' (set up). Set
+       up, the password box and Remove stay hidden until "New or lost phone?"
+       is pressed: shown straight after setup they read as one more step, and
+       people typed their password again (13 Nov 2026). */
+    var set = state === 'on' || state === 'done';
+    showEl('totpLead', !set);
+    showEl('totpTwoStepOff', !set && twoStepOn === false);
     showEl('totpStart', state === 'start');
     showEl('totpSetup', state === 'setup');
+    showEl('totpDone', state === 'done');
     showEl('totpOn', state === 'on');
+    showEl('totpShowRemoveBtn', state === 'on');
+    showEl('totpNothingMore', state === 'on');
+    showEl('totpRemoveBox', false);
+    showEl('totpCloseBtn', state !== 'done');
+    showEl('totpDoneBtn', state === 'done');
     showEl('totpStartBtn', state === 'start');
     showEl('totpConfirmBtn', state === 'setup');
-    showEl('totpRemoveBtn', state === 'on');
+    showEl('totpRemoveBtn', false);
     var fb = $('totpFeedback'); if (fb) fb.style.display = 'none';
   }
+  window.ctgTotpShowRemove = function () {
+    showEl('totpShowRemoveBtn', false);
+    showEl('totpNothingMore', false);
+    showEl('totpRemoveBox', true);
+    showEl('totpRemoveBtn', true);
+    var f = $('totpRemovePw'); if (f) f.focus();
+  };
   function totpClearSecrets() {
     var qr = $('totpQr'); if (qr) while (qr.firstChild) qr.removeChild(qr.firstChild);
     setText('totpKey', ''); setText('totpAccount', '');
@@ -1320,7 +1338,7 @@
     try {
       var d = await apiFetch('/api/me/authenticator');
       totpView(d.enabled ? 'on' : 'start', !!d.twoStepOn);
-      var f = $(d.enabled ? 'totpRemovePw' : 'totpStartPw'); if (f) f.focus();
+      var f = d.enabled ? $('totpCloseBtn') : $('totpStartPw'); if (f) f.focus();
     } catch (e) {
       totpFeedback(e.message || 'Could not load your authenticator settings.');
     }
@@ -1358,8 +1376,8 @@
     try {
       await apiFetch('/api/me/authenticator/confirm', { method: 'POST', body: JSON.stringify({ code: code }) });
       totpClearSecrets();
-      totpView('on');
-      totpFeedback('Done. Next time you sign in, use the code from the app.', 'tgn');
+      totpView('done');
+      var db = $('totpDoneBtn'); if (db) db.focus();
       toast('Authenticator app turned on');
       if (CURRENT) CURRENT.authenticatorPending = false;
       showEl('totpAsked', false);
