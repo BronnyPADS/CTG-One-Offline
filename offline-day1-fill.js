@@ -150,7 +150,9 @@
     'Aphasia (the patient takes longer to produce words, omits syllables within words, and repeatedly goes back and forth, restating the word to self-correct.)': 'Aphasia - phonation lag time',
     'Aphasia - a word choice lag time': 'Aphasia - word choice lag time',
     'Strenuous exercise in last 3 hours': 'Strenuous exercise in the last 3 hours',
-    'Do you have any orthopedic problem or injuries?': 'Do you have any orthopedic problems or injuries?'
+    'Do you have any orthopedic problem or injuries?': 'Do You Have Any Orthopedic Problems or Injuries?',
+    // Title case from 17 Nov 2026; reports printed before that use lower case.
+    'Do you have any orthopedic problems or injuries?': 'Do You Have Any Orthopedic Problems or Injuries?'
   }
 
   // The text the answers are read from, with a blank line between paragraphs.

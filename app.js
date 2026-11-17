@@ -12293,7 +12293,7 @@ const PMH_ITEMS=[
   'Brain Surgery','Meningitis','History of Rehab for Alcohol Abuse','History of Rehab for Drug Abuse',
   'Received Speech Therapy','Attended IEP or Special Education Classes',
   'Repeated One or More Grades','Advanced One or More Grades',
-  'Do you have any orthopedic problems or injuries?',
+  'Do You Have Any Orthopedic Problems or Injuries?',
   /* APPENDED, never inserted. Saved answers are matched to this list by
      position, so putting a new question anywhere but the end would shift every
      answer after it and silently rewrite existing patient records. */

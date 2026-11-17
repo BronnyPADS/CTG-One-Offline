@@ -41,7 +41,7 @@
     'yn:Received Speech Therapy', 'yn:Attended IEP or Special Education Classes',
     'yn:Repeated One or More Grades', 'yn:Advanced One or More Grades',
     // Ours, not on the template.
-    'yn:Played Organized Contact Sport on Team', 'yn:Do you have any orthopedic problems or injuries?', 'yn:Are you currently pregnant?',
+    'yn:Played Organized Contact Sport on Team', 'yn:Do You Have Any Orthopedic Problems or Injuries?', 'yn:Are you currently pregnant?',
     'id:xq_otherMedHx',
     'sdiv:Social History', 'id:jobDuties', 'id:xq_socialHabits', 'id:diet', 'id:exercise',
     'sdiv:Family History', 'id:xq_familyHistory',
