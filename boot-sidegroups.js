@@ -1,2 +1,3 @@
 /* Restores which sidebar groups were open (was inline in index.html). */
 try{if(localStorage.getItem('ctg_side_sideApptGroup')==='0')document.getElementById('sideApptGroup').classList.remove('open')}catch(e){}try{if(localStorage.getItem('ctg_side_sideRegGroup')==='0')document.getElementById('sideRegGroup').classList.remove('open')}catch(e){}try{if(localStorage.getItem('ctg_side_sideNewGroup')==='1')document.getElementById('sideNewGroup').classList.add('open')}catch(e){}
+try{if(localStorage.getItem('ctg_side_sideNeuroGroup')==='0')document.getElementById('sideNeuroGroup').classList.remove('open')}catch(e){}

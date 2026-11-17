@@ -8530,7 +8530,7 @@ function ctgPlaceTabGlider(animate){
     })
   }catch(e){}
 }
-function setPatientDetailTab(tab){if(!patientTabAllowed(tab))return;if(tab!=='documents'){patientDocumentViewState=null;patientDocumentsSearchQuery=''}ctgTabSlideNext=true;patientDetailActiveTab=tab;if(selectedPatientId)renderPatientDetails(selectedPatientId)}
+function setPatientDetailTab(tab){if(!patientTabAllowed(tab))return;if(tab==='billing'&&selectedPatientId&&(getPatient(selectedPatientId)||{}).billingWithheld)return;if(tab!=='documents'){patientDocumentViewState=null;patientDocumentsSearchQuery=''}ctgTabSlideNext=true;patientDetailActiveTab=tab;if(selectedPatientId)renderPatientDetails(selectedPatientId)}
 function togglePatientReExamRecords(id){
   const key=String(id||'')
   if(!key)return
@@ -8642,7 +8642,7 @@ function renderPatientOverviewPanel(p){
   const miniCards=[]
   if(patientTabAllowed('ace'))miniCards.push(`<div class="pld-mini-card"><div class="pld-mini-head"><div class="pld-mini-avatar ace">D1</div><div class="pld-mini-info"><div class="pld-mini-title">ACE</div><div class="pld-mini-sub">${aceSub}</div></div></div><div class="pld-mini-actions"><button class="btn btn-ghost btn-sm" data-onclick="setPatientDetailTab('ace')">View Day 1</button><button class="btn btn-ghost btn-sm" data-onclick="startAceForPatient('${p.id}')">Edit ACE</button></div></div>`)
   if(patientTabAllowed('notes'))miniCards.push(`<div class="pld-mini-card"><div class="pld-mini-head"><div class="pld-mini-avatar dn">DN</div><div class="pld-mini-info"><div class="pld-mini-title">Daily Notes</div><div class="pld-mini-sub">${dailyNotes.length} saved note${dailyNotes.length!==1?'s':''}</div></div></div><div class="pld-mini-actions">${provider?`<button class="btn btn-ghost btn-sm" data-onclick="setPatientDetailTab('notes')">View Notes</button>`:`<button class="btn btn-ghost btn-sm" data-onclick="openDailyNoteForPatient('${p.id}')">+ New Note</button>`}</div></div>`)
-  if(patientTabAllowed('billing'))miniCards.push(`<div class="pld-mini-card"><div class="pld-mini-head"><div class="pld-mini-avatar bi">BI</div><div class="pld-mini-info"><div class="pld-mini-title">Billing</div><div class="pld-mini-sub">${billSub}</div></div></div><div class="pld-mini-actions"><button class="btn btn-ghost btn-sm" data-onclick="viewBillingStatement('${p.id}')">View Statement</button><button class="btn btn-ghost btn-sm" data-onclick="downloadBillingStatement('${p.id}')">Download Statement</button></div></div>`)
+  if(patientTabAllowed('billing')&&!p.billingWithheld)miniCards.push(`<div class="pld-mini-card"><div class="pld-mini-head"><div class="pld-mini-avatar bi">BI</div><div class="pld-mini-info"><div class="pld-mini-title">Billing</div><div class="pld-mini-sub">${billSub}</div></div></div><div class="pld-mini-actions"><button class="btn btn-ghost btn-sm" data-onclick="viewBillingStatement('${p.id}')">View Statement</button><button class="btn btn-ghost btn-sm" data-onclick="downloadBillingStatement('${p.id}')">Download Statement</button></div></div>`)
   const mini=miniCards.length?`<div class="pld-mini-grid${miniCards.length===1?' pld-mini-grid--solo':''}">${miniCards.join('')}</div>`:''
   const dxSection=patientOverviewSectionAllowed('pl.diagnosis')?diagnosisSectionHtml(p):''
   return `<div class="pld-panel">${overviewCards}${renderPatientExamsOverview(p)}${dxSection}${mini}</div>`
@@ -9855,7 +9855,8 @@ function getFCRComponents(p){
   const docs=p.documents||{}
   const reExams=Array.isArray(p.reExams)?p.reExams.filter(r=>r&&r.savedAt):[]
   const testFiles=collectFCRTestUploadFiles(p)
-  const billingGroups=(()=>{try{return (getBillingStatementData(p).groups||[]).length}catch(e){return 0}})()
+  // Billing is shown only to the patient's own provider (17 Nov 2026; the server sets billingWithheld).
+  const billingGroups=p.billingWithheld?0:(()=>{try{return (getBillingStatementData(p).groups||[]).length}catch(e){return 0}})()
   const dailyCount=Array.isArray(p.dailyNotes)?p.dailyNotes.length:0
   const uploadDocs=Array.isArray(docs.uploads)?docs.uploads:[]
   const uploadsOfType=(type)=>uploadDocs.filter(d=>String(d&&d.documentType||'')===type).length
@@ -9965,7 +9966,7 @@ function renderPatientFCRPanel(p){
       </div>
     </div>
     <div class="fcr-body">
-      <div class="pld-record-card" data-cs="${__cs}margin-bottom:14px"><div class="pld-record-head"><div class="pld-record-title"><span>Statement Date</span></div></div><div class="fg" data-cs="${__cs}max-width:300px;margin-top:4px"><div class="date-field"><input type="text" id="fcrStatementDate" value="${escHtml((p.billing||{}).statementDate||'')}" placeholder="MM/DD/YYYY" data-oninput="saveFcrStatementDate('${p.id}')"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('fcrStatementDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div><div class="small-muted">Used as the Statement Date on the billing statement in this FCR.</div></div></div>
+      ${p.billingWithheld?'':`<div class="pld-record-card" data-cs="${__cs}margin-bottom:14px"><div class="pld-record-head"><div class="pld-record-title"><span>Statement Date</span></div></div><div class="fg" data-cs="${__cs}max-width:300px;margin-top:4px"><div class="date-field"><input type="text" id="fcrStatementDate" value="${escHtml((p.billing||{}).statementDate||'')}" placeholder="MM/DD/YYYY" data-oninput="saveFcrStatementDate('${p.id}')"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('fcrStatementDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div><div class="small-muted">Used as the Statement Date on the billing statement in this FCR.</div></div></div>`}
       <div class="pld-detail-list">${head}${rows}</div>
     </div>
   </div></div>`
@@ -10521,7 +10522,7 @@ async function compileFCRPages(p,merged){
   const offlineDay1File=window.ctgOfflineDay1Upload?window.ctgOfflineDay1Upload(p):null
   if(offlineDay1File)emittedUploads.add(offlineDay1File)
   if(offlineBillingFile){emittedUploads.add(offlineBillingFile);await addDataUrl(await resolveUploadDataUrl(p,offlineBillingFile))}
-  else try{await addJsPdf(buildBillingStatementDoc(getBillingStatementData(p)))}catch(e){console.error('FCR billing failed',e)}
+  else if(!p.billingWithheld){try{await addJsPdf(buildBillingStatementDoc(getBillingStatementData(p)))}catch(e){console.error('FCR billing failed',e)}}
   // 4b. Remaining uploaded documents (after billing, before test PDFs),
   //     in the fixed category order.
   //     A Day 1 saved on the form prints at step 6, so an uploaded copy does not print here too.
@@ -10708,7 +10709,8 @@ function renderPatientDetails(id){
   const TABS=lawyer
     ?[['billing','Billing'],['fcr','Final Case Report']]
     :[['overview','Overview'],['ace','Day 1'],['exams','Exams'],['comparison','Comparison'],['notes','Notes'],['billing','Billing'],['documents','Documents'],['fcr','Final Case Report']]
-  const allowedTabs=lawyer?TABS:TABS.filter(t=>patientTabAllowed(t[0]))
+  // The Billing tab only for the patient's own provider (17 Nov 2026; the server sets billingWithheld).
+  const allowedTabs=lawyer?TABS:TABS.filter(t=>patientTabAllowed(t[0])&&!(t[0]==='billing'&&p.billingWithheld))
   const allowedKeys=allowedTabs.map(t=>t[0])
   const active=allowedKeys.includes(patientDetailActiveTab)?patientDetailActiveTab:(allowedKeys[0]||'overview')
   patientDetailActiveTab=active
@@ -11095,6 +11097,8 @@ function collectAceFormState(){
   const state={inputs:{},selects:{},yn:{},symptoms:{},checks:{},icdCodes:[]}
   scope.querySelectorAll('input[type=text],textarea').forEach(el=>{if(el.id)state.inputs[el.id]=el.value})
   scope.querySelectorAll('select').forEach(el=>{if(el.id)state.selects[el.id]=el.value})
+  // "Completed By" became a dropdown (17 Nov 2026) but is still saved where everything reads it: inputs.completedBy.
+  if(Object.prototype.hasOwnProperty.call(state.selects,'completedBy')){state.inputs.completedBy=state.selects.completedBy;delete state.selects.completedBy}
   ;['hpiList','pmhList'].forEach(id=>{
     state.yn[id]=[...document.querySelectorAll('#'+id+' .yn-row')].map(row=>{
       const active=row.querySelector('.yn-btn.active')
@@ -11167,7 +11171,10 @@ function restoreInjuryTypeValueFromState(state){
 function applyAceFormState(state){
   if(!state)return
   ;(window.ctgDay1Hooks&&window.ctgDay1Hooks.beforeRestore||[]).forEach(f=>{try{f(state)}catch(e){console.warn('Day 1 add-on restore hook failed',e)}})
-  Object.entries(state.inputs||{}).forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.value=value})
+  Object.entries(state.inputs||{}).forEach(([id,value])=>{const el=document.getElementById(id);if(!el)return
+    // A saved "Completed By" no longer in the provider list stays selectable (see ctgRenderCompletedBy).
+    if(el.tagName==='SELECT'&&typeof window.ctgEnsureSelectOption==='function')window.ctgEnsureSelectOption(el,value)
+    el.value=value})
   Object.entries(state.selects||{}).forEach(([id,value])=>{
     if(id==='injuryType') return
     const el=document.getElementById(id);if(!el)return
@@ -14145,8 +14152,10 @@ function buildPDF(name,opts){
   pmhItems.forEach(([item,ans],idx)=>{
     kvLine(item,ans)
     if(idx===0){
-      const lang=gv('languageField')
-      if(lang){
+      // Not filled = no line at all (staff, 17 Nov 2026). A bare dash counts as not
+      // filled: one read from an uploaded Day 1 file printed "Language: —".
+      const lang=String(gv('languageField')||'').trim()
+      if(/[A-Za-z0-9]/.test(lang)){
         // Plain, like every other answer - no underline (16 Oct 2026). The Word copy reads the same segments.
         const segs=[{t:'Language: ',b:true},{t:lang}]
         rec({k:'p',segs:segs})

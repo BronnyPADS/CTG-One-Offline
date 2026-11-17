@@ -2,6 +2,8 @@
   'use strict';
 
   let mtgList = [];
+  // From the list: may this account invite providers into a visit (17 Nov 2026)?
+  let mtgCanInviteProviders = false;
   let mtgLobby = [];          // guests currently knocking, across all meetings
   let mtgLobbySig = '';       // last rendered lobby state; see mtgRefreshLobby
   let mtgActive = null;       // The meeting we are in, and whether staff have confirmed the patient is
@@ -259,6 +261,8 @@
     try {
       const d = await window.ctgApiFetch('/api/meetings');
       mtgList = (d && d.meetings) || [];
+      // Dr. Grande, administrators and therapy assistants invite providers into a visit (17 Nov 2026).
+      mtgCanInviteProviders = !!(d && d.canInviteProviders);
     } catch (e) { mtgList = []; }
     mtgRenderList();
     mtgRefreshLobby();
@@ -266,8 +270,8 @@
   window.ctgLoadMeetings = mtgLoad;
 
   async function mtgRefreshLobby() {
-    // Only live meetings can have anyone waiting.
-    const live = mtgList.filter(m => m.status === 'live');
+    // Only live meetings can have anyone waiting; a visit this provider is not in is not theirs to admit to.
+    const live = mtgList.filter(m => m.status === 'live' && !m.locked);
     let all = [];
     for (const m of live) {
       try {
@@ -441,7 +445,10 @@
         + '</div>'
         + '<div class="mtg-row-actions">'
           + (ended ? '<span class="small-muted">Ended</span>'
+            /* Another provider's patient visit: listed, but joined only by invite (17 Nov 2026). */
+            : m.locked ? '<span class="mtg-invite-needed" title="Ask Dr. Grande, an administrator or a therapy assistant to invite you">Invite needed</span>'
             : (mtgCan('mtg.invite') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgCopyLink(\'' + m.id + '\')">Get guest link</button>' : '')
+              + (mtgCanInviteProviders && m.patientId ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgInviteProviders(\'' + m.id + '\')">Invite provider</button>' : '')
               + '<button class="btn btn-primary btn-sm" data-onclick="mtgJoin(\'' + m.id + '\')">' + (live ? 'Join' : 'Start') + '</button>'
               + (mtgCan('mtg.create') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgCancel(\'' + m.id + '\')">Cancel</button>' : ''))
         + '</div></div>';
@@ -457,6 +464,11 @@
     return typeof window.ctgCanSection !== 'function' || window.ctgCanSection('meetings', section);
   }
   const MTG_REMOVE_ROLES = ['admin', 'ta', 'compliance'];
+  // Live transcripts are deleted only by an administrator or compliance (17 Nov 2026).
+  function mtgCanDeleteTranscript() {
+    const u = (window.ctgCurrentUser && window.ctgCurrentUser()) || {};
+    return u.role === 'admin' || u.role === 'compliance';
+  }
   function mtgCanRemoveGuests() {
     const u = (window.ctgCurrentUser && window.ctgCurrentUser()) || {};
     return MTG_REMOVE_ROLES.indexOf(u.role) !== -1 && mtgCan('mtg.host');
@@ -648,6 +660,49 @@
     window.mtgCopyLink(mtgActive.id);
   };
 
+  /* Invite a provider into a patient's visit (17 Nov 2026). Dr. Grande joins
+     any visit; another provider joins a visit that is not theirs only when
+     invited here. Offered to Dr. Grande, administrators and therapy
+     assistants; the server refuses everyone else. */
+  window.mtgInviteProviders = async function (id) {
+    let d;
+    try { d = await window.ctgApiFetch('/api/meetings/' + id + '/staff-invites'); }
+    catch (e) { toast(e.message || 'Could not load the providers.', 'err'); return; }
+    let el = document.getElementById('mtgInvModal');
+    if (!el) { el = document.createElement('div'); el.id = 'mtgInvModal'; document.body.appendChild(el); }
+    el.className = 'mtg-modal show';
+    const rows = (d.providers || []).map(function (p) {
+      const acc = String(p.accountId || '').replace(/[^0-9a-f-]/gi, '');
+      return '<div class="mtg-inv-row"><span class="mtg-inv-name">' + esc(p.name || 'Provider') + '</span>'
+        + (p.invited
+          ? '<span class="mtg-inv-tag">Invited</span><button class="btn btn-ghost btn-sm" data-onclick="mtgInviteProviderSet(\'' + id + '\',\'' + acc + '\',0)">Remove</button>'
+          : '<button class="btn btn-primary btn-sm" data-onclick="mtgInviteProviderSet(\'' + id + '\',\'' + acc + '\',1)">Invite</button>')
+        + '</div>';
+    }).join('');
+    el.innerHTML = '<div class="mtg-modal-card mtg-inv-card" role="dialog" aria-modal="true" aria-labelledby="mtgInvTitle">'
+      + '<div class="mtg-modal-title" id="mtgInvTitle">Invite a provider</div>'
+      + '<div class="small-muted">' + esc(d.title || '') + '</div>'
+      + '<p class="mtg-inv-help">Dr. Grande can join any visit. Other providers join a visit that is not theirs only when invited.</p>'
+      + (rows || '<p class="small-muted">No other provider needs an invite to this visit.</p>')
+      + '<div class="mtg-modal-actions"><button class="btn btn-primary" data-onclick="mtgInviteProvidersClose()">Done</button></div></div>';
+  };
+  window.mtgInviteProviderSet = async function (id, accountId, on) {
+    try {
+      if (+on) await window.ctgApiFetch('/api/meetings/' + id + '/staff-invites', { method: 'POST', body: JSON.stringify({ accountId: accountId }) });
+      else await window.ctgApiFetch('/api/meetings/' + id + '/staff-invites/' + encodeURIComponent(accountId), { method: 'DELETE' });
+      toast(+on ? 'Invited. They can join this visit now.' : 'Invite removed.', 'ok');
+    } catch (e) { toast(e.message || 'Could not change the invite.', 'err'); }
+    window.mtgInviteProviders(id);
+  };
+  window.mtgInviteProvidersClose = function () {
+    const el = document.getElementById('mtgInvModal');
+    if (el) { el.className = 'mtg-modal'; el.innerHTML = ''; }
+  };
+  window.mtgInviteProvidersFromCall = function () {
+    if (!mtgActive || !mtgActive.id) { toast('Not in a meeting', 'err'); return; }
+    window.mtgInviteProviders(mtgActive.id);
+  };
+
   window.mtgCopyLink = async function (id) {
     if (!mtgCan('mtg.invite')) { toast('Your account cannot share guest links', 'err'); return; }
     try {
@@ -744,9 +799,11 @@
     return m || null;
   }
 
+  const MTG_INVITE_NEEDED = 'You need an invite to join this appointment. Ask Dr. Grande, an administrator or a therapy assistant to invite you.';
   async function mtgJoin(id, guestToken) {
     const m = await mtgFind(id);
     if (!m) return;
+    if (m.locked || !m.callGroupId) { toast(MTG_INVITE_NEEDED, 'err'); return; }
     /* Staff get the same warning as guests. Someone joining a session that is
        already being recorded is entitled to know before they are in it,
        whether or not they work here. */
@@ -799,6 +856,7 @@
   async function mtgDoJoin(id, prefs) {
     const m = await mtgFind(id);
     if (!m) return;
+    if (m.locked || !m.callGroupId) { toast(MTG_INVITE_NEEDED, 'err'); return; }
     // Remembered so hopping straight to the next room can carry the camera,
     // microphone and background already chosen for this shift - see
     // mtgHopToNext, which skips the green room entirely.
@@ -3539,6 +3597,9 @@
             : '<div class="mtg-side-list">'
                 + (!mtgCan('mtg.invite') ? '' : '<button class="mtg-invite" data-onclick="mtgInviteFromCall()">'
                   + ICON_LINK + 'Copy guest link</button>')
+                // Bring another provider into this patient's visit (17 Nov 2026).
+                + (mtgCanInviteProviders && mtgActive && mtgActive.patientId
+                  ? '<button class="mtg-invite" data-onclick="mtgInviteProvidersFromCall()">Invite a provider</button>' : '')
                 /* Everyone in the room who arrived through the link, listed apart from
                    staff. They are the only people who can be removed, and who from outside
                    the practice is in a clinical room is worth reading off at a glance. */
@@ -3924,12 +3985,12 @@
           + (r.hasMedia ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgPlayRecording(\'' + esc(r.id) + '\')">Play</button>' : '')
           + (r.hasMedia ? '<a class="btn btn-ghost btn-sm" href="/api/meetings/recordings/'
               + encodeURIComponent(r.id) + '/media?download=1" download>Download</a>' : '')
-          + ((r.hasMedia || r.transcriptStatus === 'ready') && mtgCan('mtg.record')
-              ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgShareRecording(\'' + esc(r.id) + '\',true)">Share</button>' : '')
+          /* No Share on a recording (17 Nov 2026): recordings and transcripts are not shared by link. */
           + (r.transcriptStatus === 'ready' ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgShowTranscript(\'' + esc(r.id) + '\')">Transcript</button>' : '')
           + (r.hasMedia && r.transcriptStatus !== 'ready' && r.transcriptStatus !== 'pending'
               ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgTranscribe(\'' + esc(r.id) + '\')">Transcribe</button>' : '')
-          + (mtgCan('mtg.record') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgDeleteRecording(\'' + esc(r.id) + '\')">Delete</button>' : '')
+          // Delete only for an administrator or compliance (17 Nov 2026); the server enforces it.
+          + (mtgCan('mtg.record') && mtgCanDeleteTranscript() ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgDeleteRecording(\'' + esc(r.id) + '\')">Delete</button>' : '')
         + '</div>'
         + '<div class="mtg-rec-open" id="mtgRecOpen_' + esc(r.id) + '"></div>'
       + '</div>';
@@ -3968,8 +4029,9 @@
         + '<div class="mtg-rec-actions">'
           + '<button class="btn btn-ghost btn-sm" data-onclick="mtgShowTranscript(\'' + esc(r.id) + '\')">Transcript</button>'
           + '<a class="btn btn-ghost btn-sm" href="/api/meetings/recordings/' + encodeURIComponent(r.id) + '/transcript.txt" download>Download</a>'
-          + (mtgCan('mtg.record') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgShareRecording(\'' + esc(r.id) + '\',false)">Share</button>' : '')
-          + (mtgCan('mtg.record') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgDeleteRecording(\'' + esc(r.id) + '\')">Delete</button>' : '')
+          /* No Share on a live transcript, and Delete only for an administrator
+             or compliance (17 Nov 2026); the server enforces both. */
+          + (mtgCan('mtg.record') && mtgCanDeleteTranscript() ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgDeleteRecording(\'' + esc(r.id) + '\')">Delete</button>' : '')
         + '</div>'
         + '<div class="mtg-rec-open" id="mtgRecOpen_' + esc(r.id) + '"></div>'
       + '</div>';

@@ -339,6 +339,26 @@
       var selected = Object.prototype.hasOwnProperty.call(overrides, id) ? overrides[id] : el.value;
       el.innerHTML = window.ctgProviderOptionsHTML(selected);
     });
+    window.ctgRenderCompletedBy();
+  };
+  /* Day 1 "Completed By" (17 Nov 2026): a dropdown of the provider accounts
+     in Access Control. A name saved before - typed, or a provider since
+     renamed or removed - is kept as an extra choice, so an old Day 1 never
+     loses who signed it. Until the list has loaded (and in the offline
+     version, which has no accounts) the options in the page stay as they are. */
+  window.ctgEnsureSelectOption = function (el, value) {
+    value = String(value == null ? '' : value);
+    if (!el || el.tagName !== 'SELECT' || !value) return;
+    for (var i = 0; i < el.options.length; i++) if (el.options[i].value === value) return;
+    var o = document.createElement('option'); o.value = value; o.textContent = value; el.appendChild(o);
+  };
+  window.ctgRenderCompletedBy = function () {
+    var el = document.getElementById('completedBy');
+    if (!el || el.tagName !== 'SELECT' || !_providers.length) return;
+    var current = el.value;
+    el.innerHTML = window.ctgProviderOptionsHTML(current);
+    window.ctgEnsureSelectOption(el, current);
+    el.value = current;
   };
   window.ctgLawFirmOptionsHTML = function (selected) {
     selected = String(selected || '');

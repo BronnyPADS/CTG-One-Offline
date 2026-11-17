@@ -240,6 +240,8 @@
   function setText(id, v) {
     var el = byId(id)
     if (!el || blank(v)) return false
+    // "Completed By" is a dropdown now (17 Nov 2026): a name from the file is added as a choice first.
+    if (el.tagName === 'SELECT' && typeof window.ctgEnsureSelectOption === 'function') window.ctgEnsureSelectOption(el, norm(v))
     el.value = norm(v)
     fire(el, 'input'); fire(el, 'change'); mark(el)
     return true

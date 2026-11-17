@@ -87,7 +87,22 @@ let ctgBreakBlocks = []
 let apptCursorDate = apptMidnight(new Date())
 // A seven-day grid cannot fit a phone; a phone opens on the single day instead.
 let apptViewMode = (window.innerWidth <= 560 ? 'day' : 'week') // 'day' | 'week' | 'month' | 'agenda'
-let apptFacilityFilter = 'both' // 'both' | one of APPT_FACILITIES
+let apptFacilityFilter = 'both' // 'both' | one of APPT_FACILITIES - the single calendar shown, when only one is ticked
+/* Which calendars show (17 Nov 2026): a list of tick boxes in place of the
+   one-calendar dropdown. Kept as the calendars UNticked, so a provider added
+   later shows up ticked; remembered per browser, as a convenience only. */
+const APPT_HIDDEN_CALS_KEY = 'ctg_appt_hidden_calendars'
+let apptHiddenFacilities = (function () {
+  try { const v = JSON.parse(localStorage.getItem(APPT_HIDDEN_CALS_KEY) || '[]'); return new Set(Array.isArray(v) ? v.map(String) : []) } catch (e) { return new Set() }
+})()
+function apptSaveHiddenFacilities() {
+  try { localStorage.setItem(APPT_HIDDEN_CALS_KEY, JSON.stringify(Array.from(apptHiddenFacilities))) } catch (e) { /* private window: not remembered */ }
+}
+// The calendars ticked, in their usual order; never none (all, if every box was cleared somehow).
+function apptVisibleFacilities() {
+  const shown = APPT_FACILITIES.filter(f => !apptHiddenFacilities.has(f))
+  return shown.length ? shown : APPT_FACILITIES.slice()
+}
 let apptShowAllHours = false // false = business hours only (8am-7pm), true = full 24 hours
 let apptEditingId = null
 let breakEditingId = null
@@ -140,7 +155,7 @@ function apptRebuildFacilities() {
   const used = new Set(ctgBreakBlocks.map(breakFacilityOf).concat(ctgAppointments.map(apptFacilityOf)))
   const cals = apptCalendars.filter(c => c.active !== false || used.has(c.facility))
   APPT_FACILITIES = ['Concussion Therapy Group'].concat(cals.map(c => c.facility))
-  if (apptFacilityFilter !== 'both' && APPT_FACILITIES.indexOf(apptFacilityFilter) === -1) apptFacilityFilter = 'both'
+  apptSyncFacilityFilter()
   apptRenderFacilitySelects()
 }
 // A select's choice, adding it when it is not listed (a visit on a calendar no longer offered).
@@ -153,8 +168,7 @@ function apptSetSelect(el, value) {
 }
 function apptRenderFacilitySelects() {
   const opt = (v, t) => '<option value="' + apptEsc(v) + '">' + apptEsc(t) + '</option>'
-  const fil = document.getElementById('apptFacilityFilterSelect')
-  if (fil) { fil.innerHTML = opt('both', 'All Facilities') + APPT_FACILITIES.map(f => opt(f, apptFacilityName(f))).join(''); fil.value = apptFacilityFilter }
+  apptRenderCalFilter()
   // Booking and blocks: the clinic and the providers still on staff.
   const bookable = APPT_FACILITIES.filter(f => !apptIsProviderFacility(f) || (apptCalendarOf(f) || {}).active !== false)
   ;['apptFacility', 'breakFacility'].forEach(id => {
@@ -468,7 +482,81 @@ function apptNext() {
   renderAppointments()
 }
 function apptToday() { apptCursorDate = apptMidnight(new Date()); renderAppointments() }
-function apptSetFacilityFilter(f) { apptFacilityFilter = f; renderAppointments() }
+// Kept for anything that still asks for one calendar: shows that calendar alone ('both' = all).
+function apptSetFacilityFilter(f) {
+  apptHiddenFacilities = new Set(f === 'both' ? [] : APPT_FACILITIES.filter(x => x !== f))
+  apptSaveHiddenFacilities()
+  apptSyncFacilityFilter()
+  apptRenderCalFilter()
+  renderAppointments()
+}
+/* apptFacilityFilter follows the ticks: the one calendar when exactly one is
+   shown (a new appointment or block then starts on it, as before), else 'both'. */
+function apptSyncFacilityFilter() {
+  const shown = apptVisibleFacilities()
+  apptFacilityFilter = shown.length === 1 && shown.length < APPT_FACILITIES.length ? shown[0] : 'both'
+}
+
+/* ---------- which calendars show: tick boxes ---------- */
+function apptCalFilterLabel() {
+  const shown = apptVisibleFacilities()
+  if (shown.length === APPT_FACILITIES.length) return 'All Facilities'
+  if (shown.length === 1) return apptFacilityName(shown[0])
+  return shown.length + ' of ' + APPT_FACILITIES.length + ' calendars'
+}
+function apptRenderCalFilter() {
+  const btnLabel = document.getElementById('apptCalFilterLabel')
+  if (btnLabel) btnLabel.textContent = apptCalFilterLabel()
+  const panel = document.getElementById('apptCalFilterPanel')
+  if (!panel) return
+  const shown = apptVisibleFacilities()
+  const all = shown.length === APPT_FACILITIES.length
+  const box = (value, label, checked, extra) => '<label class="appt-cal-filter-row' + (extra || '') + '">'
+    + '<input type="checkbox" value="' + apptEsc(value) + '"' + (checked ? ' checked' : '') + ' data-onchange="apptCalFilterChange(this)">'
+    + '<span>' + apptEsc(label) + '</span></label>'
+  panel.innerHTML = box('__all', 'All Facilities', all, ' is-all')
+    + APPT_FACILITIES.map(f => box(f, apptFacilityName(f), shown.indexOf(f) !== -1)).join('')
+}
+function apptCalFilterChange(el) {
+  if (!el) return
+  if (el.value === '__all') {
+    // Ticking "All" shows every calendar; unticking it leaves just the clinic's.
+    apptHiddenFacilities = new Set(el.checked ? [] : APPT_FACILITIES.slice(1))
+  } else if (el.checked) {
+    apptHiddenFacilities.delete(el.value)
+  } else {
+    const shown = apptVisibleFacilities()
+    if (shown.length <= 1 && shown[0] === el.value) {
+      el.checked = true
+      if (typeof showToast === 'function') showToast('Keep at least one calendar ticked', 'err')
+      return
+    }
+    apptHiddenFacilities.add(el.value)
+  }
+  apptSaveHiddenFacilities()
+  apptSyncFacilityFilter()
+  apptRenderCalFilter()
+  renderAppointments()
+}
+function apptToggleCalFilter(force) {
+  const panel = document.getElementById('apptCalFilterPanel')
+  const btn = document.getElementById('apptCalFilterBtn')
+  if (!panel || !btn) return
+  const open = typeof force === 'boolean' ? force : panel.hidden
+  if (open) apptRenderCalFilter()
+  panel.hidden = !open
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+}
+// Closes on a click outside it or on Escape, like any menu.
+document.addEventListener('click', function (e) {
+  const wrap = document.getElementById('apptCalFilter')
+  const panel = document.getElementById('apptCalFilterPanel')
+  if (wrap && panel && !panel.hidden && !wrap.contains(e.target)) apptToggleCalFilter(false)
+})
+document.addEventListener('keydown', function (e) {
+  const panel = document.getElementById('apptCalFilterPanel')
+  if (e.key === 'Escape' && panel && !panel.hidden) { apptToggleCalFilter(false); const b = document.getElementById('apptCalFilterBtn'); if (b) b.focus() }
+})
 // Sliding pill under Day/Week/Month/Agenda. The toolbar re-renders on switch, so we
 // remember the last glider position and animate the fresh glider from there.
 let apptViewGliderLast = null
@@ -527,7 +615,8 @@ function renderAppointments() {
   if (label) label.textContent = apptRangeLabel()
 
   const todayISO = apptISODate(new Date())
-  const visibleFacilities = apptFacilityFilter === 'both' ? APPT_FACILITIES : [apptFacilityFilter]
+  apptSyncFacilityFilter()
+  const visibleFacilities = apptVisibleFacilities()
 
   // Compact top-bar status: patient appointments scheduled for the real current day.
   const tag = document.getElementById('apptWeekTag')
@@ -541,8 +630,8 @@ function renderAppointments() {
     ctgPlaceApptViewGlider(viewTabs)
   }
 
-  const facSelect = document.getElementById('apptFacilityFilterSelect')
-  if (facSelect) facSelect.value = apptFacilityFilter
+  const calLabel = document.getElementById('apptCalFilterLabel')
+  if (calLabel) calLabel.textContent = apptCalFilterLabel()
 
   apptRenderUndo()
 

@@ -165,13 +165,34 @@ function msgCloseCombo() {
   if (panel) panel.classList.remove('show')
   msgComboActive = false
 }
+/* Mobile and Email come from the patient's record and cannot be typed over
+   (17 Nov 2026) - the server sends only to the record's own contacts. A
+   channel the patient has no contact for is turned off, and the hint says
+   where to add it. */
+const MSG_ONFILE_HINT = "Taken from the patient's record. To change it, edit the patient in Registration."
+function msgFillOnFile(p) {
+  const mobile = (p && p.demographics && p.demographics.mobile) || ''
+  const email = (p && p.demographics && p.demographics.email) || ''
+  document.getElementById('msgMobile').value = mobile
+  document.getElementById('msgEmail').value = email
+  const sms = document.getElementById('msgChanSms'), mail = document.getElementById('msgChanEmail')
+  if (sms) { sms.disabled = !!p && !mobile; sms.checked = !p || !!mobile }
+  if (mail) { mail.disabled = !!p && !email; mail.checked = !p || !!email }
+  const missing = [!mobile ? 'mobile number' : '', !email ? 'email address' : ''].filter(Boolean)
+  const hint = document.getElementById('msgOnFileHint')
+  if (hint) {
+    hint.textContent = !p ? MSG_ONFILE_HINT
+      : missing.length ? 'No ' + missing.join(' or ') + ' on file for this patient. Add it in Registration to send that way.'
+      : MSG_ONFILE_HINT
+    hint.classList.toggle('is-missing', !!(p && missing.length))
+  }
+}
 function msgSelectPatient(patientId) {
   const p = getPatient(patientId)
   if (!p) return
   msgSelectedPatientId = patientId
   document.getElementById('msgPatientInput').value = naturalPatientName(p)
-  document.getElementById('msgMobile').value = p.demographics?.mobile || ''
-  document.getElementById('msgEmail').value = p.demographics?.email || ''
+  msgFillOnFile(p)
   msgCloseCombo()
   // Seed the invite's working form selection from the patient's saved checklist
   // and mint a token for this invite's link.
@@ -255,10 +276,7 @@ function msgResetForm() {
   msgFormsWorking = []
   msgFormsToken = ''
   document.getElementById('msgPatientInput').value = ''
-  document.getElementById('msgChanSms').checked = true
-  document.getElementById('msgChanEmail').checked = true
-  document.getElementById('msgMobile').value = ''
-  document.getElementById('msgEmail').value = ''
+  msgFillOnFile(null)
   document.getElementById('msgBody').value = ''
   msgRenderFormsPanel()
   msgSetEditorMode('design')
@@ -308,8 +326,8 @@ function msgSend() {
   if (!sms && !email) { showToast('Choose SMS, Email, or both', 'err'); return }
   const mobile = document.getElementById('msgMobile').value.trim()
   const emailAddr = document.getElementById('msgEmail').value.trim()
-  if (sms && !mobile) { showToast('Enter a mobile number for SMS', 'err'); return }
-  if (email && !emailAddr) { showToast('Enter an email address for Email', 'err'); return }
+  if (sms && !mobile) { showToast('This patient has no mobile number on file. Add it in Registration first.', 'err'); return }
+  if (email && !emailAddr) { showToast('This patient has no email address on file. Add it in Registration first.', 'err'); return }
   // The message + secure link are generated automatically from the ticked forms,
   // so every New Invite is a forms invite.
   const type = 'Send Selected Forms'

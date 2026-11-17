@@ -46,6 +46,8 @@
     'apptFacilityChange', 'apptGoToDay', 'apptHideHoverCard', 'apptHoverCardHover', 'apptMonthCellClick',
     'apptNext', 'apptOpenBlockContextMenu', 'apptOpenContextMenu', 'apptOpenRoom', 'apptPatientSelectChange',
     'apptPrev', 'apptRemoveRoom', 'apptRoomChanged', 'apptScheduleHideHoverCard', 'apptSetFacilityFilter',
+    // Calendar tick boxes on the appointment book (17 Nov 2026).
+    'apptToggleCalFilter', 'apptCalFilterChange',
     'apptSetViewMode', 'apptShowHoverCard', 'apptSyncEndTime', 'apptToday', 'apptToggleHours',
     'apptToggleTelehealth', 'apptUndoLast', 'arAddTask', 'arCloseAdd', 'arGoToAce', 'arGoToPatientDetails',
     'arIssuesChanged', 'arOpenAdd', 'arPayFillFull', 'arPayMethodChange', 'arPayRenderPreview', 'arPayTypeChange',
@@ -118,10 +120,12 @@
     'mtgGuestChatToggle', 'mtgGuestLeave', 'mtgGuestMoreDo', 'mtgGuestMute', 'mtgGuestNoticeClose',
     'mtgGuestPickCam', 'mtgGuestPickMic', 'mtgGuestPickSpk', 'mtgGuestSaveName', 'mtgGuestSetPane',
     'mtgGuestShare', 'mtgGuestToggleMore', 'mtgGuestVideo', 'mtgHopToNext', 'mtgInviteFromCall', 'mtgJoin',
+    // Inviting a provider into a patient's visit (17 Nov 2026).
+    'mtgInviteProviders', 'mtgInviteProviderSet', 'mtgInviteProvidersClose', 'mtgInviteProvidersFromCall',
     'mtgMarkReady', 'mtgMoreDo', 'mtgMuteEveryone', 'mtgMuteParticipant', 'mtgOpenSchedule', 'mtgPickCam',
     'mtgPickMic', 'mtgPickSpk', 'mtgPlayRecording', 'mtgPopOutShare', 'mtgRecConsentToggle', 'mtgRemoveGuest',
     'mtgRenameParticipant', 'mtgRevokeShare', 'mtgSaveTranscript', 'mtgSetPane', 'mtgSetPatientLang',
-    'mtgShareRecording', 'mtgShowTranscript', 'mtgStartInstant', 'mtgStartRecording', 'mtgSubmitNew',
+    'mtgShowTranscript', 'mtgStartInstant', 'mtgStartRecording', 'mtgSubmitNew',
     'mtgToggleDock', 'mtgToggleLiveTranscript', 'mtgToggleMore', 'mtgToggleMute', 'mtgTogglePanel',
     'mtgToggleRecord', 'mtgToggleShare', 'mtgToggleSubtitles', 'mtgToggleTouch', 'mtgToggleVideo', 'mtgTranscribe',
     'nbAddLine', 'nbClearAssign', 'nbDownloadPdf', 'nbField', 'nbGoPay', 'nbItemKey', 'nbPickToggle', 'nbPickPhysician', 'nbPickPractice', 'nbLine', 'nbOpenReferral',

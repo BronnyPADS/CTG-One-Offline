@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261113b">
+<link rel="stylesheet" href="styles.css?v=20261117c">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261113b"></script>
+<script src="ctg-actions.js?v=20261117c"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -188,26 +188,36 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l2 3h5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 14h6"/><path d="m13 11 3 3-3 3"/></svg>
     Referrals
   </a>
-  <!-- Patients whose Day 1 incident was in Virginia (neuro-referrals.js). -->
-  <a class="side-link" id="sideNeuroReferrals" data-page="neuroReferrals" data-onclick="showPage('neuroReferrals')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 5v13"/></svg>
-    Neurologist Referrals
-  </a>
-  <!-- What the practice owes the neurologist for referred patients (neuro-billing.js):
-       their bills and CTG's payments. Not AR - that is money owed to the practice. -->
-  <a class="side-sublink" id="sideNeuroBilling" data-page="neuroBilling" data-onclick="showPage('neuroBilling')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-    Neurologist Billing
-  </a>
-  <!-- The billing providers picked on each bill; part of Neurologist Billing (no Access Control tick of its own). -->
-  <a class="side-sublink" id="sideNeuroProviderList" data-page="neuroProviderList" data-onclick="showPage('neuroProviderList')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-    Billing Provider List
-  </a>
-  <a class="side-sublink" id="sideNeuroPayments" data-page="neuroPayments" data-onclick="showPage('neuroPayments')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
-    Neurologist Payments
-  </a>
+  <!-- Neurologist pages as one group, like Appointment (17 Nov 2026): Neurologist Referrals
+       (Virginia incidents, neuro-referrals.js) and what the practice owes the neurologist. -->
+  <div class="side-group open" id="sideNeuroGroup">
+    <a class="side-link side-group-toggle" data-onclick="toggleSideGroup('sideNeuroGroup')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 5v13"/></svg>
+      <span>Neurologist</span>
+      <svg class="side-group-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </a>
+    <div class="side-group-body"><div class="side-group-body-inner">
+      <a class="side-sublink" id="sideNeuroReferrals" data-page="neuroReferrals" data-onclick="showPage('neuroReferrals')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/><path d="M12 5v13"/></svg>
+        Neurologist Referrals
+      </a>
+      <!-- What the practice owes the neurologist for referred patients (neuro-billing.js):
+           their bills and CTG's payments. Not AR - that is money owed to the practice. -->
+      <a class="side-sublink" id="sideNeuroBilling" data-page="neuroBilling" data-onclick="showPage('neuroBilling')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Neurologist Billing
+      </a>
+      <!-- The billing providers picked on each bill; part of Neurologist Billing (no Access Control tick of its own). -->
+      <a class="side-sublink" id="sideNeuroProviderList" data-page="neuroProviderList" data-onclick="showPage('neuroProviderList')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Billing Provider List
+      </a>
+      <a class="side-sublink" id="sideNeuroPayments" data-page="neuroPayments" data-onclick="showPage('neuroPayments')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+        Neurologist Payments
+      </a>
+    </div></div>
+  </div>
   <a class="side-link" id="sidePatientLists" data-page="patientLists" data-onclick="showPage('patientLists')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Patient Lists
@@ -363,7 +373,7 @@
     </button>
   </div>
 </div>
-<script src="boot-sidegroups.js?v=20260929a"></script>
+<script src="boot-sidegroups.js?v=20261117a"></script>
 
 
 <div class="page" id="page-dashboard">
@@ -718,11 +728,14 @@
         </div>
       </div>
       <div class="appt-toolbar-controls">
-        <select id="apptFacilityFilterSelect" class="appt-facility-select" data-onchange="apptSetFacilityFilter(this.value)" aria-label="Facility filter">
-          <option value="both">All Facilities</option>
-          <option value="Concussion Therapy Group">Concussion Therapy Group</option>
-          <option value="Provider">Provider’s Calendar</option>
-        </select>
+        <!-- Which calendars show: tick boxes (17 Nov 2026), filled by apptRenderCalFilter in appointments.js. -->
+        <div class="appt-cal-filter" id="apptCalFilter">
+          <button type="button" class="appt-facility-select appt-cal-filter-btn" id="apptCalFilterBtn" aria-haspopup="true" aria-expanded="false" aria-controls="apptCalFilterPanel" data-onclick="apptToggleCalFilter()">
+            <span id="apptCalFilterLabel">All Facilities</span>
+            <span class="appt-cal-chev" aria-hidden="true"></span>
+          </button>
+          <div class="appt-cal-filter-panel" id="apptCalFilterPanel" role="group" aria-label="Calendars to show" hidden></div>
+        </div>
         <div class="appt-facility-tabs" id="apptViewTabs"></div>
         <span id="apptUndoSlot" class="appt-undo-slot"></span>
         <button type="button" class="btn btn-primary btn-sm" data-onclick="openApptModal()">+ New Appointment</button>
@@ -1258,8 +1271,10 @@
                 <input type="text" class="ar-combo-input" id="msgPatientInput" placeholder="Type Name, DOB or Home# to find patient" autocomplete="off" data-oninput="msgFilterPatient()" data-onfocus="msgOpenPatient()">
               </div>
             </div>
-            <div class="fg" data-cs-boot="margin-bottom:0"><label>Mobile No</label><input type="text" id="msgMobile" placeholder="___-___-____"></div>
-            <div class="fg" data-cs-boot="margin-bottom:0"><label>Email</label><input type="text" id="msgEmail" placeholder="patient@email.com"></div>
+            <!-- Read-only (17 Nov 2026): filled from the patient's record, and the server sends only there. -->
+            <div class="fg" data-cs-boot="margin-bottom:0"><label for="msgMobile">Mobile No</label><input type="text" id="msgMobile" class="msg-onfile" readonly aria-readonly="true" placeholder="Filled from the patient's record" aria-describedby="msgOnFileHint"></div>
+            <div class="fg" data-cs-boot="margin-bottom:0"><label for="msgEmail">Email</label><input type="text" id="msgEmail" class="msg-onfile" readonly aria-readonly="true" placeholder="Filled from the patient's record" aria-describedby="msgOnFileHint"></div>
+            <div class="msg-onfile-hint" id="msgOnFileHint">Taken from the patient's record. To change it, edit the patient in Registration.</div>
           </div>
 
           <div class="fg" id="msgFormsPanel" data-cs-boot="display:none;margin:16px 0 0">
@@ -2143,7 +2158,9 @@
 
     <div class="sdiv"><span>Sign-Off</span></div>
     <div class="g2">
-      <div class="fg"><label>Completed By</label><input type="text" id="completedBy" value="Nicholas A. Grande"></div>
+      <!-- A dropdown of the provider accounts (17 Nov 2026); filled by ctgRenderProviderPickers in ctg-auth.js.
+           Its value is still saved as inputs.completedBy, which the PDFs, claim and FCR read. -->
+      <div class="fg"><label for="completedBy">Completed By</label><select id="completedBy"><option value="">— Select —</option><option value="Nicholas A. Grande" selected>Nicholas A. Grande</option></select></div>
       <div class="fg"><label>Credentials</label>
         <select id="completedByCred"><option value="">— Select —</option><option>DC</option><option>MD</option><option>RN</option><option>NP</option><option>PhD</option><option>ATC</option><option>Other</option></select>
       </div>
@@ -2897,9 +2914,9 @@
 
 <script src="csp-boot-end.js?v=20261005b"></script>
 <script src="notes-group.js?v=20260923a"></script>
-<script src="app.js?v=20261113c"></script>
+<script src="app.js?v=20261117c"></script>
 <!-- Appointment scheduling (week grid) -->
-<script src="appointments.js?v=20261106a"></script>
+<script src="appointments.js?v=20261117a"></script>
 <!-- Appointment Configs (visit types, eligibility, rooms, schedulers) -->
 <script src="apptconfig.js?v=20261005e"></script>
 <script src="apptrooms.js?v=20260929b"></script>
@@ -2924,7 +2941,7 @@
 <!-- AR Summary (Billing) -->
 <script src="billing.js?v=20261105a"></script>
 <!-- Invite Patient (Messaging) -->
-<script src="messaging.js?v=20260929b"></script>
+<script src="messaging.js?v=20261117a"></script>
 <!-- Azure Communication Services Calling SDK (vendored single-file bundle via
      esbuild — the npm package is ESM-only with bare-specifier imports, no
      ready-to-use browser build, so this is pre-bundled and checked in as a
@@ -2952,7 +2969,7 @@
      someone who actually switches a transcript on. -->
 <script src="meeting-transcript.js?v=20260923a"></script>
 <script src="meeting-guest.js?v=20261005e"></script>
-<script src="meetings.js?v=20261014a"></script>
+<script src="meetings.js?v=20261117c"></script>
 <!-- Day 1 add-ons: MOI story, extra questions, even two-column layout. They plug into app.js (window.ctgDay1Hooks). -->
 <script src="day1-moi.js?v=20261113b"></script>
 <script src="day1-extras.js?v=20261104b"></script>
@@ -2960,7 +2977,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261113b"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261113c"></script>
+<script src="ctg-auth.js?v=20261117a"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>
