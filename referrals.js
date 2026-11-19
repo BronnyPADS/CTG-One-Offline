@@ -254,6 +254,25 @@
     rfAvail = { date: '', busy: {}, loading: false, error: '' };
     rfSending = false;
     rfPaintWizard();
+    // The Provider dropdown's list; fetched if this session has not loaded it yet.
+    if (!rfIsLawyer() && typeof window.ctgGetProviders === 'function' && !window.ctgGetProviders().length
+        && typeof window.ctgLoadProviders === 'function') {
+      window.ctgLoadProviders().then(function () {
+        if (rfWizStep === 1 && document.getElementById('rfFirst')) { rfCaptureDetails(); rfPaintWizard(); }
+      });
+    }
+  }
+  // Provider accounts for the booking (19 Nov 2026): clinic staff pick who sees the patient.
+  function rfProviderFieldHTML(selected) {
+    if (rfIsLawyer() || typeof window.ctgGetProviders !== 'function') return '';
+    var list = window.ctgGetProviders();
+    if (!list.length) return '';   // not loaded yet (it repaints when it is), or none, as offline
+    return '<div class="rf-f"><label for="rfProvider">Provider</label><select id="rfProvider">'
+      + '<option value="">— Select —</option>'
+      + list.map(function (p) {
+          return '<option value="' + rfEsc(p.id) + '"' + (String(p.id) === String(selected || '') ? ' selected' : '') + '>' + rfEsc(p.displayName || '') + '</option>';
+        }).join('')
+      + '</select></div>';
   }
 
   function rfCloseWizard() {
@@ -366,6 +385,7 @@
           + '<option value="' + rfEsc(RF_FACILITY) + '" selected>' + rfEsc(RF_FACILITY) + '</option>'
           + '</select></div>'
       + '</div>'
+      + rfProviderFieldHTML(d.provider)
       // Video visit: the same option the calendar's appointment form offers.
       // Accepting a video booking creates the patient's meeting room.
       + '<div class="rf-f rf-video">'
@@ -577,7 +597,7 @@
       mobile: rfVal('rfMobile'), email: rfVal('rfEmail'), notes: rfVal('rfNotes'),
       kind: rfMode,
       prefDate: rfVal('rfPrefDate'), prefTime: rfVal('rfPrefTime'),
-      visitType: rfVal('rfVisitType'), facility: rfVal('rfFacility'),
+      visitType: rfVal('rfVisitType'), facility: rfVal('rfFacility'), provider: rfVal('rfProvider'),
       videoVisit: !!(document.getElementById('rfVideoVisit') && document.getElementById('rfVideoVisit').checked)
     };
   }
@@ -829,6 +849,7 @@
           ['Time', pref.time ? rfTimeLabel(pref.time) : ''],
           ['Visit type', pref.visitType],
           ['Facility', pref.facility],
+          ['Provider', pref.provider],
           ['Video visit', pref.videoVisit ? 'Yes' : 'No']
         ], 'is-req') : '')
       + '</div>';
@@ -954,7 +975,7 @@
         addressLine: d.addressLine || '', doi: d.doi || ''
       },
       notes: d.notes || '',
-      preferred: { date: d.prefDate, time: d.prefTime, facility: d.facility, visitType: d.visitType, videoVisit: !!d.videoVisit }
+      preferred: { date: d.prefDate, time: d.prefTime, facility: d.facility, visitType: d.visitType, videoVisit: !!d.videoVisit, provider: d.provider || '' }
     };
 
     rfSending = true;
@@ -1171,10 +1192,21 @@
          page can find them until a reload. */
       if (typeof window.ctgLoadPatientStore === 'function') { try { await window.ctgLoadPatientStore(); } catch (e) {} }
       await rfLoad(true);
+      /* Then on to Patient Registration with the new patient loaded (19 Nov 2026), so the
+         rest of their details are completed there; saving updates this same record. */
+      if (d && d.patientId && rfGoToRegistration(d.patientId)) { rfBusyId = null; return; }
     } catch (e) {
       rfToast(e.message || 'Could not accept the referral', 'err');
     }
     rfBusyId = null; rfPaint();
+  }
+  function rfGoToRegistration(patientId) {
+    var canReg = typeof window.ctgCanPage !== 'function' || window.ctgCanPage('registration');
+    if (!canReg || typeof window.showPage !== 'function' || typeof window.regEditPatient !== 'function') return false;
+    window.showPage('registration');   // first: navigating resets the form
+    if (!window.regEditPatient(patientId)) return false;
+    rfToast('Complete the registration, then Save', '');
+    return true;
   }
 
   async function rfDecline(id) {

@@ -122,6 +122,8 @@
     'mtgGuestShare', 'mtgGuestToggleMore', 'mtgGuestVideo', 'mtgHopToNext', 'mtgInviteFromCall', 'mtgJoin',
     // Inviting a provider into a patient's visit (17 Nov 2026).
     'mtgInviteProviders', 'mtgInviteProviderSet', 'mtgInviteProvidersClose', 'mtgInviteProvidersFromCall',
+    'mtgAskToJoin', 'mtgCancelJoinRequest', 'mtgDecideProvider',
+    'fcrMarkSent', 'fcrUndoSent',
     'mtgMarkReady', 'mtgMoreDo', 'mtgMuteEveryone', 'mtgMuteParticipant', 'mtgOpenSchedule', 'mtgPickCam',
     'mtgPickMic', 'mtgPickSpk', 'mtgPlayRecording', 'mtgPopOutShare', 'mtgRecConsentToggle', 'mtgRemoveGuest',
     'mtgRenameParticipant', 'mtgRevokeShare', 'mtgSaveTranscript', 'mtgSetPane', 'mtgSetPatientLang',

@@ -37,6 +37,7 @@ function showPage(name){
   else if(name==='dailyNotes')updateDnContextBar()
   else if(name==='patientDailyNote')renderPatientDailyNoteDedicatedPage()
   else if(name==='dashboard')renderDashboard()
+  else if(name==='analytics'&&typeof renderAnalytics==='function')renderAnalytics()
   else if(name==='appointment')renderAppointments()
   else if(name==='apptConfigs')renderApptConfigs()
   else if(name==='apptRooms'&&typeof renderApptRooms==='function')renderApptRooms()
@@ -48,6 +49,7 @@ function showPage(name){
   else if(name==='patientCheckIn')renderPatientCheckIn()
   else if(name==='contacts')renderContacts()
   else if(name==='referrals'&&typeof renderReferrals==='function')renderReferrals()
+  else if(name==='outreach'&&typeof renderOutreach==='function')renderOutreach()
   else if(name==='neuroReferrals'&&typeof renderNeuroReferrals==='function')renderNeuroReferrals()
   else if(name==='neuroReferralLog'&&typeof renderNeuroReferralLog==='function')renderNeuroReferralLog()
   else if(name==='neuroBilling'&&typeof renderNeuroBilling==='function')renderNeuroBilling()
@@ -9521,7 +9523,7 @@ function docFileIsImage(f){
 }
 /* 'Assignment of Benefits' is intentionally not a manual upload category here
    the AoB is pulled automatically from the patient's saved Intake Form. */
-const DOC_UPLOAD_TYPES=['Valid ID','Referral Form','Police Report','Discharge Report','Intake Form','Other Report']
+const DOC_UPLOAD_TYPES=['Valid ID','Auto Insurance Card','Referral Form','Police Report','Discharge Report','Intake Form','Other Report']
 /* Providers and Technical Assistants are view-only in Documents - no upload, no delete. */
 const DOC_IMAGE_MAX_EDGE=2000        // px on the long edge - plenty for an ID
 const DOC_IMAGE_QUALITY=0.82
@@ -9967,9 +9969,51 @@ function renderPatientFCRPanel(p){
     </div>
     <div class="fcr-body">
       ${p.billingWithheld?'':`<div class="pld-record-card" data-cs="${__cs}margin-bottom:14px"><div class="pld-record-head"><div class="pld-record-title"><span>Statement Date</span></div></div><div class="fg" data-cs="${__cs}max-width:300px;margin-top:4px"><div class="date-field"><input type="text" id="fcrStatementDate" value="${escHtml((p.billing||{}).statementDate||'')}" placeholder="MM/DD/YYYY" data-oninput="saveFcrStatementDate('${p.id}')"><button type="button" class="cal-btn" data-onclick="toggleDatePicker('fcrStatementDate')" aria-label="Open date picker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button></div><div class="small-muted">Used as the Statement Date on the billing statement in this FCR.</div></div></div>`}
+      ${fcrSentCardHtml(p)}
       <div class="pld-detail-list">${head}${rows}</div>
     </div>
   </div></div>`
+}
+/* Sent to the law firm (17 Nov 2026): staff mark the day the FCR went out, and
+   the Analytics page counts it. The server stamps who and when
+   (POST/DELETE /api/patients/:id/fcr-sent); never shown to a law firm. */
+function fcrLocalToday(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function fcrUsDate(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));return m?(m[2]+'/'+m[3]+'/'+m[1]):String(iso||'')}
+function fcrSentCardHtml(p){
+  if(!p||currentUserIsLawyer())return ''
+  const pid=String(p.id||'').replace(/[^A-Za-z0-9_-]/g,'')
+  const s=p.fcrSent
+  const head='<div class="pld-record-head"><div class="pld-record-title"><span>Sent to Law Firm</span></div></div>'
+  if(s&&s.on){
+    return `<div class="pld-record-card fcr-sent-card is-sent">${head}<div class="fcr-sent-row">
+      <span class="fcr-sent-done">Sent ${escHtml(fcrUsDate(s.on))}${s.by?' · '+escHtml(s.by):''}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-onclick="fcrUndoSent('${pid}')">Undo</button></div></div>`
+  }
+  const today=fcrLocalToday()
+  return `<div class="pld-record-card fcr-sent-card">${head}<div class="fcr-sent-row">
+    <input type="date" id="fcrSentOn" class="fcr-sent-date" value="${today}" max="${today}" aria-label="Date the FCR was sent">
+    <button type="button" class="btn btn-primary btn-sm" data-onclick="fcrMarkSent('${pid}')">Mark as sent</button></div></div>`
+}
+async function fcrMarkSent(id){
+  const p=getPatient(id); if(!p)return
+  const on=String(document.getElementById('fcrSentOn')?.value||'').trim()
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(on)){showToast('Pick the date the FCR was sent','err');return}
+  try{
+    const r=await window.ctgApiFetch('/api/patients/'+encodeURIComponent(id)+'/fcr-sent',{method:'POST',body:JSON.stringify({on})})
+    p.fcrSent=(r&&r.fcrSent)||{on}
+    showToast('FCR marked as sent')
+  }catch(e){showToast((e&&e.message)||'Could not save','err');return}
+  if(selectedPatientId===id)renderPatientDetails(id)
+}
+async function fcrUndoSent(id){
+  const p=getPatient(id); if(!p||!p.fcrSent)return
+  if(!(await ctgConfirm('Undo "sent to law firm" for this FCR?',{okLabel:'Undo'})))return
+  try{
+    await window.ctgApiFetch('/api/patients/'+encodeURIComponent(id)+'/fcr-sent',{method:'DELETE'})
+    p.fcrSent=null
+    showToast('Marked as not sent')
+  }catch(e){showToast((e&&e.message)||'Could not save','err');return}
+  if(selectedPatientId===id)renderPatientDetails(id)
 }
 function fcrComputeAge(dob,ref){
   if(!dob)return ''
@@ -10502,7 +10546,7 @@ async function compileFCRPages(p,merged){
   }
   if(docs.aob)await addDataUrl(docs.aob.pdfDataUrl||docs.aob.dataUrl)
   if(docs.validId)await addDataUrl(docs.validId.dataUrl||docs.validId.pdfDataUrl)
-  for(const d of uploadsByType(['Assignment of Benefits','Valid ID']))await addDataUrl(await resolveUploadDataUrl(p,d))
+  for(const d of uploadsByType(['Assignment of Benefits','Valid ID','Auto Insurance Card']))await addDataUrl(await resolveUploadDataUrl(p,d))
   // 3. Patient-signed intake forms (Intake Form, AoB agreements, Minor
   //    Authorization). Generated from p.intake rather than stored as files, so
   //    they sit with the rest of the patient's paperwork, before billing.

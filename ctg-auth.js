@@ -26,8 +26,10 @@
      Control account editor reads the same way as the portal navigation. */
   var PAGES = [
     { key: 'dashboard',      label: 'Dashboard',                 group: 'Patient Workflow' },
+    { key: 'analytics',      label: 'Analytics',                 group: 'Patient Workflow' },
     { key: 'registration',   label: 'Patient Registration',      group: 'Patient Workflow' },
     { key: 'referrals',      label: 'Referrals',                 group: 'Patient Workflow' },
+    { key: 'outreach',       label: 'Outreach',                  group: 'Patient Workflow' },
     { key: 'neuroReferrals', label: 'Neurologist Referrals',     group: 'Patient Workflow' },
     { key: 'neuroBilling',   label: 'Neurologist Billing',       group: 'Patient Workflow' },
     { key: 'neuroPayments',  label: 'Neurologist Payments',      group: 'Patient Workflow' },
@@ -94,6 +96,19 @@
       { key: 'ref.accept',         label: 'Accept · Create Patient Record' },
       { key: 'ref.schedule',       label: 'Book Appointment from Referral' },
       { key: 'ref.decline',        label: 'Decline / Withdraw' }
+    ],
+    analytics: [
+      { key: 'an.compliance',      label: 'Compliance numbers (Outreach, Patients to submit, FCR status)' },
+      { key: 'an.appointments',    label: 'Appointments & Appointment Adherence' },
+      { key: 'an.patients',        label: 'Patient detail · For ACE / For Initial Exam' },
+      { key: 'an.names',           label: 'See patient names on hover' },
+      { key: 'an.setStatus',       label: 'Set a patient\u2019s status by hand' }
+    ],
+    outreach: [
+      { key: 'or.list',            label: 'Outreach list' },
+      { key: 'or.add',             label: 'Add a referral' },
+      { key: 'or.accept',          label: 'Accept · schedule the ACE' },
+      { key: 'or.delete',          label: 'Delete (while in progress)' }
     ],
     patientLists: [
       { key: 'pl.overview',        label: 'Overview' },
@@ -467,6 +482,8 @@
         if (key === 'day1Choices' && typeof window.ctgDay1ChoicesRealtime === 'function') window.ctgDay1ChoicesRealtime();
       }
       if (msg.type === 'data:chart' && typeof window.ctgPatientChartRealtime === 'function') window.ctgPatientChartRealtime();
+      // Any page may listen for changes (Analytics re-counts itself on them, 19 Nov 2026).
+      try { window.dispatchEvent(new CustomEvent('ctg:realtime', { detail: { type: msg.type } })); } catch (e) {}
       /* The Command Center wall reacts to anything that changes a room: a
          guest knocking, a host admitting, a meeting starting or ending, or the
          day's bookings changing. It only refreshes while it is on screen. */
@@ -516,7 +533,8 @@
     if (!u) return null;
     return { id: u.id, username: u.username, displayName: u.displayName, role: u.role,
              lawFirm: u.lawFirm || '', active: u.active !== false,
-             pages: u.role === 'admin' ? ALL_KEYS.slice() : (u.pages || []) };
+             pages: u.role === 'admin' ? ALL_KEYS.slice() : (u.pages || []),
+             primaryProviderId: u.role === 'provider' && u.primaryProviderId ? u.primaryProviderId : null };
   }
   // Human-friendly temporary password, e.g. "Temp-7fk3q9".
   function localTempPassword() { return 'Temp-' + Math.random().toString(36).slice(2, 8); }
@@ -675,7 +693,8 @@
       if (list.some(function (u) { return u.username.toLowerCase() === uname.toLowerCase(); })) throw new Error('That username is already taken');
       var acc = { id: localNewId(), username: uname, displayName: (payload.displayName || uname).trim(), role: payload.role,
                   lawFirm: payload.role === 'lawyer' ? String(payload.lawFirm || '').trim() : '',
-                  password: payload.password, pages: payload.role === 'admin' ? PAGE_KEYS.slice() : (payload.pages || ['internalMessaging']) };
+                  password: payload.password, pages: payload.role === 'admin' ? PAGE_KEYS.slice() : (payload.pages || ['internalMessaging']),
+                  primaryProviderId: payload.role === 'provider' && payload.primaryProviderId ? String(payload.primaryProviderId) : null };
       list.push(acc); localSave(list); return localView(acc);
     },
 
@@ -696,6 +715,14 @@
         u.role = payload.role;
         if (payload.role === 'admin') u.pages = PAGE_KEYS.slice();
         if (payload.role !== 'lawyer') u.lawFirm = '';
+        if (payload.role !== 'provider') u.primaryProviderId = null;
+      }
+      // Provider hierarchy (18 Nov 2026), kept as the server keeps it.
+      if (payload.primaryProviderId !== undefined && u.role === 'provider') {
+        var pp = payload.primaryProviderId ? String(payload.primaryProviderId) : null;
+        if (pp && pp === String(id)) throw new Error('A provider cannot be their own primary provider.');
+        if (pp && list.some(function (x) { return x.primaryProviderId === id; })) throw new Error('This provider has secondary providers assigned under them. Move those to another primary provider first.');
+        u.primaryProviderId = pp;
       }
       if (payload.lawFirm != null && (payload.role === 'lawyer' || u.role === 'lawyer')) u.lawFirm = String(payload.lawFirm).trim();
       if (payload.password) u.password = payload.password;
@@ -2262,6 +2289,8 @@
     });
     var counts = {};
     sorted.forEach(function (u) { counts[u.role] = (counts[u.role] || 0) + 1; });
+    acNameById = {};
+    sorted.forEach(function (u) { acNameById[String(u.id).toLowerCase()] = u.displayName || u.username; });
 
     var h = '<div class="ac-list-view">';
     var lastRole = null;
@@ -2297,7 +2326,8 @@
     var locked = !!(lockedAt && lockedAt.getTime() > Date.now());
     var lockedText = locked ? 'Locked until ' + lockedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
     var display = u.displayName || u.username;
-    var meta = '@' + (u.username || '') + (u.role === 'lawyer' && u.lawFirm ? ' · ' + u.lawFirm : '');
+    var under = u.role === 'provider' && u.primaryProviderId ? (acNameById[String(u.primaryProviderId).toLowerCase()] || 'a primary provider') : '';
+    var meta = '@' + (u.username || '') + (u.role === 'lawyer' && u.lawFirm ? ' · ' + u.lawFirm : '') + (under ? ' · under ' + under : '');
     var accountOpen = !!acOpenAccounts[u.id];
     var h = '<details class="ac-account-card" data-id="' + esc(u.id) + '"' + (accountOpen ? ' open' : '') + ' data-ontoggle="acRememberAccountOpen(this)">'
       + '<summary class="ac-account-summary">'
@@ -2308,7 +2338,7 @@
       + '<span class="ac-user-name">' + esc(display) + '</span>'
       + '<span class="ac-user-meta">' + esc(meta) + '</span>'
       + '</span>'
-      + '<span class="ac-role-badge' + (isAdmin ? ' admin' : '') + '">' + esc(ROLE_LABELS[u.role] || u.role) + '</span>'
+      + '<span class="ac-role-badge' + (isAdmin ? ' admin' : '') + '">' + esc(u.role === 'provider' ? (u.primaryProviderId ? 'Secondary Provider' : 'Primary Provider') : (ROLE_LABELS[u.role] || u.role)) + '</span>'
       + (inactive ? '<span class="ac-role-badge inactive">Inactive</span>' : '')
       + (locked ? '<span class="ac-role-badge locked" title="Too many wrong passwords or codes. It unlocks by itself at this time.">' + esc(lockedText) + '</span>' : '')
       + '</span>'
@@ -2466,11 +2496,38 @@
     acSavePermissions(id);
   };
 
+  var acNameById = {};   // account id -> name, for "under <primary>" in the list
   window.acToggleLawFirm = function () {
     window.ctgRefreshLawFirmSelections();
     var row = $('acLawFirmRow');
     if (row) row.style.display = val('acRole') === 'lawyer' ? '' : 'none';
+    var prow = $('acPrimaryRow');
+    var secondary = val('acRole') === 'provider_secondary';
+    if (prow) prow.style.display = secondary ? '' : 'none';
+    if (secondary) acFillPrimaryProviders();
   };
+
+  /* Provider hierarchy (18 Nov 2026): the Primary Provider dropdown lists
+     active provider accounts that are primaries themselves, never the account
+     being edited. The server checks the same rules on save. */
+  var acPrimaryWanted = '';
+  async function acFillPrimaryProviders() {
+    var sel = $('acPrimaryProvider');
+    if (!sel) return;
+    var keep = sel.value || acPrimaryWanted;
+    var list = [];
+    try { list = await backend.listAccounts(); } catch (e) { list = []; }
+    var lo = function (v) { return String(v || '').toLowerCase(); };
+    var opts = list.filter(function (u) {
+      return u.role === 'provider' && u.active !== false && !u.primaryProviderId && lo(u.id) !== lo(acEditingId);
+    }).sort(function (a, b) { return String(a.displayName || a.username).localeCompare(String(b.displayName || b.username)); });
+    sel.innerHTML = '<option value="">— Select the primary provider —</option>' + opts.map(function (u) {
+      return '<option value="' + esc(u.id) + '">' + esc(u.displayName || u.username) + '</option>';
+    }).join('');
+    if (keep && opts.some(function (u) { return lo(u.id) === lo(keep); })) {
+      sel.value = opts.filter(function (u) { return lo(u.id) === lo(keep); })[0].id;
+    }
+  }
 
   window.acSaveAccount = async function () {
     var payload = {
@@ -2483,6 +2540,13 @@
       mfaEnabled: !!($('acMfaEnabled') && $('acMfaEnabled').checked)
     };
     if (REMOTE && $('acTotpPrompt')) payload.authenticatorPrompt = !!$('acTotpPrompt').checked;
+    if (payload.role === 'provider_secondary') {
+      payload.role = 'provider';
+      payload.primaryProviderId = val('acPrimaryProvider');
+      if (!payload.primaryProviderId) { toast('Select the primary provider this secondary provider is under', 'err'); return; }
+    } else if (payload.role === 'provider') {
+      payload.primaryProviderId = null;
+    }
     if (payload.password) {
       var pwErr = passwordPolicyError(payload.password);
       if (pwErr) { toast(pwErr, 'err'); return; }
@@ -2523,7 +2587,8 @@
     window.ctgRefreshLawFirmSelections();
     setVal('acDisplayName', u.displayName || '');
     setVal('acUsername', u.username);
-    setVal('acRole', u.role);
+    acPrimaryWanted = u.primaryProviderId || '';
+    setVal('acRole', u.role === 'provider' && u.primaryProviderId ? 'provider_secondary' : u.role);
     setVal('acLawFirm', u.lawFirm || '');
     acToggleLawFirm();
     setVal('acEmail', u.email || '');
@@ -2571,6 +2636,8 @@
     setVal('acDisplayName', '');
     setVal('acUsername', '');
     setVal('acRole', 'lawyer');
+    acPrimaryWanted = '';
+    setVal('acPrimaryProvider', '');
     window.ctgRefreshLawFirmSelections();
     setVal('acLawFirm', '');
     acToggleLawFirm();

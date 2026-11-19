@@ -5,6 +5,7 @@
   // From the list: may this account invite providers into a visit (17 Nov 2026)?
   let mtgCanInviteProviders = false;
   let mtgLobby = [];          // guests currently knocking, across all meetings
+  let mtgProvReqs = [];       // providers asking to join the call I am in (18 Nov 2026)
   let mtgLobbySig = '';       // last rendered lobby state; see mtgRefreshLobby
   let mtgActive = null;       // The meeting we are in, and whether staff have confirmed the patient is
 // actually present. That is separate from being admitted; see the note on
@@ -271,7 +272,7 @@
 
   async function mtgRefreshLobby() {
     // Only live meetings can have anyone waiting; a visit this provider is not in is not theirs to admit to.
-    const live = mtgList.filter(m => m.status === 'live' && !m.locked);
+    const live = mtgList.filter(m => m.status === 'live' && !m.locked && !(m.requestToJoin && !m.callGroupId));
     let all = [];
     for (const m of live) {
       try {
@@ -284,7 +285,18 @@
       } catch (e) { /* a meeting ended mid-poll */ }
     }
     mtgLobby = all;
+    /* Providers asking to join the patient visit I am in (18 Nov 2026). Anyone
+       in the call may let them in; the server checks who is asking. */
+    let prov = [];
+    if (mtgActive && mtgActive.patientId) {
+      try {
+        const d = await window.ctgApiFetch('/api/meetings/' + mtgActive.id + '/join-requests');
+        prov = ((d && d.requests) || []).map(x => Object.assign({ meetingId: mtgActive.id }, x));
+      } catch (e) { /* not mine to admit, or the meeting ended */ }
+    }
+    mtgProvReqs = prov;
     const sig = JSON.stringify([
+      prov.map(x => x.accountId),
       all.map(g => g.meetingId + ':' + g.guestId + ':' + g.displayName),
       (mtgGuests || []).map(g => g.guestId + ':' + g.displayName + ':' + g.state)
     ]);
@@ -447,6 +459,13 @@
           + (ended ? '<span class="small-muted">Ended</span>'
             /* Another provider's patient visit: listed, but joined only by invite (17 Nov 2026). */
             : m.locked ? '<span class="mtg-invite-needed" title="Ask Dr. Grande, an administrator or a therapy assistant to invite you">Invite needed</span>'
+            /* A patient's visit: a provider asks, someone in the call lets them in (18 Nov 2026). */
+            : (m.requestToJoin && !m.callGroupId)
+              ? (mtgCanInviteProviders && m.patientId ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgInviteProviders(\'' + m.id + '\')">Invite provider</button>' : '')
+                + (m.joinRequest === 'pending'
+                  ? '<span class="mtg-invite-needed mtg-jr-wait">Waiting to be let in</span><button class="btn btn-ghost btn-sm" data-onclick="mtgCancelJoinRequest(\'' + m.id + '\')">Cancel</button>'
+                  : (m.joinRequest === 'declined' ? '<span class="mtg-invite-needed">Not let in</span>' : '')
+                    + '<button class="btn btn-primary btn-sm" data-onclick="mtgAskToJoin(\'' + m.id + '\')">' + (m.joinRequest === 'declined' ? 'Ask again' : 'Ask to join') + '</button>')
             : (mtgCan('mtg.invite') ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgCopyLink(\'' + m.id + '\')">Get guest link</button>' : '')
               + (mtgCanInviteProviders && m.patientId ? '<button class="btn btn-ghost btn-sm" data-onclick="mtgInviteProviders(\'' + m.id + '\')">Invite provider</button>' : '')
               + '<button class="btn btn-primary btn-sm" data-onclick="mtgJoin(\'' + m.id + '\')">' + (live ? 'Join' : 'Start') + '</button>'
@@ -510,6 +529,24 @@
       toast(name + ' was removed from the meeting', 'ok');
       mtgRefreshLobby();
     } catch (e) { toast(e.message || 'Could not remove them', 'err'); }
+  };
+
+  function mtgProvReqRowHtml(x) {
+    return '<div class="mtg-side-row mtg-side-knock">'
+      + '<span class="im-call-avatar tiny">' + esc((x.name || '?').slice(0, 2).toUpperCase()) + '</span>'
+      + '<span class="mtg-side-name">' + esc(x.name || 'A provider') + '</span>'
+      + '<button class="mtg-deny" title="Decline" aria-label="Decline ' + esc(x.name || 'provider') + '" data-onclick="mtgDecideProvider(\'' + esc(x.meetingId) + '\',\'' + esc(x.accountId) + '\',false)">✕</button>'
+      + '<button class="mtg-admit" title="Let in" aria-label="Let ' + esc(x.name || 'provider') + ' in" data-onclick="mtgDecideProvider(\'' + esc(x.meetingId) + '\',\'' + esc(x.accountId) + '\',true)">✓</button>'
+      + '</div>';
+  }
+  window.mtgDecideProvider = async function (meetingId, accountId, admit) {
+    try {
+      await window.ctgApiFetch('/api/meetings/' + encodeURIComponent(meetingId) + '/join-requests/' + encodeURIComponent(accountId),
+        { method: 'POST', body: JSON.stringify({ admit: !!admit }) });
+      const who = (mtgProvReqs.find(x => x.accountId === accountId) || {}).name || 'The provider';
+      toast(admit ? who + ' can join now' : who + ' was not let in', admit ? 'ok' : '');
+    } catch (e) { toast(e.message || 'Could not answer the request', 'err'); }
+    mtgRefreshLobby();
   };
 
   function mtgLobbyRowHtml(g) {
@@ -803,6 +840,7 @@
   async function mtgJoin(id, guestToken) {
     const m = await mtgFind(id);
     if (!m) return;
+    if (m.requestToJoin && !m.callGroupId) { mtgAskToJoin(id); return; }
     if (m.locked || !m.callGroupId) { toast(MTG_INVITE_NEEDED, 'err'); return; }
     /* Staff get the same warning as guests. Someone joining a session that is
        already being recorded is entitled to know before they are in it,
@@ -856,6 +894,7 @@
   async function mtgDoJoin(id, prefs) {
     const m = await mtgFind(id);
     if (!m) return;
+    if (m.requestToJoin && !m.callGroupId) { toast('Ask to join first - someone in the call lets you in.', 'err'); return; }
     if (m.locked || !m.callGroupId) { toast(MTG_INVITE_NEEDED, 'err'); return; }
     // Remembered so hopping straight to the next room can carry the camera,
     // microphone and background already chosen for this shift - see
@@ -936,10 +975,57 @@
   }
   window.mtgJoin = mtgJoin;
 
+  /* Asking to join a patient's visit (18 Nov 2026): every provider asks, and
+     someone already in the call lets them in. Waits here, checking every few
+     seconds; once let in, the usual camera check opens. */
+  let mtgJrPoll = null, mtgJrId = null;
+  function mtgJrClose() {
+    clearInterval(mtgJrPoll); mtgJrPoll = null; mtgJrId = null;
+    const el = document.getElementById('mtgJrModal'); if (el) { el.className = 'mtg-modal'; el.innerHTML = ''; }
+  }
+  window.mtgAskToJoin = async function (id) {
+    const m = await mtgFind(id);
+    if (!m) return;
+    let st;
+    try { st = await window.ctgApiFetch('/api/meetings/' + id + '/join-request', { method: 'POST' }); }
+    catch (e) { toast(e.message || 'Could not ask to join', 'err'); return; }
+    if (st && st.state === 'admitted') { await mtgLoad(); mtgJoin(id); return; }
+    const el = document.getElementById('mtgJrModal') || (function () {
+      const d = document.createElement('div'); d.id = 'mtgJrModal'; document.body.appendChild(d); return d;
+    })();
+    el.className = 'mtg-modal show';
+    el.innerHTML = '<div class="mtg-modal-card mtg-jr-card" role="dialog" aria-modal="true" aria-labelledby="mtgJrTitle">'
+      + '<div class="mtg-jr-spin" aria-hidden="true"></div>'
+      + '<h3 id="mtgJrTitle">Asking to join</h3>'
+      + '<p class="mtg-jr-what">' + esc(m.title) + '</p>'
+      + '<p class="small-muted" aria-live="polite">Someone in the call will let you in. You can keep this open.</p>'
+      + '<div class="mtg-jr-actions"><button class="btn btn-ghost" data-onclick="mtgCancelJoinRequest(\'' + esc(id) + '\')">Cancel</button></div>'
+      + '</div>';
+    mtgLoad();
+    clearInterval(mtgJrPoll);
+    mtgJrId = id;
+    mtgJrPoll = setInterval(async function () {
+      if (mtgJrId !== id) return;
+      let s;
+      try { s = await window.ctgApiFetch('/api/meetings/' + id + '/join-request'); } catch (e) { return; }
+      if (!s || mtgJrId !== id) return;
+      if (s.state === 'admitted') { mtgJrClose(); await mtgLoad(); toast('You were let in', 'ok'); mtgJoin(id); }
+      else if (s.state === 'declined') { mtgJrClose(); await mtgLoad(); toast('You were not let in this time', 'err'); }
+      else if (s.state === 'none') { mtgJrClose(); await mtgLoad(); }   // the meeting ended and requests were cleared
+    }, 3000);
+  };
+  window.mtgCancelJoinRequest = async function (id) {
+    mtgJrClose();
+    try { await window.ctgApiFetch('/api/meetings/' + id + '/join-request', { method: 'DELETE' }); } catch (e) { /* already gone */ }
+    mtgLoad();
+  };
+
   window.mtgAutoJoin = async function (id) {
     if (!window.ACS) { toast('Calling is still loading — Auto-Pilot will retry.', 'err'); return false; }
     const m = await mtgFind(id);
     if (!m) return false;
+    // A provider on a patient's visit asks first (18 Nov 2026).
+    if (m.requestToJoin && !m.callGroupId) { window.mtgAskToJoin(id); return false; }
     try {
       await mtgDoJoin(id, { camOn: true, micOn: false });
       return true;
@@ -3639,6 +3725,10 @@
         + (mtgLobby.length
             ? '<div class="mtg-side-head">Waiting<span>' + mtgLobby.length + '</span></div>'
               + mtgLobby.map(mtgLobbyRowHtml).join('')
+            : '')
+        + (mtgProvReqs.length
+            ? '<div class="mtg-side-head">Providers asking to join<span>' + mtgProvReqs.length + '</span></div>'
+              + mtgProvReqs.map(mtgProvReqRowHtml).join('')
             : '')
         /* Footer. These two were identical ghost buttons, which put a
            developer troubleshooting tool at exactly the same visual weight as

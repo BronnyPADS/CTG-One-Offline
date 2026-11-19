@@ -12,10 +12,10 @@
 <link rel="apple-touch-icon" sizes="180x180" href="favicon-180.png?v=20260930b">
 <meta name="theme-color" content="#1f7ac4">
 <link href="fonts/fonts.css?v=20260928a" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20261117c">
+<link rel="stylesheet" href="styles.css?v=20261119g">
 <script src="csp-styles.js?v=20261005b"></script>
 <script src="boot-theme.js?v=20261022b"></script>
-<script src="ctg-actions.js?v=20261117c"></script>
+<script src="ctg-actions.js?v=20261118a"></script>
 <link rel="stylesheet" href="day1-enhance.css?v=20261026a">
 </head>
 <body class="sidebar-visible auth-active">
@@ -162,6 +162,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
     Dashboard
   </a>
+  <a class="side-link" id="sideAnalytics" data-page="analytics" data-onclick="showPage('analytics')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    Analytics
+  </a>
   <div class="side-group open" id="sideRegGroup">
     <a class="side-link side-group-toggle" data-onclick="toggleSideGroup('sideRegGroup')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
@@ -187,6 +191,11 @@
   <a class="side-link" id="sideReferrals" data-page="referrals" data-onclick="showPage('referrals')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l2 3h5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M9 14h6"/><path d="m13 11 3 3-3 3"/></svg>
     Referrals
+  </a>
+  <!-- Outreach (18 Nov 2026): referrals that come by email, typed in by the practice (outreach.js) -->
+  <a class="side-link" id="sideOutreach" data-page="outreach" data-onclick="showPage('outreach')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+    Outreach
   </a>
   <!-- Neurologist pages as one group, like Appointment (17 Nov 2026): Neurologist Referrals
        (Virginia incidents, neuro-referrals.js) and what the practice owes the neurologist. -->
@@ -380,6 +389,11 @@
 <div class="wrap"><div id="dashboardMount"></div></div>
 </div>
 
+<!-- Analytics: counts only (analytics.js) -->
+<div class="page" id="page-analytics">
+<div class="wrap"><div id="analyticsMount"></div></div>
+</div>
+
 <div class="page" id="page-noAccess">
 <div class="wrap">
   <div class="card" data-cs-boot="margin-top:40px;text-align:center">
@@ -435,12 +449,21 @@
           <div class="fg"><label>Account Type</label>
             <select id="acRole" data-onchange="acToggleLawFirm()">
               <option value="lawyer">Law Firm</option>
-              <option value="provider">Provider</option>
+              <option value="provider">Primary Provider</option>
+              <!-- A provider assigned under a primary provider (18 Nov 2026); saved as role provider + primaryProviderId. -->
+              <option value="provider_secondary">Secondary Provider</option>
               <option value="ta">Technical Assistant (TA)</option>
               <option value="compliance">Compliance</option>
               <option value="admin">Administrator</option>
             </select>
           </div>
+        </div>
+        <div class="g2" id="acPrimaryRow" data-cs-boot="display:none">
+          <div class="fg"><label for="acPrimaryProvider">Primary Provider</label>
+            <select id="acPrimaryProvider"><option value="">— Select the primary provider —</option></select>
+            <div class="small-muted ac-field-note">The primary provider this secondary provider is assigned under.</div>
+          </div>
+          <div class="fg"></div>
         </div>
         <div class="g2" id="acLawFirmRow">
           <div class="fg"><label>Law Firm</label>
@@ -2442,6 +2465,10 @@
 </div>
 
 <!-- Referrals (law-firm intake ↔ clinic inbox; referrals.js owns the body) -->
+<!-- Outreach: email referrals typed in by the practice (outreach.js) -->
+<div class="page" id="page-outreach">
+<div class="wrap"><div id="outreachMount"></div></div>
+</div>
 <div class="page" id="page-referrals">
 <div class="wrap" data-cs-boot="max-width:none">
   <div id="referralsMount"></div>
@@ -2955,9 +2982,11 @@
 <!-- CMS-1500 claim form (Forms > Claim Form tab). Loaded after intake.js,
      which calls cfTabHTML() when that tab is active. -->
 <script src="claimform.js?v=20261105a"></script>
-<script src="referrals.js?v=20261005e"></script>
+<script src="referrals.js?v=20261119a"></script>
+<script src="outreach.js?v=20261119c"></script>
 <script src="neuro-referrals.js?v=20261112a"></script>
 <script src="neuro-billing.js?v=20261112f"></script>
+<script src="analytics.js?v=20261119h"></script>
 <!-- Authentication & role-based access control (static localStorage version) -->
 <script src="input-limits.js?v=20260916d"></script>
 <script src="backup-ui.js?v=20261005e"></script>
@@ -2969,7 +2998,7 @@
      someone who actually switches a transcript on. -->
 <script src="meeting-transcript.js?v=20260923a"></script>
 <script src="meeting-guest.js?v=20261005e"></script>
-<script src="meetings.js?v=20261117c"></script>
+<script src="meetings.js?v=20261118a"></script>
 <!-- Day 1 add-ons: MOI story, extra questions, even two-column layout. They plug into app.js (window.ctgDay1Hooks). -->
 <script src="day1-moi.js?v=20261113b"></script>
 <script src="day1-extras.js?v=20261104b"></script>
@@ -2978,7 +3007,7 @@
 <script src="day1-docx.js?v=20261109a"></script>
 <script src="fcr-docx.js?v=20261113b"></script>
 <script src="offline-api.js"></script>
-<script src="ctg-auth.js?v=20261117a"></script>
+<script src="ctg-auth.js?v=20261119b"></script>
 <!-- Patient-facing forms (opened via #pf= invite link) -->
 <script src="patientforms.js?v=20261012a"></script>
 <script src="notesform.js?v=20261005e"></script>
