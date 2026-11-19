@@ -14288,13 +14288,22 @@ function buildPDF(name,opts){
   H2('D. RED FLAGS for acute emergency management',false,true)
   redFlagBox()
 
+  // No-follow-up is authoritative from the saved record (DOM may not reflect it
+  // when the ACE is rebuilt headlessly for the FCR), falling back to the live form.
+  const acePatient=(opts&&opts.patient)||(currentAcePatientId?getPatient(currentAcePatientId):null)
+  const noFollowup=(acePatient&&isPatientAceNoFollowup(acePatient))||isAceNoFollowupSelected()
+
   H2('E. Diagnosis (ICD-10)',false,true)
   {
     /* E. names the concussion only: Concussion w/o LOC (S06.0X0A) or w LOC
        (S06.0X1A), both if both are ticked (16 Oct 2026). Every ticked code
-       still prints under ASSESSMENT > Diagnosis. */
+       still prints under ASSESSMENT > Diagnosis. A patient with no concussion
+       (Recommendation "No follow-up") gets "No follow-up needed." here instead
+       (19 Nov 2026). */
     const aceDx=dxCodes.filter(d=>d.code.trim()==='S06.0X0A'||d.code.trim()==='S06.0X1A')
-    if(aceDx.length>0){
+    if(noFollowup){
+      para(['No follow-up needed.'])
+    }else if(aceDx.length>0){
       aceDx.forEach(d=>para([{t:'('+d.code+')  ',b:true},{t:d.desc}]))
     }else{
       para(['No diagnosis code selected'])
@@ -14365,10 +14374,6 @@ function buildPDF(name,opts){
   H2('Reasonableness')
   para(['The treatment, management and charges rendered in the care of this patient have been fair, reasonable and customary for the greater Baltimore-Washington D.C. region.'])
 
-  // No-follow-up is authoritative from the saved record (DOM may not reflect it
-  // when the ACE is rebuilt headlessly for the FCR), falling back to the live form.
-  const acePatient=(opts&&opts.patient)||(currentAcePatientId?getPatient(currentAcePatientId):null)
-  const noFollowup=(acePatient&&isPatientAceNoFollowup(acePatient))||isAceNoFollowupSelected()
   H1('PLAN – TREATMENT PLAN OF CARE')
   if(noFollowup){
     // No follow-up: the patient is discharged, so the plan collapses to a

@@ -52,4 +52,4 @@ Not available offline: video meetings, messaging, texts/emails to patients,
 emailed sign-in codes, RecoverArc notes, backups.
 
 ---
-Version: 2026-11-17 (CTG One 6690983)
+Version: 2026-11-19 (CTG One 588ee94)
