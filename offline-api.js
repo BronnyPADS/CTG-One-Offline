@@ -735,6 +735,23 @@
       return { period: per, through: thr, today: td, weeks: wks }
     }
     // --- Analytics, Technical Assistant: patient adherence by week, as /api/analytics/adherence
+    // For ACE / For Initial Exam by today, yesterday, this week or this month (20 Nov 2026), as the server.
+    if (P[0] === 'analytics' && P[1] === 'exams' && method === 'GET') {
+      if (u && u.role === 'lawyer') throw httpError(403, 'Not permitted')
+      var ew = r.query.when || 'week', etd = today(), ef, et
+      if (ew === 'today') { ef = et = etd }
+      else if (ew === 'yesterday') { ef = et = addD(etd, -1) }
+      else if (ew === 'week') { var edw = new Date(etd + 'T00:00:00Z').getUTCDay(); ef = addD(etd, edw === 0 ? -6 : 1 - edw); et = addD(ef, 6) }
+      else if (ew === 'month') { ef = etd.slice(0, 8) + '01'; var eld = new Date(Date.UTC(+etd.slice(0, 4), +etd.slice(5, 7), 0)); et = eld.toISOString().slice(0, 10) }
+      else throw httpError(400, 'Pick today, yesterday, this week or this month.')
+      var eName = {}; load(K.patients, []).forEach(function (x) { eName[x.id] = [x.firstName, x.lastName].filter(Boolean).join(' ').trim() })
+      var eA = load(K.appts, []).filter(function (x) { return liveA(x) && x.date >= ef && x.date <= et })
+      var eOf = function (y) { return { id: y.patientId || null, name: eName[y.patientId] || y.patientName || '(no name)', date: y.date, time: y.start || '', status: y.status || '' } }
+      var eBy = function (p, q) { return (p.date + p.time).localeCompare(q.date + q.time) }
+      return { when: ew, from: ef, to: et, today: etd, exams: {
+        ace: eA.filter(function (y) { return /^ACE/i.test(y.visitType || '') }).map(eOf).sort(eBy),
+        ie: eA.filter(function (y) { return /^(Day 2 Exam|Initial Exam)/i.test(y.visitType || '') }).map(eOf).sort(eBy) } }
+    }
     if (P[0] === 'analytics' && P[1] === 'adherence') {
       if (u && u.role === 'lawyer') throw httpError(403, 'Not permitted')
       var ADH_KEY = 'ctg_offline_patient_adherence'

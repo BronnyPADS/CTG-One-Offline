@@ -15032,6 +15032,8 @@ html[data-theme="dark"] .nr-report>b{color:#86efac}
 #page-analytics .an-dot-sent{background:var(--an-accent)}
 #page-analytics .an-dot-pending{background:var(--an-amber)}
 #page-analytics .an-dot-awaiting{background:var(--an-gray)}
+/* For ACE / For Initial Exam filter (20 Nov 2026) */
+#page-analytics .an-exam-when{margin:4px 0 12px}
 #page-analytics .an-muted{font-size:13px;color:var(--an-muted)}
 #page-analytics .an-error{font-size:13px;color:#B42318;background:#FEF3F2;border:1px solid #FECDCA;border-radius:10px;padding:10px 12px}
 /* Technical Assistant */

@@ -81,7 +81,8 @@
       can('an.compliance') ? api('/api/analytics/summary' + rangeQuery()) : none(),
       can('an.appointments') ? loadAdherenceWeeks(true) : none(),
       can('an.appointments') ? api('/api/analytics/appointments' + rangeQuery()).catch(function () { return null }) : none(),
-      can('an.patients') ? loadPatientDetail(true) : none()
+      can('an.patients') ? loadPatientDetail(true) : none(),
+      can('an.patients') ? loadExams(true) : none()
     ]).then(function (r) {
       state.appt = r[2] || null
       state.summary = r[0] || null
@@ -462,11 +463,30 @@
       }).join('') + '</tbody></table></div>'
   }
 
-  /* "For ACE" (Day 1) and "For Initial Exam" (Day 2): who is on the calendar for one in the
-     same two weeks as Patient detail (18 Nov 2026). */
+  /* "For ACE" (Day 1) and "For Initial Exam" (Day 2): who is on the calendar for one (18 Nov 2026),
+     today, yesterday, this week or this month (20 Nov 2026; This week first). */
+  var EXAM_WHEN = [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', 'This week'], ['month', 'This month']]
+  var EXAM_EMPTY = { today: 'today', yesterday: 'yesterday', week: 'this week', month: 'this month' }
+  function loadExams(quiet) {
+    var when = state.exWhen || 'week'
+    return api('/api/analytics/exams?when=' + when).then(function (r) {
+      if ((state.exWhen || 'week') !== when) return
+      state.ex = r; state.exErr = ''
+      if (!quiet) paint()
+    }).catch(function (e) {
+      state.ex = null; state.exErr = (e && e.message) || 'Could not load the exam lists.'
+      if (!quiet) paint()
+    })
+  }
   function examBlock() {
-    var ex = state.pd && !state.pdErr && state.pd.exams
-    if (!ex) return ''
+    var when = state.exWhen || 'week'
+    var chips = '<div class="an-presets an-exam-when" role="group" aria-label="Show For ACE and For Initial Exam for">'
+      + EXAM_WHEN.map(function (x) {
+        return '<button type="button" class="an-chip-btn' + (when === x[0] ? ' is-on' : '') + '" data-an="ex-when" data-w="' + x[0] + '" aria-pressed="' + (when === x[0]) + '">' + x[1] + '</button>'
+      }).join('') + '</div>'
+    if (state.exErr) return chips + '<div class="an-error" role="alert">' + esc(state.exErr) + '</div>'
+    var ex = state.ex && state.ex.exams
+    if (!ex) return chips + '<div class="an-muted an-pad">Loading…</div>'
     var tone = { 'Check-in': ['ok', 'Checked in'], 'Missed': ['bad', 'Missed'], 'Reschedule': ['warn', 'Rescheduled'] }
     var pill = function (s) { var t = tone[s] || ['gray', s || 'Scheduled']; return '<span class="an-status is-' + t[0] + ' is-static"><i></i>' + esc(t[1]) + '</span>' }
     // Unconfirmed (or no status yet) at the bottom; the rest first. Date order kept within each (19 Nov 2026).
@@ -485,10 +505,10 @@
             + rows.map(function (r) {
               return '<tr><td class="an-pd-name">' + esc(r.name) + '</td><td>' + esc(dayLabel(r.date)) + (r.time ? ' · ' + esc(r.time) : '') + '</td><td>' + pill(r.status) + '</td></tr>'
             }).join('') + '</tbody></table></div>'
-          : '<div class="an-muted an-pad">No one on the calendar for this in these two weeks.</div>')
+          : '<div class="an-muted an-pad">No one on the calendar for this ' + esc(EXAM_EMPTY[when]) + '.</div>')
         + '</section>'
     }
-    return '<div class="an-exams">' + table('For ACE', 'Day 1', ex.ace || []) + table('For Initial Exam', 'Day 2', ex.ie || []) + '</div>'
+    return chips + '<div class="an-exams">' + table('For ACE', 'Day 1', ex.ace || []) + table('For Initial Exam', 'Day 2', ex.ie || []) + '</div>'
   }
 
   function patientBlock() {
@@ -656,6 +676,10 @@
     var a = b.getAttribute('data-an')
     if (a === 'refresh') load()
     else if (a === 'preset') { var pr = presetRange(b.getAttribute('data-p')); setRange(pr.from, pr.to) }
+    else if (a === 'ex-when') {
+      var ew = b.getAttribute('data-w')
+      if (ew && ew !== (state.exWhen || 'week')) { state.exWhen = ew; state.ex = null; state.exErr = ''; paint(); loadExams(false) }
+    }
     else if (a === 'clear-range') setRange('', '')
     else if (a === 'pd-tab') { state.pdTab = b.getAttribute('data-t'); paint() }
     else if (a === 'pd-sort') { var k = b.getAttribute('data-k'); state.pdSort = { key: k, dir: state.pdSort.key === k ? -state.pdSort.dir : 1 }; paint() }
@@ -716,7 +740,8 @@
       can('an.compliance') ? api('/api/analytics/summary' + rangeQuery()).then(keep(function (r) { state.summary = r })).catch(function () {}) : none(),
       can('an.appointments') ? api('/api/analytics/appointments' + rangeQuery()).then(keep(function (r) { state.appt = r })).catch(function () {}) : none(),
       can('an.appointments') ? api('/api/analytics/adherence-weeks' + awQuery()).then(keep(function (r) { state.aw = r; state.awErr = '' })).catch(function () {}) : none(),
-      can('an.patients') ? api('/api/analytics/adherence?a=' + w.a + '&b=' + w.b).then(keep(function (r) { state.pd = r; state.pdErr = '' })).catch(function () {}) : none()
+      can('an.patients') ? api('/api/analytics/adherence?a=' + w.a + '&b=' + w.b).then(keep(function (r) { state.pd = r; state.pdErr = '' })).catch(function () {}) : none(),
+      can('an.patients') ? api('/api/analytics/exams?when=' + (state.exWhen || 'week')).then(keep(function (r) { if (r && r.when === (state.exWhen || 'week')) { state.ex = r; state.exErr = '' } })).catch(function () {}) : none()
     ]).then(function () {
       liveBusy = false; lastLive = Date.now()
       who = {}   // the hover lists are fetched again when next opened
